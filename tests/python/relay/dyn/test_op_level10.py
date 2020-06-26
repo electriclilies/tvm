@@ -32,26 +32,25 @@ import topi.testing
 import random
 
 def test_dyn_broadcast_to():
-    #so shape should be some sort of variable, but how do I do it properly? 
     dtype = 'uint8'
     rank = 3
     dyn_shape = relay.Var("shape", relay.ty.TensorType((rank,), 'int64'))
-    x = relay.Var("x", relay.ty.TensorType((1, 2, 3), dtype))
+    x_shape = (1,)
+    x = relay.Var("x", relay.ty.TensorType(x_shape, dtype))
     z = relay.dyn.broadcast_to(x, shape=dyn_shape)
     zz = run_infer_type(z)
     
     assert zz.checked_type == relay.ty.TensorType((relay.Any(),) * rank, dtype)
 
-    func = relay.Function([x], z)
-    n = random.randint(0, 100)
-    shape = (n,) * rank
-    shape_like = (n,) * rank
-    x = np.random.uniform(size=shape).astype(dtype)
-    ref_res = np.broadcast_to(x, shape_like)
+    func = relay.Function([x, dyn_shape], z)
+    
+    x = np.random.uniform(size=x_shape).astype(dtype)
+    dyn_shape = np.array([1])*rank
+    ref_res = np.broadcast_to(x, (1,2,3))
     for target, ctx in ctx_list():
         for kind in ["graph", "debug"]:
             intrp = relay.create_executor(kind, ctx=ctx, target=target)
-            op_res = intrp.evaluate(func)(x)
+            op_res = intrp.evaluate(func)(x,dyn_shape)
             tvm.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
     
 test_dyn_broadcast_to()

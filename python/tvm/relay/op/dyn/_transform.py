@@ -21,6 +21,8 @@ from tvm.te.hybrid import script
 from .. import op as _reg
 
 _reg.register_injective_schedule("dyn.reshape")
+_reg.register_broadcast_schedule("dyn.broadcast_to")
+
 
 @script
 def _reshape_shape_func_input_data(data, newshape, ndim):

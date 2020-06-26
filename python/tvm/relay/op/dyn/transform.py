@@ -71,3 +71,23 @@ def reshape(data, newshape):
         The reshaped result.
     """
     return _make.reshape(data, newshape)
+
+def broadcast_to(data, shape):
+
+    """Return a scalar value array with the same type, broadcast to
+    the provided shape.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input tensor.
+
+    shape : a relay.Expr, cannot be a tuple of consts
+        Provide the shape to broadcast to.
+
+    Returns
+    -------
+    result : relay.Expr
+        The resulting tensor.
+    """
+    return _make.broadcast_to(data, shape)

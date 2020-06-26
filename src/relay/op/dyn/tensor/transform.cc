@@ -133,6 +133,7 @@ RELAY_REGISTER_OP("dyn.reshape")
 bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs, 
                    const TypeReporter& reporter) {
                      // types = [data, shape_to, ret_type]
+
   CHECK_EQ(types.size(), 3);
   
   // extract target shape and output dtypes
@@ -155,7 +156,7 @@ bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs
 Expr MakeBroadCastTo(Expr data, Expr shape) {
   static const Op& op = Op::Get("dyn.broadcast_to");
   auto attrs = make_object<InitOpAttrs>();
-  return Call(op, {data, shape}, Attrs(attrs));
+  return Call(op, {data, shape}, Attrs(attrs), {});
 }
 
 Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
@@ -167,7 +168,7 @@ Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.broadcast_to").set_body_typed(MakeBroadCastTo);
 
-RELAY_REGISTER_OP("broadcast_to")
+RELAY_REGISTER_OP("dyn.broadcast_to")
     .describe(R"code(Broadcast the first input to match the shape argument.
 )code" TVM_ADD_FILELINE)
     .set_num_inputs(2)

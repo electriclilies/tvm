@@ -23,6 +23,7 @@
  */
 #include "transform.h"
 
+#include <topi/broadcast.h>
 #include <topi/transform.h>
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/op.h>
@@ -127,6 +128,55 @@ RELAY_REGISTER_OP("dyn.reshape")
     .add_type_rel("DynamicReshape", ReshapeRel)
     .set_attr<FTVMCompute>("FTVMCompute", ReshapeCompute)
     .set_attr<TOpPattern>("TOpPattern", kInjective);
+
+// BroadCastTo: <A, B> -> B where BroadCast(A, B) = B
+bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs, 
+                   const TypeReporter& reporter) {
+                     // types = [data, shape_to, ret_type]
+  CHECK_EQ(types.size(), 3);
+  
+  // extract target shape and output dtypes
+  const auto* target_shape = types[1].as<TensorTypeNode>();  
+  DataType out_dtype = types[0].as<TensorTypeNode>()->dtype;
+  
+  // rank must be static
+  const IntImmNode* rank = target_shape->shape[0].as<IntImmNode>();
+  CHECK(rank) << "Target shape must have static rank";  // rank must be static even in dyn pass
+                                                           // could add support for dyn rank in futures
+
+  std::vector<IndexExpr> oshape;
+  for (int i = 0; i < rank->value; ++i) {
+    oshape.push_back(Any());
+  }
+  reporter->Assign(types[2], TensorType(oshape, out_dtype)); 
+  return true; 
+}
+
+Expr MakeBroadCastTo(Expr data, Expr shape) {
+  static const Op& op = Op::Get("dyn.broadcast_to");
+  auto attrs = make_object<InitOpAttrs>();
+  return Call(op, {data, shape}, Attrs(attrs));
+}
+
+Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
+                                    const Type& out_type) {
+
+  const auto* out_ttype = out_type.as<TensorTypeNode>();
+  return {topi::broadcast_to(inputs[0], out_ttype->shape)};
+}
+
+TVM_REGISTER_GLOBAL("relay.op.dyn._make.broadcast_to").set_body_typed(MakeBroadCastTo);
+
+RELAY_REGISTER_OP("broadcast_to")
+    .describe(R"code(Broadcast the first input to match the shape argument.
+)code" TVM_ADD_FILELINE)
+    .set_num_inputs(2)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .add_argument("shape", "Tensor", "Target shape.")
+    .set_support_level(4)
+    .add_type_rel("BroadCastTo", BroadCastToRel)
+    .set_attr<FTVMCompute>("FTVMCompute", BroadCastToCompute)
+    .set_attr<TOpPattern>("TOpPattern", kBroadcast);
 
 }  // namespace dyn
 }  // namespace relay

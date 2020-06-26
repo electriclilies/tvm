@@ -45,11 +45,14 @@ def test_dyn_broadcast_to():
     func = relay.Function([x, dyn_shape], z)
     
     x = np.random.uniform(size=x_shape).astype(dtype)
-    dyn_shape = np.array([1])*rank
-    ref_res = np.broadcast_to(x, (1,2,3))
+    dyn_shape = (1,)*rank
+    print(x)
+    print(dyn_shape)
+    ref_res = np.broadcast_to(x, dyn_shape)
     for target, ctx in ctx_list():
-        for kind in ["graph", "debug"]:
-            intrp = relay.create_executor(kind, ctx=ctx, target=target)
+        for kind in ["vm", "debug"]:
+            mod = tvm.ir.IRModule.from_expr(func)
+            intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
             op_res = intrp.evaluate(func)(x,dyn_shape)
             tvm.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
     

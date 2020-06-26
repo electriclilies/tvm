@@ -167,7 +167,7 @@ Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.broadcast_to").set_body_typed(MakeBroadCastTo);
 
-RELAY_REGISTER_OP("broadcast_to")
+RELAY_REGISTER_OP("dyn.broadcast_to")
     .describe(R"code(Broadcast the first input to match the shape argument.
 )code" TVM_ADD_FILELINE)
     .set_num_inputs(2)

@@ -134,8 +134,6 @@ bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs
                    const TypeReporter& reporter) {
                      // types = [data, shape_to, ret_type]
   
-  std::cout << "BROADCASTTOREL DYNAMIC CALLED" << std::endl;
-
   CHECK_EQ(types.size(), 3);
   
   // extract target shape and output dtypes
@@ -177,7 +175,7 @@ RELAY_REGISTER_OP("dyn.broadcast_to")
     .add_argument("data", "Tensor", "The input tensor.")
     .add_argument("shape", "Tensor", "Target shape.")
     .set_support_level(4)
-    .add_type_rel("BroadCastTo", BroadCastToRel)
+    .add_type_rel("DynamicBroadCastTo", BroadCastToRel)
     .set_attr<FTVMCompute>("FTVMCompute", BroadCastToCompute)
     .set_attr<TOpPattern>("TOpPattern", kBroadcast);
 

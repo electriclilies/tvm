@@ -55,5 +55,27 @@ def test_dyn_broadcast_to():
             intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
             op_res = intrp.evaluate(func)(x,dyn_shape)
             tvm.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
-    
+
+def test_broadcast_to():
+    shape = (4, 1, 6)
+    shape_like = (3, 4, 5, 6)
+    dtype = "float32"
+    x = relay.Var("x", relay.ty.TensorType(shape , dtype))
+    z = relay.broadcast_to(x, shape=shape_like)
+    zz = run_infer_type(z)
+    print(zz.checked_type)
+    assert zz.checked_type == relay.ty.TensorType(shape_like, dtype)
+
+    func = relay.Function([x], z)
+    x = np.random.uniform(size=shape).astype(dtype)
+    ref_res = np.broadcast_to(x, shape_like)
+    for target, ctx in ctx_list():
+        for kind in ["graph", "debug"]:
+            intrp = relay.create_executor(kind, ctx=ctx, target=target)
+            op_res = intrp.evaluate(func)(x)
+            tvm.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
+
+#print("TEST BROADCAST_TO")
+#test_broadcast_to()
+print("TEST DYNAMIC BROADCAST_TO")
 test_dyn_broadcast_to()

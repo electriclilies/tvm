@@ -794,9 +794,7 @@ void VirtualMachine::InvokePacked(Index packed_index, const PackedFunc& func, In
   size_t arity = 0;
   for (Index i = 0; i < arg_count; i++) {
     if (const auto* obj = args[i].as<ADTObj>()) {
-      std::cout << i << " obj size " << obj->size << std::endl;
       arity += obj->size;
-      std::cout << i << " arity " << arity << std::endl;
     } else {
       ++arity;
     }

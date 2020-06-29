@@ -1786,7 +1786,6 @@ bool CollapseSumToRel(const Array<Type>& types, int num_inputs, const Attrs& att
 // BroadCastTo: <A, B> -> B where BroadCast(A, B) = B
 bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                     const TypeReporter& reporter) {
-  std::cout << "BRoADCASTTOREL STATIC CALLED" << std::endl;
 
 >>>>>>> 26e8e691c... added debugging code for matt
   CHECK_EQ(types.size(), 3);

@@ -174,7 +174,7 @@ RELAY_REGISTER_OP("dyn.broadcast_to")
     .add_argument("data", "Tensor", "The input tensor.")
     .add_argument("shape", "Tensor", "Target shape.")
     .set_support_level(4)
-    .add_type_rel("BroadCastTo", BroadCastToRel)
+    .add_type_rel("DynamicBroadCastTo", BroadCastToRel)
     .set_attr<FTVMCompute>("FTVMCompute", BroadCastToCompute)
     .set_attr<TOpPattern>("TOpPattern", kBroadcast);
 

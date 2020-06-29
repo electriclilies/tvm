@@ -1716,11 +1716,12 @@ RELAY_REGISTER_OP("collapse_sum_like")
 // BroadCastTo: <A, B> -> B where BroadCast(A, B) = B
 bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                     const TypeReporter& reporter) {
+  std::cout << "BRoADCASTTOREL STATIC CALLED" << std::endl;
+
   CHECK_EQ(types.size(), 3);
   const InitOpAttrs* param = attrs.as<InitOpAttrs>();
   const auto* target_shape = types[1].as<TensorTypeNode>(); //type of target shape
   DataType out_dtype = types[0].as<TensorTypeNode>()->dtype; // output type same as input type
-
 
   const IntImmNode* rank = target_shape->shape[0].as<IntImmNode>();
   CHECK(rank) << "Parameter shape must have static rank"; // shape_shape = rank, rank must be static (even in dyn pass)

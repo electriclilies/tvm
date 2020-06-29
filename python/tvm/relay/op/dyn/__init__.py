@@ -21,10 +21,3 @@ from .transform import *
 from . import _transform
 
 from . import _tensor
-
-def _register_op_make():
-    from .. import _make
-    from ... import expr
-    expr._op_make = _make
-
-_register_op_make()

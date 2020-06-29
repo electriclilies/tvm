@@ -1716,7 +1716,6 @@ RELAY_REGISTER_OP("collapse_sum_like")
 // BroadCastTo: <A, B> -> B where BroadCast(A, B) = B
 bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                     const TypeReporter& reporter) {
-  std::cout << "BRoADCASTTOREL STATIC CALLED" << std::endl;
 
   CHECK_EQ(types.size(), 3);
   const InitOpAttrs* param = attrs.as<InitOpAttrs>();

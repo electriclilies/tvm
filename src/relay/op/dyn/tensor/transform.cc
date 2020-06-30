@@ -217,7 +217,6 @@ Array<te::Tensor> OneHotCompute(const Attrs& attrs, const Array<te::Tensor>& inp
 
 Expr MakeOneHot(Expr indices, Expr on_value, Expr off_value, Expr depth, int axis, DataType dtype) {
   auto attrs = make_object<OneHotAttrs>();
-  attrs->depth = std::move(depth);
   attrs->axis = axis;
   attrs->dtype = dtype;
   static const Op& op = Op::Get("dyn.one_hot");

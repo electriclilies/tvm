@@ -22,6 +22,7 @@ from .. import op as _reg
 
 _reg.register_broadcast_schedule("dyn.broadcast_to")
 _reg.register_injective_schedule("dyn.reshape")
+_reg.register_injective_schedule("dyn.one_hot")
 
 
 @script

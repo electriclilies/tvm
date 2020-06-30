@@ -32,7 +32,9 @@ namespace relay {
 
 class DynamicToStaticMutator : public MixedModeMutator {
  public:
-  DynamicToStaticMutator() : dyn_reshape_op_(Op::Get("dyn.reshape")) {}
+  DynamicToStaticMutator() : 
+    dyn_reshape_op_(Op::Get("dyn.reshape")),
+    dyn_broadcast_to_op_(Op::Get("dyn.broadcast_to")) {}
 
  private:
   Expr Rewrite_(const CallNode* pre, const Expr& post) override {
@@ -47,6 +49,17 @@ class DynamicToStaticMutator : public MixedModeMutator {
         return Call(reshape, {call_node->args[0]}, Attrs(attrs), {});
       }
     }
+    if (call_node->op == dyn_broadcast_to_op_) {
+      if (const ConstantNode* shape = call_node->args[1].as<ConstantNode>()) {
+        auto attrs = make_object<InitOpAttrs>();
+        CHECK_EQ(shape->data->ndim, 1);
+        attrs->shape = ToVector(shape->data);
+        static const Op& broadcast_to = Op::Get("broadcast_to");
+        return Call(broadcast_to, call_node->args, Attrs(attrs), {}); 
+      }
+    }
+    /*if (call_node->op == dyn_one_hot_op_) { 
+    }*/
     return post;
   }
   Expr DispatchVisitExpr(const Expr& expr) override {
@@ -58,6 +71,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
   }
 
   const Op& dyn_reshape_op_;
+  const Op& dyn_broadcast_to_op_; 
 };
 
 Expr DynamicToStatic(Function f, IRModule m) {

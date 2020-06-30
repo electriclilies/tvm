@@ -455,12 +455,20 @@ def test_one_hot():
         func = relay.Function([indices], out)
         indices_np = np.random.randint(0, depth, size=indices_shape).astype("int32")
         out_np = topi.testing.one_hot(indices_np, on_value, off_value, depth, axis, dtype)
-
+        """
         for target, ctx in ctx_list():
             for kind in ["graph", "debug"]:
                 intrp = relay.create_executor(kind, ctx=ctx, target=target)
                 out_relay = intrp.evaluate(func)(indices_np)
                 tvm.testing.assert_allclose(out_relay.asnumpy(), out_np)
+        """
+        #run static one hot on vm.. why doesn't it need a shape func? 
+        for target, ctx in ctx_list():
+            for kind in ["vm", "debug"]:
+                mod = tvm.ir.IRModule.from_expr(func)
+                intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
+                op_res = intrp.evaluate(func)(indices_np)
+                tvm.testing.assert_allclose(op_res.asnumpy(), out_np, rtol=1e-5)
 
     _verify((3,), 3, 1, 0, -1, "int32")
     _verify((3,), 3, 1.0, 0.0, -1, "float32")

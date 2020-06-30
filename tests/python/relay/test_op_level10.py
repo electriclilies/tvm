@@ -472,6 +472,7 @@ def test_one_hot():
 if __name__ == "__main__":
     test_adaptive_pool()
     test_collapse_sum_like()
+    test_broadcast_to()
     test_broadcast_to_like()
     test_slice_like()
     test_reverse_reshape()

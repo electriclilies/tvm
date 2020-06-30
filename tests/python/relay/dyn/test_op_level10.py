@@ -79,15 +79,16 @@ def test_dyn_one_hot():
         checked = run_infer_type(out)
         
         print(checked.checked_type)
-        assert checked.checked_type == relay.ty.TensorType(_get_oshape(indices_shape, depth, axis), dtype)
-        func = relay.Function([indices], out)
+        #assert checked.checked_type == relay.ty.TensorType(_get_oshape(indices_shape, depth, axis), dtype)
+        func = relay.Function([indices, depth_var], out)
         indices_np = np.random.randint(0, depth, size=indices_shape).astype("int32")
         out_np = topi.testing.one_hot(indices_np, on_value, off_value, depth, axis, dtype)
 
         for target, ctx in ctx_list():
-            for kind in ["graph", "debug"]:
-                intrp = relay.create_executor(kind, ctx=ctx, target=target)
-                out_relay = intrp.evaluate(func)(indices_np)
+            for kind in ["vm", "debug"]:
+                mod = tvn.ir.IRModule.from_expr(func)
+                intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
+                out_relay = intrp.evaluate(func)(indices_np, depth)
                 tvm.testing.assert_allclose(out_relay.asnumpy(), out_np)
 
     _verify((3,), 3, 1, 0, -1, "int32")
@@ -96,7 +97,6 @@ def test_dyn_one_hot():
     _verify((2, 2), 5, 0.5, -0.5, 1, "float32")
     _verify((3, 2, 4, 5), 6, 1, 0, 1, "int32")
     _verify((3, 2, 4, 5), 6, 1.0, 0.0, 0, "float32")
-
 
 
 if __name__ == "__main__":

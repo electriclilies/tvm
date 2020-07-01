@@ -53,16 +53,6 @@ class DynamicToStaticMutator : public MixedModeMutator {
       if (const ConstantNode* shape = call_node->args[1].as<ConstantNode>()) {
         auto attrs = make_object<InitOpAttrs>();
         CHECK_EQ(shape->data->ndim, 1);
-<<<<<<< HEAD
-
-        // put shape in attrs
-        attrs->shape = ToVector(shape->data);
-        static const Op& broadcast_to = Op::Get("broadcast_to");
-        // pass in one arg to static broadcast to
-        return Call(broadcast_to, {call_node->args[0]}, Attrs(attrs), {}); 
-      }
-    }
-=======
         attrs->shape = ToVector(shape->data);
         static const Op& broadcast_to = Op::Get("broadcast_to");
         return Call(broadcast_to, call_node->args, Attrs(attrs), {}); 
@@ -70,7 +60,6 @@ class DynamicToStaticMutator : public MixedModeMutator {
     }
     /*if (call_node->op == dyn_one_hot_op_) { 
     }*/
->>>>>>> 4ae58b693... broadcast_to in dyn to static pass! yay
     return post;
   }
   Expr DispatchVisitExpr(const Expr& expr) override {

@@ -98,6 +98,7 @@ def test_dynamic_to_static_quad_reshape():
         zz = func2.body
         assert isinstance(zz, relay.Call)
         assert zz.op == relay.op.get("reshape")
+        #print(zz.astext())
         assert "newshape=" in zz.astext()
         assert zz.checked_type == relay.ty.TensorType(shape, "float32")
 

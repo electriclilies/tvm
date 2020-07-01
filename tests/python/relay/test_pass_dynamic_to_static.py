@@ -98,6 +98,7 @@ def test_dynamic_to_static_quad_reshape():
         zz = func2.body
         assert isinstance(zz, relay.Call)
         assert zz.op == relay.op.get("reshape")
+        #print(zz.astext())
         assert "newshape=" in zz.astext()
         assert zz.checked_type == relay.ty.TensorType(shape, "float32")
 
@@ -108,8 +109,34 @@ def test_dynamic_to_static_quad_reshape():
     verify_reshape((2, 3, 4), (8, 3))
     verify_reshape((4, 7), (2, 7, 2))
 
+def test_dynamic_to_static_broadcast_to():
+    def verify_broadcast_to(shape, broadcast_shape):
+        x = relay.var("x", relay.TensorType(shape, "float32"))
+        y = relay.var("y", relay.TensorType(broadcast_shape, "float32"))
+        z = relay.dyn.broadcast_to(x, relay.shape_of(y))
+
+        func = run_infer_type(relay.Function([x, y], z))
+        func2 = run_opt_pass(run_opt_pass(func, transform.DynamicToStatic()), transform.InferType())
+
+        zz = func2.body
+        assert isinstance(zz, relay.Call)
+        assert zz.op == relay.op.get("broadcast_to")
+        print(zz.astext())
+        #assert "newshape=" in zz.astext() // where does this come from? 
+        assert zz.checked_type == relay.ty.TensorType(broadcast_shape, "float32")
+        
+        x_data = np.random.uniform(low=-1, high=1, size=shape).astype("float32")
+        y_data = np.random.uniform(low=-1, high=1, size=broadcast_shape).astype("float32")
+
+    verify_broadcast_to((3, 1), (3, 3))
+
+    #write func to calculate broadcast res
+    #verify_func(func2, [x_data, y_data], x_data)
+
+
 if __name__=="__main__":
     test_dynamic_to_static_reshape()
     test_dynamic_to_static_double_reshape()
     test_dynamic_to_static_quad_reshape()
+    test_dynamic_to_static_broadcast_to()
 

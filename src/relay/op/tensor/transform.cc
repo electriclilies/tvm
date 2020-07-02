@@ -1826,36 +1826,43 @@ RELAY_REGISTER_OP("collapse_sum_to")
     .set_attr<FTVMCompute>("FTVMCompute", CollapseSumLikeCompute)
     .set_attr<TOpPattern>("TOpPattern", kCommReduce);
 
-// BroadCastTo: <A, B> -> B where BroadCast(A, B) = B
 bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                     const TypeReporter& reporter) {
 
-  CHECK_EQ(types.size(), 3);
-  const InitOpAttrs* param = attrs.as<InitOpAttrs>();
-  const auto* target_shape = types[1].as<TensorTypeNode>(); //type of target shape
-  DataType out_dtype = types[0].as<TensorTypeNode>()->dtype; // output type same as input type
+                      // types = [data_type, ret_type], broadcast_to_type is in attrs bc static
+  CHECK_EQ(types.size(), 2);
+  
+  const InitOpAttrs* params = attrs.as<InitOpAttrs>();
+  CHECK(params);
 
-  const IntImmNode* rank = target_shape->shape[0].as<IntImmNode>();
-  CHECK(rank) << "Parameter shape must have static rank"; // shape_shape = rank, rank must be static (even in dyn pass)
+  DataType out_dtype = types[0].as<TensorTypeNode>()->dtype;
+
+  // rank must be static
+  const IntImmNode* rank = params->shape.as<TensorTypeNode>()->shape[0].as<IntImmNode>();
+  CHECK(rank) << "Target shape must have a static rank";
 
   std::vector<IndexExpr> oshape;
-
-  const Array<Integer>& cshape_array = param->shape.value(); // static case
-    for (size_t i = 0; i < cshape_array.size(); ++i) {
-      oshape.push_back(cshape_array[i]); // put in output shape as compile time const 
+  const Array<Integer>& cshape_array = params->shape.value();
+  for (size_t i = 0; i < cshape_array.size(); i++) {
+    oshape.push_back(cshape_array[i]);
   }
-  reporter->Assign(types[2], TensorType(oshape, out_dtype)); // assigns output to infered shape
-  return BroadcastRel({types[0], types[2], types[2]}, 2, Attrs(), reporter); // don't do this bc check
 
+  auto type = TensorType(oshape, out_dtype);
+  reporter->Assign(types[1], type); // assigns output to infered shape
+  return BroadcastRel({types[0], types[1], types[1]}, 2, Attrs(), reporter); 
 }
 
-Expr MakeBroadCastTo(Expr data, Expr shape) {
-  static const Op& op = Op::Get("broadcast_to");
+Expr MakeBroadCastTo(Expr data, Array<IndexExpr> shape) {
+  static const Op& op = Op::Get("broadcast_to"); // attrs->shape is Array<Integer>.... how to get it to 
   auto attrs = make_object<InitOpAttrs>();
-  if (const auto* cshape = shape.as<ConstantNode>()) {
-    attrs->shape = ToVector(cshape->data);
+  
+  const Array<Integer> oshape; // this doesnt work how do I convert IndexExpr to Integer? :(
+  for(size_t i = 0; i < shape.size(); i++) {
+    oshape.push_back(shape[i].value());
   }
-  return Call(op, {data, shape}, Attrs(attrs), {});
+
+  attrs->shape = std::move(oshape); 
+  return Call(op, {data}, Attrs(attrs), {});
 }
 
 Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
@@ -1869,9 +1876,8 @@ TVM_REGISTER_GLOBAL("relay.op._make.broadcast_to").set_body_typed(MakeBroadCastT
 RELAY_REGISTER_OP("broadcast_to")
     .describe(R"code(Broadcast the first input to match the shape argument.
 )code" TVM_ADD_FILELINE)
-    .set_num_inputs(2)
+    .set_num_inputs(1)
     .add_argument("data", "Tensor", "The input tensor.")
-    .add_argument("shape", "Tensor", "Target shape.")
     .set_support_level(4)
     .add_type_rel("BroadCastTo", BroadCastToRel)
     .set_attr<FTVMCompute>("FTVMCompute", BroadCastToCompute)

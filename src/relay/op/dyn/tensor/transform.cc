@@ -35,11 +35,8 @@ namespace relay {
 namespace dyn {
 
 /* relay.dyn.reshape */
-<<<<<<< HEAD
-=======
 // TVM_REGISTER_NODE_TYPE(ReshapeAttrs);
 
->>>>>>> f873100f8... dyn one hot called, still need to do impl
 bool ReshapeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                 const TypeReporter& reporter) {
   // types: [data, newshape, result]
@@ -136,14 +133,12 @@ RELAY_REGISTER_OP("dyn.reshape")
 
 bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs, 
                    const TypeReporter& reporter) {
-                     // types = [data, shape_to, ret_type]
+                     // types = [data_type, broadcast_shape_type, ret_type]
   
   CHECK_EQ(types.size(), 3);
-  
-  // extract target shape and output dtypes
-  const auto* target_shape = types[1].as<TensorTypeNode>();  
-  DataType out_dtype = types[0].as<TensorTypeNode>()->dtype;
-  
+
+  const auto* target_shape = types[1].as<TensorTypeNode>();
+  DataType out_dtype = types[0].as<TensorTypeNode>()->dtype; 
   // rank must be static
   const IntImmNode* rank = target_shape->shape[0].as<IntImmNode>();
   CHECK(rank) << "Target shape must have static rank";  // rank must be static even in dyn pass
@@ -167,6 +162,7 @@ Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>
                                     const Type& out_type) {
 
   const auto* out_ttype = out_type.as<TensorTypeNode>();
+  
   return {topi::broadcast_to(inputs[0], out_ttype->shape)};
 }
 
@@ -175,7 +171,7 @@ TVM_REGISTER_GLOBAL("relay.op.dyn._make.broadcast_to").set_body_typed(MakeBroadC
 RELAY_REGISTER_OP("dyn.broadcast_to")
     .describe(R"code(Broadcast the first input to match the shape argument.
 )code" TVM_ADD_FILELINE)
-    .set_num_inputs(2)
+    .set_num_inputs(2) 
     .add_argument("data", "Tensor", "The input tensor.")
     .add_argument("shape", "Tensor", "Target shape.")
     .set_support_level(4)
@@ -217,6 +213,7 @@ Array<te::Tensor> OneHotCompute(const Attrs& attrs, const Array<te::Tensor>& inp
 
 Expr MakeOneHot(Expr indices, Expr on_value, Expr off_value, Expr depth, int axis, DataType dtype) {
   auto attrs = make_object<OneHotAttrs>();
+  //attrs->depth = std::move(depth); // TODO: FIX ME
   attrs->axis = axis;
   attrs->dtype = dtype;
   static const Op& op = Op::Get("dyn.one_hot");

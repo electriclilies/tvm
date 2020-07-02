@@ -34,7 +34,7 @@ namespace tvm {
 namespace relay {
 namespace dyn {
 
-/* relay.dyn.reshape */
+/* relay.reshape */
 // TVM_REGISTER_NODE_TYPE(ReshapeAttrs);
 
 bool ReshapeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
@@ -162,7 +162,6 @@ Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>
                                     const Type& out_type) {
 
   const auto* out_ttype = out_type.as<TensorTypeNode>();
-  
   return {topi::broadcast_to(inputs[0], out_ttype->shape)};
 }
 

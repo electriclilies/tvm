@@ -90,6 +90,7 @@ def broadcast_to(data, shape):
     result : relay.Expr
         The resulting tensor.
     """
+<<<<<<< HEAD
     return _make.broadcast_to(data, shape)
 
 def one_hot(indices, on_value, off_value, depth, axis, dtype):
@@ -135,3 +136,6 @@ def one_hot(indices, on_value, off_value, depth, axis, dtype):
              [0, 0, 1]]
     """
     return _make.one_hot(indices, on_value, off_value, depth, axis, dtype)
+=======
+    return _make.broadcast_to(data, shape)
+>>>>>>> a6830f87a660d731a6b7e69d9f3bb71819bf76e1

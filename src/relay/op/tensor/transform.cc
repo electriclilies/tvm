@@ -1696,22 +1696,17 @@ bool CollapseSumToRel(const Array<Type>& types, int num_inputs, const Attrs& att
                       const TypeReporter& reporter) {
   CHECK_EQ(types.size(), 3);
   const InitOpAttrs* param = attrs.as<InitOpAttrs>();
-  const auto* target_shape = types[1].as<TensorTypeNode>();
-  DataType out_dtype = types[0].as<TensorTypeNode>()->dtype;
+  const auto* target_shape = types[1].as<TensorTypeNode>(); //type of target shape
+  DataType out_dtype = types[0].as<TensorTypeNode>()->dtype; // output type same as input type
 
-  const IntImmNode* shape_shape = target_shape->shape[0].as<IntImmNode>();
-  CHECK(shape_shape) << "Parameter shape must have static shape";
+  const IntImmNode* rank = target_shape->shape[0].as<IntImmNode>();
+  CHECK(rank) << "Parameter shape must have static rank"; // shape_shape = rank, rank must be static (even in dyn pass)
 
   std::vector<IndexExpr> oshape;
-  if (param->shape) {
-    const Array<Integer>& cshape_array = param->shape.value();
+
+  const Array<Integer>& cshape_array = param->shape.value(); // static case
     for (size_t i = 0; i < cshape_array.size(); ++i) {
-      oshape.push_back(cshape_array[i]);
-    }
-  } else {
-    for (int i = 0; i < shape_shape->value; ++i) {
-      oshape.push_back(Any());
-    }
+      oshape.push_back(cshape_array[i]); // put in output shape as compile time const 
   }
   reporter->Assign(types[2], TensorType(oshape, out_dtype));
   return BroadcastRel({types[0], types[2], types[0]}, 2, Attrs(), reporter);

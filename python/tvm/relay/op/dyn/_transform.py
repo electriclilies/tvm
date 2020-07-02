@@ -22,7 +22,10 @@ from .. import op as _reg
 
 _reg.register_broadcast_schedule("dyn.broadcast_to")
 _reg.register_injective_schedule("dyn.reshape")
+<<<<<<< HEAD
 _reg.register_injective_schedule("dyn.one_hot")
+=======
+>>>>>>> a6830f87a660d731a6b7e69d9f3bb71819bf76e1
 
 
 @script

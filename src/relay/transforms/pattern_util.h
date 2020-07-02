@@ -667,10 +667,12 @@ static inline Expr Tile(Expr data, Array<Integer> reps) {
   return Call(op, {data}, Attrs(attrs), {});
 }
 
-Expr MakeBroadCastTo(Expr data, Expr shape);
+Expr MakeBroadCastTo(Expr data, Array<IndexExpr> shape);
 
 static inline Expr BroadCastTo(Expr data, Array<IndexExpr> shape) {
-  return MakeBroadCastTo(data, CheckConstantShape(shape));
+  // this is a hack fix it 
+
+  return MakeBroadCastTo(data, shape); // note: just removed cast to const for now, not sure what to do about it exactly
 }
 
 Expr MakeConcatenate(Expr data, int axis);

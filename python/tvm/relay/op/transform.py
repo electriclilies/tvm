@@ -621,6 +621,10 @@ def broadcast_to(data, shape):
     result : relay.Expr
         The resulting tensor.
     """
+    if isinstance(shape, Expr):
+        return _dyn_make.broadcast_to(data, shape)
+    if isinstance(shape, int):
+        shape = [shape]
     if isinstance(shape, (list, tuple)):
         shape = const(list(shape), "int32")
     return _make.broadcast_to(data, shape)

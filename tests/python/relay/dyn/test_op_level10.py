@@ -37,7 +37,7 @@ def test_dyn_broadcast_to():
     dyn_shape = relay.Var("shape", relay.ty.TensorType((rank,), 'int64'))
     x_shape = (1,)
     x = relay.Var("x", relay.ty.TensorType(x_shape, dtype))
-    z = relay.dyn.broadcast_to(x, shape=dyn_shape)
+    z = relay.broadcast_to(x, dyn_shape)
     zz = run_infer_type(z)
     
     assert zz.checked_type == relay.ty.TensorType((relay.Any(),) * rank, dtype)
@@ -101,4 +101,4 @@ def test_dyn_one_hot():
 
 if __name__ == "__main__":
     test_dyn_broadcast_to()
-    test_dyn_one_hot()
+    #test_dyn_one_hot()

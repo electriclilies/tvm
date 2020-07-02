@@ -53,9 +53,5 @@ def test_dyn_broadcast_to():
             intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
             op_res = intrp.evaluate(func)(x,np.array(dyn_shape))
             tvm.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
-<<<<<<< HEAD
     
-=======
-
->>>>>>> a6830f87a... finished dyn broadcast_to and removed debugging lines
 test_dyn_broadcast_to()

@@ -1765,16 +1765,11 @@ bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs
   return BroadcastRel({types[0], types[1], types[1]}, 2, Attrs(), reporter); 
 }
 
-Expr MakeBroadCastTo(Expr data, Array<IndexExpr> shape) {
-  static const Op& op = Op::Get("broadcast_to"); // attrs->shape is Array<Integer>.... how to get it to 
+Expr MakeBroadCastTo(Expr data, Array<Integer> shape) {
+  static const Op& op = Op::Get("broadcast_to");  
   auto attrs = make_object<InitOpAttrs>();
-  
-  const Array<Integer> oshape; // this doesnt work how do I convert IndexExpr to Integer? :(
-  for(size_t i = 0; i < shape.size(); i++) {
-    oshape.push_back(shape[i].value());
-  }
 
-  attrs->shape = std::move(oshape); 
+  attrs->shape = shape;
   return Call(op, {data}, Attrs(attrs), {});
 }
 

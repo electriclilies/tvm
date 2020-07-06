@@ -474,11 +474,7 @@ def test_one_hot():
 if __name__ == "__main__":
     test_adaptive_pool()
     test_collapse_sum_like()
-<<<<<<< HEAD
-    #test_broadcast_to()
-=======
     test_broadcast_to()
->>>>>>> 5aea251b8... dyn one hot called, still need to do impl
     test_broadcast_to_like()
     test_slice_like()
     test_reverse_reshape()

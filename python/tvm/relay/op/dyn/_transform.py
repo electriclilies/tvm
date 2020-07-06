@@ -20,10 +20,7 @@ from __future__ import absolute_import
 from tvm.te.hybrid import script
 from .. import op as _reg
 
-_reg.register_broadcast_schedule("dyn.broadcast_to")
 _reg.register_injective_schedule("dyn.reshape")
-_reg.register_injective_schedule("dyn.one_hot")
-
 
 @script
 def _reshape_shape_func_input_data(data, newshape, ndim):

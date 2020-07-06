@@ -61,8 +61,6 @@ class DynamicToStaticMutator : public MixedModeMutator {
         return Call(broadcast_to, {call_node->args[0]}, Attrs(attrs), {}); 
       }
     }
-    /*if (call_node->op == dyn_one_hot_op_) { 
-    }*/
     return post;
   }
   Expr DispatchVisitExpr(const Expr& expr) override {

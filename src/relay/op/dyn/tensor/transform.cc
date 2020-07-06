@@ -23,7 +23,6 @@
  */
 #include "transform.h"
 
-#include <topi/broadcast.h>
 #include <topi/transform.h>
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/op.h>
@@ -34,9 +33,7 @@ namespace tvm {
 namespace relay {
 namespace dyn {
 
-/* relay.reshape */
-// TVM_REGISTER_NODE_TYPE(ReshapeAttrs);
-
+/* relay.dyn.reshape */
 bool ReshapeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                 const TypeReporter& reporter) {
   // types: [data, newshape, result]
@@ -130,122 +127,6 @@ RELAY_REGISTER_OP("dyn.reshape")
     .add_type_rel("DynamicReshape", ReshapeRel)
     .set_attr<FTVMCompute>("FTVMCompute", ReshapeCompute)
     .set_attr<TOpPattern>("TOpPattern", kInjective);
-
-bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs, 
-                   const TypeReporter& reporter) {
-                     // types = [data_type, broadcast_shape_type, ret_type]
-  
-  CHECK_EQ(types.size(), 3);
-
-  const auto* target_shape = types[1].as<TensorTypeNode>();
-  DataType out_dtype = types[0].as<TensorTypeNode>()->dtype; 
-  // rank must be static
-  const IntImmNode* rank = target_shape->shape[0].as<IntImmNode>();
-  CHECK(rank) << "Target shape must have static rank";  // rank must be static even in dyn pass
-                                                           // could add support for dyn rank in futures
-
-  std::vector<IndexExpr> oshape;
-  for (int i = 0; i < rank->value; ++i) {
-    oshape.push_back(Any());
-  }
-
-  reporter->Assign(types[2], TensorType(oshape, out_dtype)); 
-  return true; 
-}
-
-Expr MakeBroadCastTo(Expr data, Expr shape) {
-  static const Op& op = Op::Get("dyn.broadcast_to");
-  auto attrs = make_object<InitOpAttrs>();
-  return Call(op, {data, shape}, Attrs(attrs), {});
-}
-
-Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
-                                    const Type& out_type) {
-
-  const auto* out_ttype = out_type.as<TensorTypeNode>();
-  return {topi::broadcast_to(inputs[0], out_ttype->shape)};
-}
-
-TVM_REGISTER_GLOBAL("relay.op.dyn._make.broadcast_to").set_body_typed(MakeBroadCastTo);
-
-RELAY_REGISTER_OP("dyn.broadcast_to")
-    .describe(R"code(Broadcast the first input to match the shape argument.
-)code" TVM_ADD_FILELINE)
-    .set_num_inputs(2) 
-    .add_argument("data", "Tensor", "The input tensor.")
-    .add_argument("shape", "Tensor", "Target shape.")
-    .set_support_level(4)
-    .add_type_rel("DynamicBroadCastTo", BroadCastToRel)
-    .set_attr<FTVMCompute>("FTVMCompute", BroadCastToCompute)
-    .set_attr<TOpPattern>("TOpPattern", kBroadcast);
-
-  /* relay.dyn.one_hot */
-  
-  //TVM_REGISTER_NODE_TYPE(OneHotAttrs);
-
-bool OneHotRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
-               const TypeReporter& reporter) {
-  // `types` contains: [indices, on_value, off_value, result]
-  CHECK_EQ(types.size(), 4);
-  const auto* indices = types[0].as<TensorTypeNode>();
-  CHECK(indices);
-  
-  const auto param = attrs.as<OneHotAttrs>();
-
-  Array<IndexExpr> oshape;
-  int ndim = indices->shape.size() + 1; // output rank is ndim of indicies + 1
-  
-  for (int i = 0; i < ndim; i++) {
-    oshape.push_back(Any());
-  }
-  std::cout << "dyn onehot rel called" << std::endl;
-  reporter->Assign(types[3], TensorType(oshape, param->dtype));
-  return true;
-}
-
-Array<te::Tensor> OneHotCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
-                                const Type& out_type) {
-  const auto* param = attrs.as<OneHotAttrs>();
-  CHECK(param != nullptr);
-  return Array<te::Tensor>{
-      topi::one_hot(inputs[0], inputs[1](), inputs[2](), param->depth, param->axis, param->dtype)};
-}
-
-Expr MakeOneHot(Expr indices, Expr on_value, Expr off_value, Expr depth, int axis, DataType dtype) {
-  auto attrs = make_object<OneHotAttrs>();
-  //attrs->depth = std::move(depth); // TODO: FIX ME
-  attrs->axis = axis;
-  attrs->dtype = dtype;
-  static const Op& op = Op::Get("dyn.one_hot");
-  return Call(op, {indices, on_value, off_value}, Attrs(attrs), {});
-}
-
-TVM_REGISTER_GLOBAL("relay.op.dyn._make.one_hot").set_body_typed(MakeOneHot);
-
-RELAY_REGISTER_OP("dyn.one_hot")
-    .describe(R"code(Returns a one-hot tensor where the locations repsented by indices take value 1,
-    other locations take value 0. Final dimension is <indices dimensions> x depth.
-
-    **indices** Locations to set to 1.
-
-    **on_value** Value to fill at indices.
-
-    **off_value** Value to fill at all other positions besides indices.
-
-    **depth** Depth of the one-hot dimension.
-
-    **axis** Axis to fill.
-
-    **dtype**)code" TVM_ADD_FILELINE)
-    .set_attrs_type<OneHotAttrs>()
-    .set_num_inputs(3)
-    .add_argument("indices", "Tensor", "Locations to set to on_value.")
-    .add_argument("on_value", "Expr", "Value to fill at indices.")
-    .add_argument("off_value", "Expr", "Value to fill at all other positions besides indices.")
-    .set_support_level(10)
-    .add_type_rel("DynamicOneHot", OneHotRel)
-    .set_attr<FTVMCompute>("FTVMCompute", OneHotCompute)
-    .set_attr<TOpPattern>("TOpPattern", kOutEWiseFusable);
 
 }  // namespace dyn
 }  // namespace relay

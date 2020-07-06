@@ -18,4 +18,3 @@
 """The Relay namespace containing dynamic ops."""
 
 from . import _transform
-from . import _tensor

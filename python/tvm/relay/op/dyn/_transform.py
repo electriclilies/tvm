@@ -23,7 +23,6 @@ from .. import op as _reg
 _reg.register_broadcast_schedule("dyn.broadcast_to")
 _reg.register_injective_schedule("dyn.reshape")
 
-
 @script
 def _reshape_shape_func_input_data(data, newshape, ndim):
     out = output_tensor((ndim,), "int64")

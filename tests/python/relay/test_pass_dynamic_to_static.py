@@ -133,8 +133,8 @@ def test_dynamic_to_static_broadcast_to():
 
 
 if __name__=="__main__":
-    #test_dynamic_to_static_reshape()
-    #test_dynamic_to_static_double_reshape()
-    #test_dynamic_to_static_quad_reshape()
+    test_dynamic_to_static_reshape()
+    test_dynamic_to_static_double_reshape()
+    test_dynamic_to_static_quad_reshape()
     test_dynamic_to_static_broadcast_to()
 

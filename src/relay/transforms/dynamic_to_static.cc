@@ -33,7 +33,7 @@ namespace relay {
 class DynamicToStaticMutator : public MixedModeMutator {
  public:
   DynamicToStaticMutator()
-      : dyn_reshape_op_(Op::Get("dyn.reshape")), 
+      : dyn_reshape_op_(Op::Get("dyn.reshape")),
         dyn_tile_op_(Op::Get("dyn.tile")),
         dyn_broadcast_to_op_(Op::Get("dyn.broadcast_to")) {}
 

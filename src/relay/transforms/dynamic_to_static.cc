@@ -33,7 +33,8 @@ namespace relay {
 class DynamicToStaticMutator : public MixedModeMutator {
  public:
   DynamicToStaticMutator()
-      : dyn_reshape_op_(Op::Get("dyn.reshape")), dyn_tile_op_(Op::Get("dyn.tile")),
+      : dyn_reshape_op_(Op::Get("dyn.reshape")), 
+        dyn_tile_op_(Op::Get("dyn.tile")),
         dyn_broadcast_to_op_(Op::Get("dyn.broadcast_to")) {}
 
  private:
@@ -78,7 +79,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
         attrs->shape = ToVector(shape->data);
         static const Op& broadcast_to = Op::Get("broadcast_to");
         // pass in one arg to static broadcast to
-        return Call(broadcast_to, {call_node->args[0]}, Attrs(attrs), {}); 
+        return Call(broadcast_to, {call_node->args[0]}, Attrs(attrs), {});
       }
     }
     return post;

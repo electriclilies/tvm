@@ -94,7 +94,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
 
   const Op& dyn_reshape_op_;
   const Op& dyn_tile_op_;
-  const Op& dyn_broadcast_to_op_; 
+  const Op& dyn_broadcast_to_op_;
 };
 
 Expr DynamicToStatic(Function f, IRModule m) {

@@ -33,7 +33,8 @@ namespace relay {
 class DynamicToStaticMutator : public MixedModeMutator {
  public:
   DynamicToStaticMutator()
-      : dyn_reshape_op_(Op::Get("dyn.reshape")), dyn_tile_op_(Op::Get("dyn.tile")) {}
+      : dyn_reshape_op_(Op::Get("dyn.reshape")), dyn_tile_op_(Op::Get("dyn.tile")),
+        dyn_broadcast_to_op_(Op::Get("dyn.broadcast_to")) {}
 
  private:
   Expr Rewrite_(const CallNode* pre, const Expr& post) override {
@@ -56,6 +57,18 @@ class DynamicToStaticMutator : public MixedModeMutator {
         return Call(op, {call_node->args[0]}, Attrs(attrs), {});
       }
     }
+    if (call_node->op == dyn_broadcast_to_op_) {
+      if (const ConstantNode* shape = call_node->args[1].as<ConstantNode>()) {
+        auto attrs = make_object<InitOpAttrs>();
+        CHECK_EQ(shape->data->ndim, 1);
+
+        // put shape in attrs
+        attrs->shape = ToVector(shape->data);
+        static const Op& broadcast_to = Op::Get("broadcast_to");
+        // pass in one arg to static broadcast to
+        return Call(broadcast_to, {call_node->args[0]}, Attrs(attrs), {}); 
+      }
+    }
     return post;
   }
   Expr DispatchVisitExpr(const Expr& expr) override {
@@ -68,6 +81,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
 
   const Op& dyn_reshape_op_;
   const Op& dyn_tile_op_;
+  const Op& dyn_broadcast_to_op_; 
 };
 
 Expr DynamicToStatic(Function f, IRModule m) {
@@ -108,6 +122,5 @@ TVM_REGISTER_GLOBAL("relay._transform.DynamicToStatic").set_body_typed([]() {
 });
 
 }  // namespace transform
-
 }  // namespace relay
 }  // namespace tvm

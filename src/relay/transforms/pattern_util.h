@@ -534,10 +534,10 @@ inline Expr ZerosLike(Expr e) {
   return Call(op, {e});
 }
 
-Expr MakeZeros(Expr shape, DataType dtype);
+Expr MakeZeros(Array<Integer> shape, DataType dtype);
 
 inline Expr Zeros(Array<IndexExpr> shape, DataType dtype) {
-  return MakeZeros(CheckConstantShape(shape), dtype);
+  return MakeZeros(CheckConstantShapeArrayInteger(shape), dtype);
 }
 
 inline Expr OnesLike(Expr e) {
@@ -545,10 +545,10 @@ inline Expr OnesLike(Expr e) {
   return Call(op, {e});
 }
 
-Expr MakeOnes(Expr shape, DataType dtype);
+Expr MakeOnes(Array<Integer> shape, DataType dtype);
 
 inline Expr Ones(Array<IndexExpr> shape, DataType dtype) {
-  return MakeOnes(CheckConstantShape(shape), dtype);
+  return MakeOnes(CheckConstantShapeArrayInteger(shape), dtype);
 }
 
 inline Expr CollapseSumLike(Expr e) {

@@ -37,7 +37,9 @@ class DynamicToStaticMutator : public MixedModeMutator {
       : dyn_reshape_op_(Op::Get("dyn.reshape")),
         dyn_tile_op_(Op::Get("dyn.tile")),
         dyn_topk_op_(Op::Get("dyn.topk")),
-        dyn_broadcast_to_op_(Op::Get("dyn.broadcast_to")) {}
+        dyn_broadcast_to_op_(Op::Get("dyn.broadcast_to")),
+        dyn_zeros_op_(Op::Get("dyn.zeros")),
+        dyn_ones_op_(Op::Get("dyn.ones")) {}
 
  private:
   Expr Rewrite_(const CallNode* pre, const Expr& post) override {
@@ -78,12 +80,27 @@ class DynamicToStaticMutator : public MixedModeMutator {
       if (const ConstantNode* shape = call_node->args[1].as<ConstantNode>()) {
         auto attrs = make_object<InitOpAttrs>();
         CHECK_EQ(shape->data->ndim, 1);
-
-        // put shape in attrs
         attrs->shape = ToVector(shape->data);
         static const Op& broadcast_to = Op::Get("broadcast_to");
-        // pass in one arg to static broadcast to
         return Call(broadcast_to, {call_node->args[0]}, Attrs(attrs), {});
+      }
+    }
+    if (call_node-> op == dyn_zeros_op_) {
+      if (const ConstantNode* shape = call_node->args[0].as<ConstantNode>()) {
+        auto attrs = make_object<InitOpAttrs>();
+        CHECK_EQ(shape->data->ndim, 1);
+        attrs->shape = ToVector(shape->data);
+        static const Op& zeros = Op::Get("zeros");
+        return Call(zeros, {}, Attrs(attrs), {});
+      }
+    }
+    if (call_node-> op == dyn_ones_op_) {
+      if (const ConstantNode* shape = call_node->args[0].as<ConstantNode>()) {
+        auto attrs = make_object<InitOpAttrs>();
+        CHECK_EQ(shape->data->ndim, 1);
+        attrs->shape = ToVector(shape->data);
+        static const Op& ones = Op::Get("ones");
+        return Call(ones, {}, Attrs(attrs), {});
       }
     }
     return post;
@@ -99,7 +116,9 @@ class DynamicToStaticMutator : public MixedModeMutator {
   const Op& dyn_reshape_op_;
   const Op& dyn_tile_op_;
   const Op& dyn_topk_op_;
-  const Op& dyn_broadcast_to_op_; 
+  const Op& dyn_broadcast_to_op_;
+  const Op& dyn_zeros_op_;
+  const Op& dyn_ones_op_; 
 };
 
 Expr DynamicToStatic(Function f, IRModule m) {

@@ -927,8 +927,8 @@ bool FullRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   CHECK_EQ(fill_value->shape.size(), 0)
       << "Fill value should be a scalar but has dimension " << fill_value->shape.size() << ".";
 
-  const IntImmNode* shape_shape = fill_shape->shape[0].as<IntImmNode>();
-  CHECK(shape_shape) << "Parameter shape must have static shape";
+  const IntImmNode* rank = fill_shape->shape[0].as<IntImmNode>();
+  CHECK(rank) << "Parameter shape must have static rank";
 
   std::vector<IndexExpr> oshape;
   if (param->shape) {
@@ -937,7 +937,7 @@ bool FullRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
       oshape.push_back(cshape_array[i]);
     }
   } else {
-    for (int i = 0; i < shape_shape->value; ++i) {
+    for (int i = 0; i < rank->value; ++i) {
       oshape.push_back(Any());
     }
   }

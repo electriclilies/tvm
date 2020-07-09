@@ -41,6 +41,7 @@ def zeros_compute(attrs, inputs, output_type):
 register_broadcast_schedule("dyn.zeros")
 register_pattern("dyn.zeros", OpPattern.ELEMWISE)
 
-register_shape_func("dyn.broadcast_to", True, full_shape_func)
 register_shape_func("dyn.ones", True, no_data_full_shape_func)
 register_shape_func("dyn.zeros", True, no_data_full_shape_func)
+register_shape_func("dyn.full", True, full_shape_func)
+register_shape_func("dyn.broadcast_to", True, full_shape_func)

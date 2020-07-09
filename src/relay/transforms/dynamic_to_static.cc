@@ -85,7 +85,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
         return Call(broadcast_to, {call_node->args[0]}, Attrs(attrs), {});
       }
     }
-    if (call_node-> op == dyn_zeros_op_) {
+    if (call_node->op == dyn_zeros_op_) {
       if (const ConstantNode* shape = call_node->args[0].as<ConstantNode>()) {
         auto attrs = make_object<InitOpAttrs>();
         CHECK_EQ(shape->data->ndim, 1);
@@ -94,7 +94,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
         return Call(zeros, {}, Attrs(attrs), {});
       }
     }
-    if (call_node-> op == dyn_ones_op_) {
+    if (call_node->op == dyn_ones_op_) {
       if (const ConstantNode* shape = call_node->args[0].as<ConstantNode>()) {
         auto attrs = make_object<InitOpAttrs>();
         CHECK_EQ(shape->data->ndim, 1);

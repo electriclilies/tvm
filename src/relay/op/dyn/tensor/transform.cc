@@ -361,7 +361,6 @@ RELAY_REGISTER_OP("dyn.full")
     .set_attr<FTVMCompute>("FTVMCompute", FullCompute)
     .set_attr<TOpPattern>("TOpPattern", kElemWise);
 
-
 }  // namespace dyn
 }  // namespace relay
 }  // namespace tvm

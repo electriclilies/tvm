@@ -927,7 +927,7 @@ bool FullRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
       << "Fill value should be a scalar but has dimension " << fill_value->shape.size() << ".";
 
   std::vector<IndexExpr> oshape;
-  
+
   const Array<Integer>& cshape_array = param->shape.value();
   for (size_t i = 0; i < cshape_array.size(); ++i) {
     oshape.push_back(cshape_array[i]);

@@ -25,6 +25,7 @@ import tvm
 from tvm import relay
 from tvm.relay.testing import ctx_list, run_infer_type
 import random
+from test_dynamic_op_level3 import verify_func
 
 def test_dyn_broadcast_to():
     dtype = 'uint8'
@@ -43,12 +44,8 @@ def test_dyn_broadcast_to():
     x = np.random.uniform(size=x_shape).astype(dtype)
     dyn_shape = (1,)*rank
     ref_res = np.broadcast_to(x, dyn_shape)
-    for target, ctx in ctx_list():
-        if (target != 'cuda'): #skip cuda because we don't have dynamic support for GPU
-            for kind in ["vm", "debug"]:
-                mod = tvm.ir.IRModule.from_expr(func)
-                intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
-                op_res = intrp.evaluate(func)(x,np.array(dyn_shape).astype(shape_type))
-                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)
 
-test_dyn_broadcast_to()
+    verify_func(func, [x, np.array(dyn_shape).astype(shape_type)], ref_res)
+
+if __name__ == "__main__":
+    test_dyn_broadcast_to()

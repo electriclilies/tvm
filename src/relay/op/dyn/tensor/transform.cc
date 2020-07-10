@@ -24,6 +24,7 @@
 #include "transform.h"
 
 #include <topi/broadcast.h>
+#include <topi/elemwise.h>
 #include <topi/transform.h>
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/op.h>
@@ -327,15 +328,8 @@ bool FullRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   CHECK(rank) << "Parameter shape must have static rank";
 
   std::vector<IndexExpr> oshape;
-  if (param->shape) {
-    const Array<Integer>& cshape_array = param->shape.value();
-    for (size_t i = 0; i < cshape_array.size(); ++i) {
-      oshape.push_back(cshape_array[i]);
-    }
-  } else {
-    for (int i = 0; i < rank->value; ++i) {
-      oshape.push_back(Any());
-    }
+  for (int i = 0; i < rank->value; ++i) {
+    oshape.push_back(Any());
   }
   reporter->Assign(types[2], TensorType(oshape, out_dtype));
   return true;
@@ -349,17 +343,14 @@ Array<te::Tensor> FullCompute(const Attrs& attrs, const Array<te::Tensor>& input
 
 Expr MakeFull(Expr fill_value, Expr shape, DataType dtype) {
   auto attrs = make_object<InitOpAttrs>();
-  if (const auto* cshape = shape.as<ConstantNode>()) {
-    attrs->shape = ToVector(cshape->data);
-  }
   attrs->dtype = std::move(dtype);
-  static const Op& op = Op::Get("full");
+  static const Op& op = Op::Get("dyn.full");
   return Call(op, {fill_value, shape}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relay.op._make.full").set_body_typed(MakeFull);
+TVM_REGISTER_GLOBAL("relay.op.dyn._make.full").set_body_typed(MakeFull);
 
-RELAY_REGISTER_OP("full")
+RELAY_REGISTER_OP("dyn.full")
     .describe(R"code(Fill array with scalar value.
 
 )code" TVM_ADD_FILELINE)
@@ -368,7 +359,7 @@ RELAY_REGISTER_OP("full")
     .add_argument("fill_value", "double", "The value to fill.")
     .add_argument("shape", "Tensor", "Target shape.")
     .set_support_level(3)
-    .add_type_rel("Full", FullRel)
+    .add_type_rel("DynamicFull", FullRel)
     .set_attr<FTVMCompute>("FTVMCompute", FullCompute)
     .set_attr<TOpPattern>("TOpPattern", kElemWise);
 

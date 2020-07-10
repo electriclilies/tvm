@@ -932,7 +932,6 @@ bool FullRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   for (size_t i = 0; i < cshape_array.size(); ++i) {
     oshape.push_back(cshape_array[i]);
   }
-
   reporter->Assign(types[1], TensorType(oshape, out_dtype));
   return true;
 }

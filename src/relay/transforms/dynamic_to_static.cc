@@ -37,7 +37,8 @@ class DynamicToStaticMutator : public MixedModeMutator {
         dyn_tile_op_(Op::Get("dyn.tile")),
         dyn_broadcast_to_op_(Op::Get("dyn.broadcast_to")),
         dyn_zeros_op_(Op::Get("dyn.zeros")),
-        dyn_ones_op_(Op::Get("dyn.ones")) {}
+        dyn_ones_op_(Op::Get("dyn.ones")),
+        dyn_full_op_(Op::Get("dyn.full")) {}
 
  private:
   Expr Rewrite_(const CallNode* pre, const Expr& post) override {
@@ -87,6 +88,15 @@ class DynamicToStaticMutator : public MixedModeMutator {
         return Call(ones, {}, Attrs(attrs), {});
       }
     }
+    if (call_node->op == dyn_full_op_) {
+      if (const ConstantNode* shape = call_node->args[1].as<ConstantNode>()) {
+        auto attrs = make_object<InitOpAttrs>();
+        CHECK_EQ(shape->data->ndim, 1);
+        attrs->shape = ToVector(shape->data);
+        static const Op& full = Op::Get("full");
+        return Call(full, {call_node->args[0]}, Attrs(attrs), {});
+      }
+    }
     return post;
   }
   Expr DispatchVisitExpr(const Expr& expr) override {
@@ -102,6 +112,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
   const Op& dyn_broadcast_to_op_;
   const Op& dyn_zeros_op_;
   const Op& dyn_ones_op_;
+  const Op& dyn_full_op_;
 };
 
 Expr DynamicToStatic(Function f, IRModule m) {

@@ -348,7 +348,6 @@ def full(fill_value, shape=(), dtype=""):
         The resulting tensor.
     """
     if isinstance(shape, Expr):
-        print("dyn full")
         return _dyn_make.full(fill_value, shape, dtype)
     if isinstance(shape, int):
         shape = [shape]

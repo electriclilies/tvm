@@ -170,6 +170,26 @@ def test_dynamic_to_static_zeros_ones():
     verify_ones_zeros((1, 2, 3), 'int64')
     verify_ones_zeros((9, 8, 3, 4), 'float32')
 
+def test_dynamic_to_static_full():
+    def verify_full(fill_value, fill_shape, dtype): # I think the test case is wrong
+        x = relay.var("x", relay.scalar_type(dtype))
+        y = relay.var("y", relay.TensorType(fill_shape, 'int64'))
+        z = relay.full(x, relay.shape_of(y), dtype)
+
+        func = run_infer_type(relay.Function([x, y], z))
+        func2 = run_opt_pass(run_opt_pass(func, transform.DynamicToStatic()), transform.InferType())
+
+        zz = func2.body
+        assert isinstance(zz, relay.Call)
+        assert zz.checked_type == relay.TensorType(fill_shape, dtype)
+
+        ref_res = np.full(fill_shape, fill_value).astype(dtype)
+        y_data = np.random.uniform(low=-1, high=1, size=fill_shape).astype('int64')
+        verify_func(func2, [fill_value, y_data], ref_res)
+    
+    verify_full(4, (1, 2, 3, 4), 'int32')
+    verify_full(3.0, (1, 2, 8, 10), 'float32')
+
 if __name__=="__main__":
     test_dynamic_to_static_reshape()
     test_dynamic_to_static_double_reshape()
@@ -177,3 +197,4 @@ if __name__=="__main__":
     test_dynamic_to_static_tile()
     test_dynamic_to_static_broadcast_to()
     test_dynamic_to_static_zeros_ones()
+    test_dynamic_to_static_full()

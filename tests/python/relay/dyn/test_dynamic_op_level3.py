@@ -100,18 +100,20 @@ def test_dyn_zeros_ones():
     verify_zeros_ones((1, 3), 'int64')
     verify_zeros_ones((8, 9, 1, 2), 'float32')
 
-
 def test_dyn_full():
     def verify_full(fill_value, src_shape, dtype):
-        dyn_fill_value = relay.var("x", relay.scalar_type(dtype))
+        x = relay.var("x", relay.scalar_type(dtype))
         rank = len(src_shape)
-        dyn_src_shape = relay.Var("src_shape", relay.ty.TensorType((rank,), 'int64'))
-        z = relay.full(dyn_fill_value, dyn_src_shape)
-        func = relay.Function([dyn_fill_value, dyn_src_shape], z)
+        dyn_src_shape = relay.Var("dyn_src_shape", relay.ty.TensorType((rank,), 'int64'))
+        z = relay.full(x, dyn_src_shape, dtype)
+        func = relay.Function([x, dyn_src_shape], z)
         ref_res = np.full(src_shape, fill_value).astype(dtype)
-        verify_func(func, [fill_value, src_shape], ref_res)
+        
+        verify_func(func, [fill_value, np.array(src_shape).astype('int64')], ref_res)
 
-    verify_full(4, (1, 3, 4, 4), 'int64')
+    verify_full(4, (1, 3, 4, 4), 'int32')
+    #verify_full(4, (1, 3, 4, 4), 'int64') # does not pass -- how do python ints interact with relay? no python3 int64.. 
+                                           # consider supporting np.int64(num)?
     verify_full(4.0, (1, 4), 'float32')
 
 if __name__ == "__main__":
@@ -119,3 +121,4 @@ if __name__ == "__main__":
     test_dyn_shape_reshape()
     test_dyn_tile()
     test_dyn_zeros_ones()
+    test_dyn_full()

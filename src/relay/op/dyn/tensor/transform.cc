@@ -335,19 +335,17 @@ bool FullRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   return true;
 }
 
-Array<te::Tensor> FullCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
-                              const Type& out_type) {
-  const auto* out_ttype = out_type.as<TensorTypeNode>();
-  return {topi::full(out_ttype->shape, out_ttype->dtype, inputs[0]())};
-}
-
 Expr MakeFull(Expr fill_value, Expr shape, DataType dtype) {
   auto attrs = make_object<InitOpAttrs>();
   attrs->dtype = std::move(dtype);
   static const Op& op = Op::Get("dyn.full");
   return Call(op, {fill_value, shape}, Attrs(attrs), {});
 }
-
+Array<te::Tensor> FullCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
+                              const Type& out_type) {
+  const auto* out_ttype = out_type.as<TensorTypeNode>();
+  return {topi::full(out_ttype->shape, out_ttype->dtype, inputs[0]())};
+}
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.full").set_body_typed(MakeFull);
 
 RELAY_REGISTER_OP("dyn.full")

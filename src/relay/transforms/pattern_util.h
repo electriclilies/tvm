@@ -609,10 +609,10 @@ static inline Expr GreaterEqual(const Expr& lhs, const Expr& rhs) {
   return Call(op, {lhs, rhs}, Attrs(), {});
 }
 
-Expr MakeFull(Expr fill_value, Expr shape, DataType dtype);
+Expr MakeFull(Expr fill_value, Array<Integer> shape, DataType dtype);
 
 static inline Expr Full(Expr fill_value, Array<IndexExpr> shape, DataType dtype) {
-  return MakeFull(fill_value, CheckConstantShape(shape), dtype);
+  return MakeFull(fill_value, CheckConstantShapeArrayInteger(shape), dtype);
 }
 
 static inline Expr Conv2D(Expr data, Expr weight, Array<IndexExpr> strides,

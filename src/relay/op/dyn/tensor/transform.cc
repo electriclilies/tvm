@@ -305,7 +305,6 @@ RELAY_REGISTER_OP("dyn.ones")
     .set_support_level(3)
     .add_type_rel("DynamicInitOp", InitOpRel);
 
-// full -- TODO: CONVERT TO DYNAMIC
 bool FullRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
              const TypeReporter& reporter) {
   CHECK_EQ(types.size(), 3);

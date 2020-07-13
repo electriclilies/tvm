@@ -28,7 +28,8 @@
 
 #include <vector>
 
-#include "../op_common.h" 
+#include "../op_common.h"
+#include "../nn/upsampling.h"
 
 namespace tvm {
 namespace relay {
@@ -36,36 +37,10 @@ namespace relay {
 TVM_REGISTER_NODE_TYPE(UpSamplingAttrs);
 TVM_REGISTER_NODE_TYPE(UpSampling3DAttrs);
 
-template <typename T>
-Array<Array<Layout> > UpsamplingInferCorrectLayout(const Attrs& attrs,
-                                                   const Array<Layout>& new_in_layouts,
-                                                   const Array<Layout>& old_in_layouts,
-                                                   const Array<tvm::relay::Type>& old_in_types) {
-  // NOTE: Discard "const" qualifier here.
-  T* params = const_cast<T*>(attrs.as<T>());
-
-  if (new_in_layouts.defined()) {
-    CHECK_EQ(new_in_layouts.size(), 1);
-
-    Layout raw_layout(params->layout);
-    Layout input = new_in_layouts[0];
-    if (input.IndexOf(LayoutAxis::Get('W')) == raw_layout.IndexOf(LayoutAxis::Get('W')) &&
-        input.IndexOf(LayoutAxis::Get('H')) == raw_layout.IndexOf(LayoutAxis::Get('H')) &&
-        !input.Contains(LayoutAxis::Get('w')) && !input.Contains(LayoutAxis::Get('h')) &&
-        (input.IndexOf(LayoutAxis::Get('D')) == -1 ||
-         (input.IndexOf(LayoutAxis::Get('D')) == raw_layout.IndexOf(LayoutAxis::Get('D')) &&
-          !input.Contains(LayoutAxis::Get('d'))))) {
-      params->layout = input.name();  // modify self to follow the input layout
-    }
-  }
-
-  Layout inferred_layout(params->layout);
-  return Array<Array<Layout> >{{inferred_layout}, {inferred_layout}};
-}
-
 bool UpSamplingRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                    const TypeReporter& reporter) {
-  CHECK_EQ(types.size(), 2);
+                       // types = [data_type, scale_h_type, scale_w_type, ret_type]
+  CHECK_EQ(types.size(), 4);
   const auto* data = types[0].as<TensorTypeNode>();
   if (data == nullptr) return false;
 
@@ -80,38 +55,40 @@ bool UpSamplingRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
       << "UpSampling only support input layouts that are convertible from NCHW."
       << " But got " << in_layout;
 
-  auto oshape = layout_converter.ForwardShape(data->shape);
-  oshape.Set(2, tir::Cast(oshape[2].dtype(), tvm::round(oshape[2] * param->scale_h)));
-  oshape.Set(3, tir::Cast(oshape[3].dtype(), tvm::round(oshape[3] * param->scale_w)));
+  const IntImmNode* rank = data->shape->shape[0].as<IntImmNode>();
+  CHECK(rank == 4); // data is 4D array
 
+  std::vector<IndexExpr> oshape {Any(), Any(), Any(), Any()}; // output will be 4D array
   // assign output type
-  reporter->Assign(types[1], TensorType(layout_converter.BackwardShape(oshape), data->dtype));
+  reporter->Assign(types[3], TensorType(oshape, data->dtype));
   return true;
 }
 
 // Positional relay function to create upsampling operator
 // used by frontend FFI.
-Expr MakeUpSampling(Expr data, double scale_h, double scale_w, String layout, String method,
+Expr MakeUpSampling(Expr data, Expr scale_h, Expr scale_w, String layout, String method,
                     bool align_corners) {
   auto attrs = make_object<UpSamplingAttrs>();
   attrs->layout = std::move(layout);
   attrs->method = std::move(method);
-  attrs->scale_h = scale_h;
-  attrs->scale_w = scale_w;
   attrs->align_corners = align_corners;
   static const Op& op = Op::Get("nn.upsampling");
-  return Call(op, {data}, Attrs(attrs), {});
+  return Call(op, {data, scale_h, scale_w}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relay.op.nn._make.upsampling").set_body_typed(MakeUpSampling);
+TVM_REGISTER_GLOBAL("relay.op.dyn.nn._make.upsampling").set_body_typed(MakeUpSampling);
 
-RELAY_REGISTER_OP("nn.upsampling")
+RELAY_REGISTER_OP("dyn.nn.upsampling")
     .describe(
         R"code(Perform upsampling on input array with nearest neighbour or bilinear interpolation.
 
 - **data**: data is 4D array of shape
             (batch_size, channels, in_height, in_width) for NCHW
             (batch_size, in_height, in_width, channels) for NHWC
+
+- **scale_h**: scale_h is an integer of the amount to scale height by
+
+- **scale_w**: scale_w is an integer of the amount to scale width by
 
 - **out**: Output is 4D array of shape
            for layout NCHW
@@ -122,10 +99,12 @@ RELAY_REGISTER_OP("nn.upsampling")
 
 )code" TVM_ADD_FILELINE)
     .set_attrs_type<UpSamplingAttrs>()
-    .set_num_inputs(1)
+    .set_num_inputs(3)
     .add_argument("data", "Tensor", "The input tensor.")
+    .add_argument("scale_h", "integer", "The scale for the height.")
+    .add_argument("scale_w", "integer", "The scale for the width.")
     .set_support_level(2)
-    .add_type_rel("UpSampling", UpSamplingRel)
+    .add_type_rel("DynamicUpSampling", UpSamplingRel)
     .set_attr<FInferCorrectLayout>("FInferCorrectLayout",
                                    UpsamplingInferCorrectLayout<UpSamplingAttrs>)
     .set_attr<TOpPattern>("TOpPattern", kInjective);

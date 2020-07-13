@@ -19,6 +19,7 @@
 from tvm.relay import expr
 
 from . import _make
+from .dyn import _make as _dyn_make
 from .util import get_pad_tuple1d, get_pad_tuple2d, get_pad_tuple3d
 
 
@@ -1170,7 +1171,11 @@ def upsampling(data,
     result : tvm.relay.Expr
         The computed result.
     """
-    return _make.upsampling(data, scale_h, scale_w, layout, method, align_corners)
+    # should w, h become dyn too?
+    if isinstance(data, Expr) or isinstance(scale_h, Expr) or isinstance(scale_w, Expr):
+        return _dyn_make.upsampling(data, scale_h, scale_w, layout, method, align_corners)
+    else: 
+        return _make.upsampling(data, scale_h, scale_w, layout, method, align_corners)
 
 
 def upsampling3d(data,
@@ -1826,7 +1831,7 @@ def group_norm(data,
                epsilon=1e-5,
                center=True,
                scale=True):
-    r"""
+    """
     Group normalization normalizes over group of channels for each training examples.
     We can say that, Group Norm is in between Instance Norm and Layer Norm. When we put
     all the channels into a single group, group normalization becomes Layer normalization.

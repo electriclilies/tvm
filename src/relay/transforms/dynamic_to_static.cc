@@ -22,6 +22,7 @@
  * \file dynamic_to_static.cc
  * \brief Rewrite Dynamic Operations to Static operations where possible
  */
+#include <tvm/relay/attrs/algorithm.h>
 #include <tvm/relay/expr_functor.h>
 #include <tvm/relay/transform.h>
 
@@ -35,6 +36,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
   DynamicToStaticMutator()
       : dyn_reshape_op_(Op::Get("dyn.reshape")),
         dyn_tile_op_(Op::Get("dyn.tile")),
+        dyn_topk_op_(Op::Get("dyn.topk")),
         dyn_broadcast_to_op_(Op::Get("dyn.broadcast_to")),
         dyn_zeros_op_(Op::Get("dyn.zeros")),
         dyn_ones_op_(Op::Get("dyn.ones")),
@@ -59,6 +61,47 @@ class DynamicToStaticMutator : public MixedModeMutator {
         attrs->reps = ToVector(reps->data);
         static const Op& op = Op::Get("tile");
         return Call(op, {call_node->args[0]}, Attrs(attrs), {});
+      }
+    } else if (call_node->op == dyn_topk_op_) {
+      if (const ConstantNode* k = call_node->args[1].as<ConstantNode>()) {
+        const TopKAttrs* param = call_node->attrs.as<TopKAttrs>();
+        CHECK(param);
+        auto attrs = make_object<TopKAttrs>();
+        attrs->k = Integer(ToScalar(k->data, 0));
+        std::cout << attrs->k << std::endl;
+        attrs->axis = param->axis;
+        attrs->ret_type = param->ret_type;
+        attrs->is_ascend = param->is_ascend;
+        attrs->dtype = param->dtype;
+        static const Op& op = Op::Get("topk");
+        return Call(op, {call_node->args[0]}, Attrs(attrs), {});
+      }
+    }
+    if (call_node->op == dyn_broadcast_to_op_) {
+      if (const ConstantNode* shape = call_node->args[1].as<ConstantNode>()) {
+        auto attrs = make_object<InitOpAttrs>();
+        CHECK_EQ(shape->data->ndim, 1);
+        attrs->shape = ToVector(shape->data);
+        static const Op& broadcast_to = Op::Get("broadcast_to");
+        return Call(broadcast_to, {call_node->args[0]}, Attrs(attrs), {});
+      }
+    }
+    if (call_node->op == dyn_zeros_op_) {
+      if (const ConstantNode* shape = call_node->args[0].as<ConstantNode>()) {
+        auto attrs = make_object<InitOpAttrs>();
+        CHECK_EQ(shape->data->ndim, 1);
+        attrs->shape = ToVector(shape->data);
+        static const Op& zeros = Op::Get("zeros");
+        return Call(zeros, {}, Attrs(attrs), {});
+      }
+    }
+    if (call_node->op == dyn_ones_op_) {
+      if (const ConstantNode* shape = call_node->args[0].as<ConstantNode>()) {
+        auto attrs = make_object<InitOpAttrs>();
+        CHECK_EQ(shape->data->ndim, 1);
+        attrs->shape = ToVector(shape->data);
+        static const Op& ones = Op::Get("ones");
+        return Call(ones, {}, Attrs(attrs), {});
       }
     }
     if (call_node->op == dyn_broadcast_to_op_) {
@@ -109,10 +152,12 @@ class DynamicToStaticMutator : public MixedModeMutator {
 
   const Op& dyn_reshape_op_;
   const Op& dyn_tile_op_;
+  const Op& dyn_topk_op_;
   const Op& dyn_broadcast_to_op_;
   const Op& dyn_zeros_op_;
   const Op& dyn_ones_op_;
   const Op& dyn_full_op_;
+
 };
 
 Expr DynamicToStatic(Function f, IRModule m) {

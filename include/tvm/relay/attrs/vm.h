@@ -17,37 +17,31 @@
  * under the License.
  */
 
-#define TVM_CRT_LOG_VIRT_MEM_SIZE 16
-#define TVM_CRT_PAGE_BYTES 4096
+/*!
+ * \file tvm/relay/attrs/vm.h
+ * \brief Attributes for Relay vm operators.
+ */
+#ifndef TVM_RELAY_ATTRS_VM_H_
+#define TVM_RELAY_ATTRS_VM_H_
 
-#include <gtest/gtest.h>
-#include <tvm/runtime/crt/memory.h>
+#include <tvm/ir/attrs.h>
 
-#include "../../src/runtime/crt/memory.c"
+namespace tvm {
+namespace relay {
 
-TEST(CRTMemory, Alloc) {
-  for (int idx = 0; idx < 65536; idx++) {
-    void* a = vmalloc(1);
-    EXPECT_EQ(vleak_size, 1);
-    vfree(a);
-    EXPECT_EQ(vleak_size, 0);
+/*!
+ * \brief Options for the shape function operator.
+ */
+struct ShapeFuncAttrs : public tvm::AttrsNode<ShapeFuncAttrs> {
+  Array<Integer> is_input;
+
+  TVM_DECLARE_ATTRS(ShapeFuncAttrs, "relay.attrs.ShapeFuncAttrs") {
+    TVM_ATTR_FIELD(is_input).describe(
+        "A bool indicating whether the shape function should"
+        "expect shape or input in each position.");
   }
-}
+};
 
-TEST(CRTMemory, Realloc) {
-  for (int idx = 0; idx < 65536; idx++) {
-    void* a = vrealloc(0, 1);
-    EXPECT_EQ(vleak_size, 1);
-    void* b = vrealloc(a, 1);
-    EXPECT_EQ(a, b);
-    EXPECT_EQ(vleak_size, 1);
-    vfree(a);
-    EXPECT_EQ(vleak_size, 0);
-  }
-}
-
-int main(int argc, char** argv) {
-  testing::InitGoogleTest(&argc, argv);
-  testing::FLAGS_gtest_death_test_style = "threadsafe";
-  return RUN_ALL_TESTS();
-}
+}  // namespace relay
+}  // namespace tvm
+#endif  // TVM_RELAY_ATTRS_VM_H_

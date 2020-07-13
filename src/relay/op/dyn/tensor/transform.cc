@@ -24,7 +24,10 @@
 #include "transform.h"
 
 #include <topi/broadcast.h>
+<<<<<<< HEAD
 #include <topi/elemwise.h>
+=======
+>>>>>>> aa408256dee5fcaee1ffc684ac103b7473f0c3ce
 #include <topi/transform.h>
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/op.h>
@@ -305,6 +308,7 @@ RELAY_REGISTER_OP("dyn.ones")
     .set_support_level(3)
     .add_type_rel("DynamicInitOp", InitOpRel);
 
+<<<<<<< HEAD
 bool FullRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
              const TypeReporter& reporter) {
   CHECK_EQ(types.size(), 3);
@@ -360,6 +364,8 @@ RELAY_REGISTER_OP("dyn.full")
     .set_attr<FTVMCompute>("FTVMCompute", FullCompute)
     .set_attr<TOpPattern>("TOpPattern", kElemWise);
 
+=======
+>>>>>>> aa408256dee5fcaee1ffc684ac103b7473f0c3ce
 }  // namespace dyn
 }  // namespace relay
 }  // namespace tvm

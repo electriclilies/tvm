@@ -24,8 +24,8 @@
 #include "transform.h"
 
 #include <topi/broadcast.h>
-#include <topi/elemwise.h>
 #include <topi/transform.h>
+#include <topi/elemwise.h>
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/op.h>
 #include <tvm/relay/op_attr_types.h>

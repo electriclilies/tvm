@@ -28,7 +28,7 @@
 
 #include <vector>
 
-#include "../op_common.h" 
+#include "../op_common.h"
 
 namespace tvm {
 namespace relay {

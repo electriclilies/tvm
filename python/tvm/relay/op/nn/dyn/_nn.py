@@ -16,10 +16,14 @@
 # under the License.
 # pylint: disable=no-else-return, invalid-name, unused-argument, too-many-arguments, consider-using-in
 """Backend compiler related feature registration"""
+
 from __future__ import absolute_import
+from tvm.te.hybrid import script
+from ...op import register_shape_func, register_compute
+from ...op import register_injective_schedule
 
 # upsampling
-@reg.register_compute("dyn.nn.upsampling")
+@register_compute("nn.dyn.upsampling")
 def compute_upsampling(attrs, inputs, out_dtype):
     data = inputs[0]
     scale_h = inputs[1]
@@ -29,8 +33,7 @@ def compute_upsampling(attrs, inputs, out_dtype):
     align_corners = attrs.align_corners
     return [topi.nn.upsampling(data, scale_h, scale_w, layout, method, align_corners)]
 
-reg.register_injective_schedule("dyn.nn.upsampling")
-
+register_injective_schedule("nn.dyn.upsampling")
 
 #####################
 #  Shape functions  #
@@ -40,7 +43,8 @@ reg.register_injective_schedule("dyn.nn.upsampling")
 def _upsampling_shape_func(dshape, scale_h, scale_w, layout):
     assert len(dshape.shape) == 1 and dshape.shape[0] == 4
     out = output_tensor((4,), "int64") # dshape is 4d
-    if(layout == kNCHW("NCHW")): #how do i check what layout it is
+    print(layout)
+    if(layout == "NCHW"):
         batch_size = dshape[0]
         channels = dshape[1]
         in_height = dshape[2]
@@ -53,7 +57,7 @@ def _upsampling_shape_func(dshape, scale_h, scale_w, layout):
 
         return out
 
-    if (layout == kNHWC):
+    elif (layout == "NHWC"):
         batch_size = dshape[0]
         in_height = dshape[1]
         in_width = dshape[2]
@@ -66,5 +70,6 @@ def _upsampling_shape_func(dshape, scale_h, scale_w, layout):
 
         return out
 
+@register_shape_func("nn.dyn.upsampling", True)
 def upsampling_shape_func(attrs, inputs, _):
     return [_upsampling_shape_func(inputs[0], inputs[1], inputs[2], attrs.layout)]

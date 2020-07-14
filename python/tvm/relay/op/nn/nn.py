@@ -16,12 +16,14 @@
 # under the License.
 #pylint: disable=invalid-name, too-many-lines
 """Neural network operations."""
+import tvm
+from tvm import relay
 from tvm.relay import expr
 
 from . import _make
 from .dyn import _make as _dyn_make
 from .util import get_pad_tuple1d, get_pad_tuple2d, get_pad_tuple3d
-
+from ...expr import Expr
 
 def conv1d(data,
            weight,
@@ -1136,7 +1138,7 @@ def upsampling(data,
                layout="NCHW",
                method="nearest_neighbor",
                align_corners=False):
-    """Upsampling.
+    r"""Upsampling.
 
     This operator takes data as input and does 2D scaling to the given scale factor.
     In the default case, where the data_layout is `NCHW`
@@ -1148,13 +1150,13 @@ def upsampling(data,
 
     Parameters
     ----------
-    data : tvm.relay.Expr
+    data : tvm.relay.Expr or tuple <anytype> or list <anytype>
         The input data to the operator.
 
-    scale_h : tvm.relay.Expr
+    scale_h : tvm.relay.Expr or int or float
         The scale factor for height upsampling.
 
-    scale_w : tvm.relay.Expr
+    scale_w : tvm.relay.Expr or int or float
         The scale factor for width upsampling.
 
     layout : str, optional
@@ -1171,8 +1173,17 @@ def upsampling(data,
     result : tvm.relay.Expr
         The computed result.
     """
-    # should w, h become dyn too?
+
     if isinstance(data, Expr) or isinstance(scale_h, Expr) or isinstance(scale_w, Expr):
+        if not isinstance(data, Expr): # is it better to check if not expr here
+            data = relay.Constant(data)
+        if not isinstance(scale_h, Expr):
+            print("hi1")
+            scale_h = relay.Constant(tvm.nd.array(scale_h))
+            print("hi2")
+        if not isinstance(scale_w, Expr):
+            scale_w = relay.Constant(tvm.nd.array(scale_w))
+        print("hi")
         return _dyn_make.upsampling(data, scale_h, scale_w, layout, method, align_corners)
     else: 
         return _make.upsampling(data, scale_h, scale_w, layout, method, align_corners)

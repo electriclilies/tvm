@@ -19,7 +19,6 @@ Support level10 operator test cases.
 
 """
 
-
 import numpy as np
 import tvm
 from tvm import relay

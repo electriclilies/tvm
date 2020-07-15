@@ -40,7 +40,15 @@ bool UpSamplingRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                        // types = [data_type, scale_h_type, scale_w_type, ret_type]
   CHECK_EQ(types.size(), 4);
   const auto* data = types[0].as<TensorTypeNode>();
+  const auto* scale_h = types[1].as<TensorTypeNode>();
+  const auto* scale_w = types[2].as<TensorTypeNode>();
   if (data == nullptr) return false;
+  if (scale_h == nullptr) return false;
+  if (scale_w == nullptr) return false;
+  
+  CHECK_EQ(data->shape.size(), 4);
+  //CHECK_EQ(scale_h->shape.size(), 1);
+  //CHECK_EQ(scale_w->shape.size(), 1);
 
   static const Layout kNCHW("NCHW");
 
@@ -52,10 +60,6 @@ bool UpSamplingRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   CHECK(layout_converter.defined())
       << "UpSampling only supports input layouts that are convertible from NCHW."
       << " But got " << in_layout;
-  // what to do with converted layout
-  const IntImmNode* rank = data->shape[0].as<IntImmNode>();
-  CHECK(rank->value == 4); // data is 4D array
-
   std::vector<IndexExpr> oshape {Any(), Any(), Any(), Any()}; // output will be 4D array
   // assign output type
   reporter->Assign(types[3], TensorType(oshape, data->dtype));
@@ -103,10 +107,10 @@ RELAY_REGISTER_OP("nn.dyn.upsampling")
     .add_argument("scale_w", "integer", "The scale for the width.")
     .set_support_level(2)
     .add_type_rel("DynamicUpSampling", UpSamplingRel)
-    .set_attr<FInferCorrectLayout>("FInferCorrectLayout",
-                                   UpsamplingInferCorrectLayout<UpSamplingAttrs>)
     .set_attr<TOpPattern>("TOpPattern", kInjective);
 
 }  // namespace dyn
 }  // namespace relay
 }  // namespace tvm
+// deleted from dyn upsampling
+// .set_attr<FInferCorrectLayout>("FInferCorrectLayout",UpsamplingInferCorrectLayout<UpSamplingAttrs>)

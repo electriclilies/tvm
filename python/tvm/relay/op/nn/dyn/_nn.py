@@ -25,6 +25,7 @@ from ...op import register_injective_schedule
 # upsampling
 @register_compute("nn.dyn.upsampling")
 def compute_upsampling(attrs, inputs, out_dtype):
+    print("compute_upsampling called")
     data = inputs[0]
     scale_h = inputs[1]
     scale_w = inputs[2]
@@ -40,11 +41,25 @@ register_injective_schedule("nn.dyn.upsampling")
 #####################
 
 @script
-def _upsampling_shape_func(dshape, scale_h, scale_w, layout):
-    assert len(dshape.shape) == 1 and dshape.shape[0] == 4
+def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w):
     out = output_tensor((4,), "int64") # dshape is 4d
-    print(layout)
-    if(layout == "NCHW"):
+
+    batch_size = dshape[0]
+    in_height = dshape[1]
+    in_width = dshape[2]
+    channels = dshape[3]
+    
+    out[0] = batch_size
+    out[1] = in_height * h_scale # ROUND ME!!
+    out[2] = in_width * w_scale
+    out[3] = channels
+
+    return out
+
+@script
+def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
+        out = output_tensor((4,), "int64") # dshape is 4d
+        
         batch_size = dshape[0]
         channels = dshape[1]
         in_height = dshape[2]
@@ -57,19 +72,16 @@ def _upsampling_shape_func(dshape, scale_h, scale_w, layout):
 
         return out
 
-    elif (layout == "NHWC"):
-        batch_size = dshape[0]
-        in_height = dshape[1]
-        in_width = dshape[2]
-        channels = dshape[3]
-
-        out[0] = batch_size
-        out[1] = in_height * h_scale
-        out[2] = in_width * w_scale
-        out[3] = channels
-
-        return out
-
 @register_shape_func("nn.dyn.upsampling", True)
 def upsampling_shape_func(attrs, inputs, _):
-    return [_upsampling_shape_func(inputs[0], inputs[1], inputs[2], attrs.layout)]
+    print(len(inputs[0].shape))
+    print(inputs[0].dtype)
+    print(inputs[1])
+    print(inputs[2])
+    print(inputs[1].dtype)
+    print(inputs[2].dtype)
+    print(attrs.layout)
+    if (attrs.layout == "NHWC"):
+        return [_upsampling_nhwc_shape_func(inputs[0].shape, inputs[1], inputs[2])]
+    if (attrs.layout == "NCHW"):
+        return [_upsampling_nchw_shape_func(inputs[0].shape, inputs[1], inputs[2])]

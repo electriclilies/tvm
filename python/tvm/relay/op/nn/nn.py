@@ -23,7 +23,7 @@ from tvm.relay import expr
 from . import _make
 from .dyn import _make as _dyn_make
 from .util import get_pad_tuple1d, get_pad_tuple2d, get_pad_tuple3d
-from ...expr import Expr
+from ...expr import const, Expr
 
 def conv1d(data,
            weight,
@@ -1175,15 +1175,12 @@ def upsampling(data,
     """
 
     if isinstance(data, Expr) or isinstance(scale_h, Expr) or isinstance(scale_w, Expr):
-        if not isinstance(data, Expr): # is it better to check if not expr here
-            data = relay.Constant(data)
+        if not isinstance(data, Expr):
+            data = const(list(data), "int64") # is this right
         if not isinstance(scale_h, Expr):
-            print("hi1")
-            scale_h = relay.Constant(tvm.nd.array(scale_h))
-            print("hi2")
+            scale_h = const([scale_h], "int64")
         if not isinstance(scale_w, Expr):
-            scale_w = relay.Constant(tvm.nd.array(scale_w))
-        print("hi")
+            scale_w = const([scale_w], "int64")
         return _dyn_make.upsampling(data, scale_h, scale_w, layout, method, align_corners)
     else: 
         return _make.upsampling(data, scale_h, scale_w, layout, method, align_corners)

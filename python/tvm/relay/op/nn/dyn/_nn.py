@@ -21,14 +21,16 @@ from __future__ import absolute_import
 from tvm.te.hybrid import script
 from ...op import register_shape_func, register_compute
 from ...op import register_injective_schedule
+import tvm
+import topi
 
 # upsampling
 @register_compute("nn.dyn.upsampling")
 def compute_upsampling(attrs, inputs, out_dtype):
     print("compute_upsampling called")
     data = inputs[0]
-    scale_h = inputs[1]
-    scale_w = inputs[2]
+    scale_h = inputs[1][0]
+    scale_w = inputs[2][0]
     layout = attrs.layout
     method = attrs.method
     align_corners = attrs.align_corners
@@ -42,7 +44,7 @@ register_injective_schedule("nn.dyn.upsampling")
 
 @script
 def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w):
-    out = output_tensor((4,), "int64") # dshape is 4d
+    out = output_tensor((4,), "int32") # dshape is 4d
 
     batch_size = dshape[0]
     in_height = dshape[1]
@@ -50,15 +52,15 @@ def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w):
     channels = dshape[3]
     
     out[0] = batch_size
-    out[1] = in_height * h_scale # ROUND ME!!
-    out[2] = in_width * w_scale
+    out[1] = in_height * h_scale[0] # ROUND ME!! how though? 
+    out[2] = in_width * w_scale[0]
     out[3] = channels
 
     return out
 
 @script
 def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
-        out = output_tensor((4,), "int64") # dshape is 4d
+        out = output_tensor((4,), "int32") # dshape is 4d
         
         batch_size = dshape[0]
         channels = dshape[1]
@@ -67,15 +69,15 @@ def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
 
         out[0] = batch_size
         out[1] = channels
-        out[2] = in_height * scale_h
-        out[3] = in_width * scale_w
+        out[2] = in_height * scale_h[0]
+        out[3] = in_width * scale_w[0]
 
         return out
 
 @register_shape_func("nn.dyn.upsampling", True)
 def upsampling_shape_func(attrs, inputs, _):
     print(len(inputs[0].shape))
-    print(inputs[0].dtype)
+    print(inputs[0].shape)
     print(inputs[1])
     print(inputs[2])
     print(inputs[1].dtype)

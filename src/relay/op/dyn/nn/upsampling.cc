@@ -47,9 +47,11 @@ bool UpSamplingRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   if (scale_w == nullptr) return false;
   
   CHECK_EQ(data->shape.size(), 4);
-  //CHECK_EQ(scale_h->shape.size(), 1);
-  //CHECK_EQ(scale_w->shape.size(), 1);
-
+  //CHECK_EQ(scale_h->shape.size(), 0);
+  //CHECK_EQ(scale_w->shape.size(), 0);
+  std::cout << scale_h->dtype << std::endl; 
+  std::cout << scale_w->dtype << std::endl;
+  std::cout << data->shape[0]->dtype << std::endl;
   static const Layout kNCHW("NCHW");
 
   const UpSamplingAttrs* param = attrs.as<UpSamplingAttrs>();
@@ -74,6 +76,7 @@ Expr MakeUpSampling(Expr data, Expr scale_h, Expr scale_w, String layout, String
   attrs->layout = std::move(layout);
   attrs->method = std::move(method);
   attrs->align_corners = align_corners;
+
   static const Op& op = Op::Get("nn.dyn.upsampling");
   return Call(op, {data, scale_h, scale_w}, Attrs(attrs), {});
 }

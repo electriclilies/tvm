@@ -1174,9 +1174,7 @@ def upsampling(data,
         The computed result.
     """
 
-    if isinstance(data, Expr) or isinstance(scale_h, Expr) or isinstance(scale_w, Expr):
-        if not isinstance(data, Expr):
-            data = const(list(data), "int32")
+    if isinstance(scale_h, Expr) or isinstance(scale_w, Expr):
         if not isinstance(scale_h, Expr):
             scale_h = const([scale_h], "int32")
         if not isinstance(scale_w, Expr):
@@ -1184,7 +1182,6 @@ def upsampling(data,
         return _dyn_make.upsampling(data, scale_h, scale_w, layout, method, align_corners)
     else: 
         return _make.upsampling(data, scale_h, scale_w, layout, method, align_corners)
-
 
 def upsampling3d(data,
                  scale_d=1,

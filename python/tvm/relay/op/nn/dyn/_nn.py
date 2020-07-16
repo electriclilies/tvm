@@ -20,7 +20,8 @@
 from __future__ import absolute_import
 from tvm.te.hybrid import script
 from ...op import register_shape_func, register_compute
-from ...op import register_injective_schedule
+from ...op import register_injective_schedule, register_broadcast_schedule
+from .. import _pad_shape_func
 import tvm
 import topi
 
@@ -38,52 +39,54 @@ def compute_upsampling(attrs, inputs, out_dtype):
 
 register_injective_schedule("nn.dyn.upsampling")
 
+# pad
+register_broadcast_schedule("nn.dyn.pad")
+
 #####################
 #  Shape functions  #
 #####################
 
+# upsampling
+
 @script
 def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w):
-    out = output_tensor((4,), "int32") # dshape is 4d
-
+    out = output_tensor((4,), "int64")
     batch_size = dshape[0]
     in_height = dshape[1]
     in_width = dshape[2]
     channels = dshape[3]
-    
-    out[0] = batch_size
-    out[1] = in_height * h_scale[0] # ROUND ME!! how though? 
-    out[2] = in_width * w_scale[0]
-    out[3] = channels
-
+    out[0] = int64(batch_size)
+    out[1] = int64(round(in_height * h_scale[0]))
+    out[2] = int64(round(in_width * w_scale[0]))
+    out[3] = int64(channels)
     return out
 
 @script
 def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
-        out = output_tensor((4,), "int32") # dshape is 4d
-        
+        out = output_tensor((4,), "int64")
         batch_size = dshape[0]
         channels = dshape[1]
         in_height = dshape[2]
         in_width = dshape[3]
-
-        out[0] = batch_size
-        out[1] = channels
-        out[2] = in_height * scale_h[0]
-        out[3] = in_width * scale_w[0]
-
+        out[0] = int64(batch_size)
+        out[1] = int64(channels)
+        out[2] = int64(round(in_height * scale_h[0]))
+        out[3] = int64(round(in_width * scale_w[0]))
         return out
 
 @register_shape_func("nn.dyn.upsampling", True)
 def upsampling_shape_func(attrs, inputs, _):
-    print(len(inputs[0].shape))
-    print(inputs[0].shape)
-    print(inputs[1])
-    print(inputs[2])
-    print(inputs[1].dtype)
-    print(inputs[2].dtype)
-    print(attrs.layout)
     if (attrs.layout == "NHWC"):
         return [_upsampling_nhwc_shape_func(inputs[0].shape, inputs[1], inputs[2])]
     if (attrs.layout == "NCHW"):
         return [_upsampling_nchw_shape_func(inputs[0].shape, inputs[1], inputs[2])]
+
+@register_shape_func("nn.dyn.pad", False)
+def pad_shape_func(attrs, inputs, _):
+    """
+    Shape function for dynamic pad op.
+    """
+    pad_width = []
+    for pair in attrs.pad_width:
+        pad_width.append(get_const_tuple(pair))
+    return [_pad_shape_func(inputs[0], convert(pad_width))]

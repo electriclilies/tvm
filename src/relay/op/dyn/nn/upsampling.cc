@@ -110,6 +110,8 @@ RELAY_REGISTER_OP("nn.dyn.upsampling")
     .add_argument("scale_w", "integer", "The scale for the width.")
     .set_support_level(2)
     .add_type_rel("DynamicUpSampling", UpSamplingRel)
+    .set_attr<FInferCorrectLayout>("FInferCorrectLayout",
+                                   UpsamplingInferCorrectLayout<UpSamplingAttrs>)
     .set_attr<TOpPattern>("TOpPattern", kInjective);
 
 }  // namespace dyn

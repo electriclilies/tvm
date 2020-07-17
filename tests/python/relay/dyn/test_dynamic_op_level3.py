@@ -117,8 +117,8 @@ def test_dyn_full():
     verify_full(4.0, (1, 4), 'float32')
 
 if __name__ == "__main__":
-    test_dyn_reshape()
-    test_dyn_shape_reshape()
-    test_dyn_tile()
-    test_dyn_zeros_ones()
+    #test_dyn_reshape()
+    #test_dyn_shape_reshape()
+    #test_dyn_tile()
+    #test_dyn_zeros_ones()
     test_dyn_full()

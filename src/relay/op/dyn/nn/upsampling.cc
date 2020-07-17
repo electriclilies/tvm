@@ -117,5 +117,3 @@ RELAY_REGISTER_OP("nn.dyn.upsampling")
 }  // namespace dyn
 }  // namespace relay
 }  // namespace tvm
-// deleted from dyn upsampling
-// .set_attr<FInferCorrectLayout>("FInferCorrectLayout",UpsamplingInferCorrectLayout<UpSamplingAttrs>)

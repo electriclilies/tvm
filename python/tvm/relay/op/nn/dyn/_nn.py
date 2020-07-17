@@ -21,7 +21,7 @@ from __future__ import absolute_import
 from tvm.te.hybrid import script
 from ...op import register_shape_func, register_compute
 from ...op import register_injective_schedule, register_broadcast_schedule
-from .. import _pad_shape_func
+from .._nn import _pad_shape_func
 import tvm
 import topi
 
@@ -73,6 +73,7 @@ def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
         out[2] = int64(round(in_height * scale_h[0]))
         out[3] = int64(round(in_width * scale_w[0]))
         return out
+
 
 @register_shape_func("nn.dyn.upsampling", True)
 def upsampling_shape_func(attrs, inputs, _):

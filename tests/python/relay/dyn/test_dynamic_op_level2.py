@@ -50,5 +50,24 @@ def test_dyn_upsampling():
     ref_res = topi.testing.upsampling_python(data, (scale_h_val, scale_w_val), layout)
     verify_func(func, [data, 2.0, 2.0], ref_res)
 
+def test_dyn_pad():
+    def verify_pad(dshape, pad_width, dtype):
+        
+        x = relay.var("x", relay.TensorType(dshape, dtype))
+        pad_width_var = relay.var("pad_width_var", relay.TensorType((len(dshape), 2), 'int64'))
+        
+        y = relay.nn.pad(x, pad_width_var)
+        yy = run_infer_type(y)
+
+        assert yy.checked_type == relay.ty.TensorType((relay.Any(),) * len(dshape), dtype)
+       
+        func = relay.Function([x, pad_width_var], y)
+        data = np.random.uniform(size=dshape).astype(dtype)
+        ref_res = np.pad(data, pad_width, 'constant')
+        verify_func(func, [data, pad_width], ref_res)
+    
+    verify_pad((4, 10, 7, 7), ((1, 1), (2, 2), (3, 3), (4, 4)), "int32")
+    #verify_pad((4, 7, 7), ((1, 1), (2, 2), (3, 3), (4, 4)), "int32")
 if __name__ == "__main__":
-    test_dyn_upsampling()
+    #test_dyn_upsampling()
+    test_dyn_pad()

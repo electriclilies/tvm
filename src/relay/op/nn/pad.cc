@@ -36,6 +36,7 @@ namespace tvm {
 namespace relay {
 
 // relay.nn.pad
+TVM_REGISTER_NODE_TYPE(PadAttrs);
 
 Array<Array<Layout>> PadInferCorrectLayout(const Attrs& attrs, const Array<Layout>& new_in_layouts,
                                            const Array<Layout>& old_in_layouts,

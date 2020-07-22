@@ -18,6 +18,10 @@
 """Backend compiler related feature registration"""
 
 from __future__ import absolute_import
+
+from topi.util import get_const_tuple
+
+from tvm.runtime import convert
 from tvm.te.hybrid import script
 from ...op import register_shape_func, register_compute
 from ...op import register_injective_schedule, register_broadcast_schedule
@@ -51,10 +55,10 @@ register_broadcast_schedule("nn.dyn.pad")
 @script
 def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w):
     out = output_tensor((4,), "int64")
-    batch_size = dshape[0]
-    in_height = dshape[1]
-    in_width = dshape[2]
-    channels = dshape[3]
+    batch_size = dshape.shape[0]
+    in_height = dshape.shape[1]
+    in_width = dshape.shape[2]
+    channels = dshape.shape[3]
     out[0] = int64(batch_size)
     out[1] = int64(round(in_height * h_scale[0]))
     out[2] = int64(round(in_width * w_scale[0]))
@@ -64,30 +68,38 @@ def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w):
 @script
 def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
         out = output_tensor((4,), "int64")
-        batch_size = dshape[0]
-        channels = dshape[1]
-        in_height = dshape[2]
-        in_width = dshape[3]
+        batch_size = dshape.shape[0]
+        channels = dshape.shape[1]
+        in_height = dshape.shape[2]
+        in_width = dshape.shape[3]
         out[0] = int64(batch_size)
         out[1] = int64(channels)
         out[2] = int64(round(in_height * scale_h[0]))
         out[3] = int64(round(in_width * scale_w[0]))
         return out
 
-
 @register_shape_func("nn.dyn.upsampling", True)
 def upsampling_shape_func(attrs, inputs, _):
+    print(inputs[0].shape)
+    print(inputs[1])
+    print(inputs[2])
     if (attrs.layout == "NHWC"):
-        return [_upsampling_nhwc_shape_func(inputs[0].shape, inputs[1], inputs[2])]
+        return [_upsampling_nhwc_shape_func(inputs[0], inputs[1], inputs[2])]
     if (attrs.layout == "NCHW"):
-        return [_upsampling_nchw_shape_func(inputs[0].shape, inputs[1], inputs[2])]
+        return [_upsampling_nchw_shape_func(inputs[0], inputs[1], inputs[2])]
 
-@register_shape_func("nn.dyn.pad", False)
-def pad_shape_func(attrs, inputs, _):
+@script
+def _dyn_pad_shape_func(data, pad_width):
+    out = output_tensor((data.shape[0],), "int64")
+    for i in const_range(out.shape[0]):
+        out[i] = pad_width[i, 0] + pad_width[i, 1] + data.shape[i]
+    return out
+
+@register_shape_func("nn.dyn.pad", True)
+def pad_shape_func(attrs, inputs, data):
     """
     Shape function for dynamic pad op.
     """
-    pad_width = []
-    for pair in attrs.pad_width:
-        pad_width.append(get_const_tuple(pair))
-    return [_pad_shape_func(inputs[0], convert(pad_width))]
+    print(inputs[0].shape[0])
+    print(inputs[1])
+    return [_dyn_pad_shape_func(inputs[0], inputs[1])]

@@ -86,7 +86,7 @@ Array<te::Tensor> PadCompute(const Attrs& attrs, const Array<te::Tensor>& inputs
   
   CHECK(((size_t) pad_width_dim1->value) == data.ndim() && pad_width_dim2->value == 2) << "Illegal pad_width";
   
-  const FloatImmNode* pad_value = inputs[2].as<FloatImmNode>();
+  const PrimExpr& pad_value = inputs[2](Array<PrimExpr>());
 
   Array<IndexExpr> pad_before;
   Array<IndexExpr> pad_after;
@@ -99,7 +99,7 @@ Array<te::Tensor> PadCompute(const Attrs& attrs, const Array<te::Tensor>& inputs
   const auto* out_ttype = out_type.as<TensorTypeNode>();
   CHECK(out_ttype != nullptr);
   return Array<te::Tensor>{topi::pad(inputs[0], pad_before, pad_after,
-                                     tvm::tir::make_const(out_ttype->dtype, pad_value->value),
+                                     pad_value,
                                      "T_pad", topi::kElementWise, param->pad_mode)};
 
 }

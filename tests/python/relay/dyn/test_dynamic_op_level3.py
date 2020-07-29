@@ -31,6 +31,7 @@ def verify_func(func, data, ref_res):
         if "llvm" not in target: continue
         for kind in ["vm", "debug"]:
             mod = tvm.ir.IRModule.from_expr(func)
+            """
             seq = tvm.transform.Sequential([
                 relay.transform.InferType(),
                 relay.transform.FoldConstant(),
@@ -47,7 +48,7 @@ def verify_func(func, data, ref_res):
             with relay.build_config(opt_level=3, trace=print_ir):
                 with tvm.target.create("llvm"):
                     mod = seq(mod)
-
+            """
 
             intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
             op_res = intrp.evaluate()(*data)

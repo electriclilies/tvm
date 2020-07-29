@@ -21,7 +21,7 @@ from ..util import simplify
 
 
 def upsampling(data, scale_h, scale_w, layout="NCHW", method='nearest_neighbor',
-               align_corners=False, output_shape=None):
+               align_corners=False):
     """Perform upsampling on the data.
        Nearest neighbor and bilinear upsampling are supported.
 
@@ -52,13 +52,11 @@ def upsampling(data, scale_h, scale_w, layout="NCHW", method='nearest_neighbor',
     """
     base_layout = layout[0:4]
     if base_layout == "NCHW":
-        if output_shape is None:
-            output_shape = (simplify(topi.cast(te.round(data.shape[2] * scale_h), data.shape[2].dtype)),
-                        simplify(topi.cast(te.round(data.shape[3] * scale_w), data.shape[3].dtype)))
+        output_shape = (simplify(topi.cast(te.round(data.shape[2] * scale_h), data.shape[2].dtype)),
+                    simplify(topi.cast(te.round(data.shape[3] * scale_w), data.shape[3].dtype)))
     elif layout == "NHWC":
-        if output_shape is None:
-            output_shape = (simplify(topi.cast(te.round(data.shape[1] * scale_h), data.shape[1].dtype)),
-                        simplify(topi.cast(te.round(data.shape[2] * scale_w), data.shape[2].dtype)))
+        output_shape = (simplify(topi.cast(te.round(data.shape[1] * scale_h), data.shape[1].dtype)),
+                    simplify(topi.cast(te.round(data.shape[2] * scale_w), data.shape[2].dtype)))
 
     else:
         raise ValueError("not support this layout {} yet".format(layout))

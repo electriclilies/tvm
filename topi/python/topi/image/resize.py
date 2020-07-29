@@ -491,7 +491,7 @@ def resize_bicubic(indices, data, image_height, image_width,
 
 
 def resize(data, size, layout="NCHW", method="bilinear",
-           coordinate_transformation_mode="half_pixel", out_dtype=None, output_shape=None):
+           coordinate_transformation_mode="half_pixel", out_dtype=None):
     """Perform resize operation on the data.
 
     Parameters
@@ -528,24 +528,19 @@ def resize(data, size, layout="NCHW", method="bilinear",
     """
 
     method = method.lower()
-    print("resize")
 
     if layout == 'NHWC':
         in_n, in_h, in_w, in_c = data.shape
-        if output_shape is None:
-            output_shape = [in_n, size[0], size[1], in_c]
+        output_shape = [in_n, size[0], size[1], in_c]
     elif layout == 'NCHW':
         in_n, in_c, in_h, in_w = data.shape
-        if output_shape is None: 
-            output_shape = [in_n, in_c, size[0], size[1]]
+        output_shape = [in_n, in_c, size[0], size[1]]
     elif nchw_pack_layout(layout):# for NCHWinic
         in_n, in_c, in_h, in_w, in_inum, in_ic = data.shape
-        if output_shape is None:
-            output_shape = [in_n, in_c, size[0], size[1], in_inum, in_ic]
+        output_shape = [in_n, in_c, size[0], size[1], in_inum, in_ic]
     elif nchw_xc_layout(layout):# for NCHWxc
         in_n, in_c, in_h, in_w, in_cc = data.shape
-        if output_shape is None:
-            output_shape = [in_n, in_c, size[0], size[1], in_cc]
+        output_shape = [in_n, in_c, size[0], size[1], in_cc]
     else:
         raise ValueError('%s layout is not supported.' % layout)
 

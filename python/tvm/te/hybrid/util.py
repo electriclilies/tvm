@@ -73,7 +73,6 @@ def replace_io(body, rmap):
     """Replacing tensors usage according to the dict given"""
     # pylint: disable=import-outside-toplevel
     from tvm.tir import stmt_functor
-
     def replace(op):
         if isinstance(op, _stmt.ProducerStore) and op.producer.op in rmap.keys():
             buf = rmap[op.producer.op]
@@ -82,7 +81,6 @@ def replace_io(body, rmap):
             buf = rmap[op.producer.op]
             return _expr.ProducerLoad(buf, op.indices)
         return None
-
     return stmt_functor.ir_transform(body, None, replace, ['tir.ProducerStore', 'tir.ProducerLoad'])
 
 
@@ -95,7 +93,8 @@ def _is_tvm_arg_types(args):
                              "Expecting a Var, Tensor or ConstExpr instance but %s get!" \
                              % str(type(elem)))
         return True
-
+    if(not isinstance(args[0], np_arg_types)):
+        print(args[0])
     _internal_assert(isinstance(args[0], np_arg_types), \
                      "Expect a numpy type but %s get!" % str(type(args[0])))
     for elem in args[1:]:

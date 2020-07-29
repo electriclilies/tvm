@@ -54,7 +54,7 @@ TVM_REGISTER_GLOBAL("topi.nn.prelu").set_body([](TVMArgs args, TVMRetValue* rv) 
 });
 
 TVM_REGISTER_GLOBAL("topi.nn.pad").set_body([](TVMArgs args, TVMRetValue* rv) {
-  *rv = pad(args[0], args[1], args[2], args[3], args[4]);
+  *rv = pad(args[0], args[1], args[2], args[3]);
 });
 
 /* Ops from nn/dense.h */

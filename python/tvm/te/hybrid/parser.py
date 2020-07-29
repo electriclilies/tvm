@@ -272,6 +272,8 @@ class HybridParser(ast.NodeVisitor):
             return entry if isinstance(node.ctx, ast.Load) else None
         if ty is Symbol.BufferVar:
             if isinstance(node.ctx, ast.Load):
+                print(node)
+                print("returning producer load")
                 return tvm.tir.ProducerLoad(entry, [tvm.runtime.const(0, 'int32')])
             return entry, [tvm.runtime.const(0, 'int32')]
         # Do I need any assertion here?
@@ -312,7 +314,9 @@ class HybridParser(ast.NodeVisitor):
 
     def visit_Assign(self, node):
         rhs = self.visit(node.value)
+        print("visit assign")
         if isinstance(rhs, Operation):
+            print("rhs is op")
             rmap = {}
             _internal_assert(len(node.targets) == rhs.num_outputs, \
                              "Unable to detuple the outs to targets")
@@ -391,6 +395,9 @@ class HybridParser(ast.NodeVisitor):
                     arr = arr[i.value]
             return arr
         if isinstance(node.ctx, ast.Load):
+            print(node)
+            print("making producer load")
+            #_internal_assert(False, "returning producer load")
             return tvm.tir.ProducerLoad(arr, args)
         return arr, args
 
@@ -607,11 +614,14 @@ def parse_python(src, args, symbols, closure_vars):
     root : Stmt
         The result Halide IR and the parser class instance.
     """
+    print(src)
     root = ast.parse(src) if isinstance(src, str) else src
     _internal_assert(root, ast.AST)
     var_usage = determine_variable_usage(root, args, symbols, closure_vars)
     parser = HybridParser(args, var_usage, symbols, closure_vars)
     parser.parsed_body = parser.visit(root)
+    print(parser.parsed_body)
+    print(parser.outputs)
     _internal_assert(parser.returned, 'No valid return found in the function body!')
     return parser
 

@@ -42,7 +42,7 @@ def compute_upsampling(attrs, inputs, out_dtype):
     layout = attrs.layout
     method = attrs.method
     align_corners = attrs.align_corners
-    return [topi.nn.upsampling(data, scale_h, scale_w, layout, method, align_corners, data.shape)]
+    return [topi.nn.upsampling(data, scale_h, scale_w, layout, method, align_corners)]
 
 register_injective_schedule("nn.dyn.upsampling")
 
@@ -56,7 +56,7 @@ register_broadcast_schedule("nn.dyn.pad")
 # upsampling
 
 @script
-def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w, ndim):
+def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w):
     out = output_tensor((4,), "int64")
     batch_size = dshape.shape[0]
     in_height = dshape.shape[1]
@@ -69,7 +69,7 @@ def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w, ndim):
     return out
 
 @script
-def _upsampling_nchw_shape_func(dshape, scale_h, scale_w, ndim):
+def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
         out = output_tensor((4,), "int64")
         batch_size = dshape[0]
         channels = dshape[1]
@@ -80,6 +80,20 @@ def _upsampling_nchw_shape_func(dshape, scale_h, scale_w, ndim):
         out[2] = int64(round(in_height * scale_h[0]))
         out[3] = int64(round(in_width * scale_w[0]))
         return out
+
+@script
+def _this_is_terrible(a):
+    out = output_tensor((1,), "int64")
+    out[0] = int64(a)
+    return out
+
+"""
+@register_shape_func("nn.dyn.upsampling", True)
+def upsampling_shape_func(attrs, inputs, _):
+    dshape = inputs[0].shape
+    return [_this_is_terrible(dshape[0])]
+"""
+
 
 @register_shape_func("nn.dyn.upsampling", True)
 def upsampling_shape_func(attrs, inputs, _):
@@ -92,11 +106,11 @@ def upsampling_shape_func(attrs, inputs, _):
     
     to_NCHW = bijective_layout(shape_layout, NCHW)
     transformed_shape = to_NCHW.forward_shape(dshape)
-    upsampled_shape_nchw = _upsampling_nchw_shape_func(transformed_shape, scale_h, scale_w, 4) # this is a tensor
-    print(typeof(upsampled_shape_nchw))
+    upsampled_shape_nchw = _upsampling_nchw_shape_func(transformed_shape, scale_h, scale_w) # this is a tensor
     final_shape = to_NCHW.backward_shape([upsampled_shape_nchw[0], upsampled_shape_nchw[1], upsampled_shape_nchw[2], upsampled_shape_nchw[3]]) # this takes in array<PrimExpr>
-    
-    return [final_shape]
+    print("HIII")
+    return [_upsampling_nchw_shape_func(dshape, scale_h, scale_w)]
+
 
 """
 @register_shape_func("nn.dyn.upsampling", True)

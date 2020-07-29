@@ -19,15 +19,18 @@
 
 from __future__ import absolute_import
 
+import tvm
+import topi
+
+from tvm import te
 from topi.util import get_const_tuple
 
 from tvm.runtime import convert
 from tvm.te.hybrid import script
+from tvm.tir import layout, bijective_layout
 from ...op import register_shape_func, register_compute
 from ...op import register_injective_schedule, register_broadcast_schedule
 from .._nn import _pad_shape_func
-import tvm
-import topi
 
 # upsampling
 @register_compute("nn.dyn.upsampling")
@@ -39,7 +42,7 @@ def compute_upsampling(attrs, inputs, out_dtype):
     layout = attrs.layout
     method = attrs.method
     align_corners = attrs.align_corners
-    return [topi.nn.upsampling(data, scale_h, scale_w, layout, method, align_corners)]
+    return [topi.nn.upsampling(data, scale_h, scale_w, layout, method, align_corners, data.shape)]
 
 register_injective_schedule("nn.dyn.upsampling")
 
@@ -53,25 +56,25 @@ register_broadcast_schedule("nn.dyn.pad")
 # upsampling
 
 @script
-def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w):
+def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w, ndim):
     out = output_tensor((4,), "int64")
     batch_size = dshape.shape[0]
     in_height = dshape.shape[1]
     in_width = dshape.shape[2]
     channels = dshape.shape[3]
     out[0] = int64(batch_size)
-    out[1] = int64(round(in_height * h_scale[0]))
-    out[2] = int64(round(in_width * w_scale[0]))
+    out[1] = int64(round(in_height * scale_h[0]))
+    out[2] = int64(round(in_width * scale_w[0]))
     out[3] = int64(channels)
     return out
 
 @script
-def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
+def _upsampling_nchw_shape_func(dshape, scale_h, scale_w, ndim):
         out = output_tensor((4,), "int64")
-        batch_size = dshape.shape[0]
-        channels = dshape.shape[1]
-        in_height = dshape.shape[2]
-        in_width = dshape.shape[3]
+        batch_size = dshape[0]
+        channels = dshape[1]
+        in_height = dshape[2]
+        in_width = dshape[3]
         out[0] = int64(batch_size)
         out[1] = int64(channels)
         out[2] = int64(round(in_height * scale_h[0]))
@@ -80,14 +83,29 @@ def _upsampling_nchw_shape_func(dshape, scale_h, scale_w):
 
 @register_shape_func("nn.dyn.upsampling", True)
 def upsampling_shape_func(attrs, inputs, _):
-    print(inputs[0].shape)
-    print(inputs[1])
-    print(inputs[2])
+    print(attrs.layout)
+    dshape = inputs[0].shape
+    scale_h = inputs[1]
+    scale_w = inputs[2]
+    shape_layout = layout(attrs.layout)
+    NCHW = layout("NCHW")
+    
+    to_NCHW = bijective_layout(shape_layout, NCHW)
+    transformed_shape = to_NCHW.forward_shape(dshape)
+    upsampled_shape_nchw = _upsampling_nchw_shape_func(transformed_shape, scale_h, scale_w, 4) # this is a tensor
+    print(typeof(upsampled_shape_nchw))
+    final_shape = to_NCHW.backward_shape([upsampled_shape_nchw[0], upsampled_shape_nchw[1], upsampled_shape_nchw[2], upsampled_shape_nchw[3]]) # this takes in array<PrimExpr>
+    
+    return [final_shape]
+
+"""
+@register_shape_func("nn.dyn.upsampling", True)
+def upsampling_shape_func(attrs, inputs, _):
     if (attrs.layout == "NHWC"):
         return [_upsampling_nhwc_shape_func(inputs[0], inputs[1], inputs[2])]
     if (attrs.layout == "NCHW"):
         return [_upsampling_nchw_shape_func(inputs[0], inputs[1], inputs[2])]
-
+"""
 @script
 def _dyn_pad_shape_func(data, pad_width):
     out = output_tensor((data.shape[0],), "int64")

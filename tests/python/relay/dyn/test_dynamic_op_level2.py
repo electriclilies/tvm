@@ -32,7 +32,7 @@ def test_dyn_upsampling():
     scale_h_val = 2.0
     scale_w_val = 2.0
     dtype = "float32"
-    layout = "NCHW"
+    layout = "NHWC"
     method = "nearest_neighbor"
     align_corners = False
     dshape = (1, ) + (c, w, h)
@@ -46,6 +46,7 @@ def test_dyn_upsampling():
     yy = run_infer_type(y)
     assert yy.checked_type == relay.ty.TensorType((relay.Any(),) * 4, dtype)
     func = relay.Function([x, scale_h, scale_w], y)
+
     data = np.random.uniform(size=dshape).astype(dtype)
     ref_res = topi.testing.upsampling_python(data, (scale_h_val, scale_w_val), layout)
     verify_func(func, [data, 2.0, 2.0], ref_res)
@@ -69,5 +70,5 @@ def test_dyn_pad():
     verify_pad((4, 10, 7, 7), ((1, 1), (2, 2), (3, 3), (4, 4)), "int32")
     #verify_pad((4, 7, 7), ((1, 1), (2, 2), (3, 3), (4, 4)), "int32")
 if __name__ == "__main__":
-    #test_dyn_upsampling()
-    test_dyn_pad()
+    test_dyn_upsampling()
+    #test_dyn_pad()

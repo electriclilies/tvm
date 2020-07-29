@@ -55,7 +55,7 @@ bool PadRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   if (pad_value == nullptr) return false;
 
   const IntImmNode* data_rank = data->shape[0].as<IntImmNode>();
-  CHECK(data_rank) << "Data shape must have static rank"; 
+  CHECK(data_rank) << "Data shape must have static rank";
 
   const IntImmNode* pad_width_rank = pad_width->shape[0].as<IntImmNode>();
   CHECK(pad_width_rank) << "Pad width shape must have static rank";
@@ -98,6 +98,7 @@ Array<te::Tensor> PadCompute(const Attrs& attrs, const Array<te::Tensor>& inputs
   
   const auto* out_ttype = out_type.as<TensorTypeNode>();
   CHECK(out_ttype != nullptr);
+
   return Array<te::Tensor>{topi::pad(inputs[0], pad_before, pad_after,
                                      pad_value,
                                      "T_pad", topi::kElementWise, param->pad_mode)};

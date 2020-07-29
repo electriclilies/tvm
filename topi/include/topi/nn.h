@@ -123,6 +123,7 @@ inline tvm::te::Tensor prelu(const tvm::te::Tensor& x, const tvm::te::Tensor& sl
  * "constant" pads with constant_value;
  * "edge" pads using the edge values of the input array;
  * "reflect" pads by reflecting values with respect to the edges.
+ * \param output_shape
  * \param name The name of the operation
  * \param tag The tag to mark the operation
  *

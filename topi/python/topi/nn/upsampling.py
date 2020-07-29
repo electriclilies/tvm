@@ -21,7 +21,7 @@ from ..util import simplify
 
 
 def upsampling(data, scale_h, scale_w, layout="NCHW", method='nearest_neighbor',
-               align_corners=False):
+               align_corners=False, output_shape=None):
     """Perform upsampling on the data.
        Nearest neighbor and bilinear upsampling are supported.
 
@@ -52,16 +52,18 @@ def upsampling(data, scale_h, scale_w, layout="NCHW", method='nearest_neighbor',
     """
     base_layout = layout[0:4]
     if base_layout == "NCHW":
-        out_shape = (simplify(topi.cast(te.round(data.shape[2] * scale_h), data.shape[2].dtype)),
-                     simplify(topi.cast(te.round(data.shape[3] * scale_w), data.shape[3].dtype)))
+        if output_shape is None:
+            output_shape = (simplify(topi.cast(te.round(data.shape[2] * scale_h), data.shape[2].dtype)),
+                        simplify(topi.cast(te.round(data.shape[3] * scale_w), data.shape[3].dtype)))
     elif layout == "NHWC":
-        out_shape = (simplify(topi.cast(te.round(data.shape[1] * scale_h), data.shape[1].dtype)),
-                     simplify(topi.cast(te.round(data.shape[2] * scale_w), data.shape[2].dtype)))
+        if output_shape is None:
+            output_shape = (simplify(topi.cast(te.round(data.shape[1] * scale_h), data.shape[1].dtype)),
+                        simplify(topi.cast(te.round(data.shape[2] * scale_w), data.shape[2].dtype)))
 
     else:
         raise ValueError("not support this layout {} yet".format(layout))
     coord_trans = "align_corners" if align_corners else "asymmetric"
-    return topi.image.resize(data, out_shape, layout=layout,
+    return topi.image.resize(data, output_shape, layout=layout,
                              method=method, coordinate_transformation_mode=coord_trans)
 
 

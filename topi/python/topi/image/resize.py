@@ -519,6 +519,8 @@ def resize(data, size, layout="NCHW", method="bilinear",
     out_dtype: string, optional
         Type to return. If left None will be same as input type.
 
+    output_shape: the shape to resize to
+
     Returns
     -------
     output : tvm.te.Tensor
@@ -528,7 +530,6 @@ def resize(data, size, layout="NCHW", method="bilinear",
     """
 
     method = method.lower()
-    print("resize")
 
     if layout == 'NHWC':
         in_n, in_h, in_w, in_c = data.shape
@@ -546,6 +547,7 @@ def resize(data, size, layout="NCHW", method="bilinear",
         in_n, in_c, in_h, in_w, in_cc = data.shape
         if output_shape is None:
             output_shape = [in_n, in_c, size[0], size[1], in_cc]
+
     else:
         raise ValueError('%s layout is not supported.' % layout)
 

@@ -52,19 +52,26 @@ def upsampling(data, scale_h, scale_w, layout="NCHW", method='nearest_neighbor',
     """
     base_layout = layout[0:4]
     if base_layout == "NCHW":
-        if output_shape is None:
-            output_shape = (simplify(topi.cast(te.round(data.shape[2] * scale_h), data.shape[2].dtype)),
+        if not output_shape: #static case
+            reshape_size = (simplify(topi.cast(te.round(data.shape[2] * scale_h), data.shape[2].dtype)),
                         simplify(topi.cast(te.round(data.shape[3] * scale_w), data.shape[3].dtype)))
+        else: #dynamic case
+            reshape_size = (simplify(topi.cast(te.round(output_shape[2] * scale_h), output_shape[2].dtype)),
+                        simplify(topi.cast(te.round(output_shape[3] * scale_w), output_shape[3].dtype)))
+
     elif layout == "NHWC":
-        if output_shape is None:
-            output_shape = (simplify(topi.cast(te.round(data.shape[1] * scale_h), data.shape[1].dtype)),
+        if not output_shape: #static case
+            reshape_size = (simplify(topi.cast(te.round(data.shape[1] * scale_h), data.shape[1].dtype)),
                         simplify(topi.cast(te.round(data.shape[2] * scale_w), data.shape[2].dtype)))
+        else: #dynamic case
+            reshape_size = (simplify(topi.cast(te.round(output_shape[1] * scale_h), output_shape[1].dtype)),
+                        simplify(topi.cast(te.round(output_shape[2] * scale_w), output_shape[2].dtype)))
 
     else:
         raise ValueError("not support this layout {} yet".format(layout))
     coord_trans = "align_corners" if align_corners else "asymmetric"
-    return topi.image.resize(data, output_shape, layout=layout,
-                             method=method, coordinate_transformation_mode=coord_trans)
+    return topi.image.resize(data, reshape_size, layout=layout,
+                             method=method, coordinate_transformation_mode=coord_trans, output_shape=output_shape)
 
 
 def upsampling3d(data, scale_d, scale_h, scale_w, layout="NCDHW", method='nearest_neighbor',

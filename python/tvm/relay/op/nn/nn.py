@@ -1176,9 +1176,9 @@ def upsampling(data,
 
     if isinstance(scale_h, Expr) or isinstance(scale_w, Expr):
         if not isinstance(scale_h, Expr):
-            scale_h = const([scale_h], "int32")
+            scale_h = const(scale_h, "float64")
         if not isinstance(scale_w, Expr):
-            scale_w = const([scale_w], "int32")
+            scale_w = const(scale_w, "float64")
         return _dyn_make.upsampling(data, scale_h, scale_w, layout, method, align_corners)
     else: 
         return _make.upsampling(data, scale_h, scale_w, layout, method, align_corners)

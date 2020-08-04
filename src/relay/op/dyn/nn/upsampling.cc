@@ -47,24 +47,27 @@ bool UpSamplingRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   if (scale_w == nullptr) return false;
   
   CHECK_EQ(data->shape.size(), 4);
-  //CHECK_EQ(scale_h->shape.size(), 0);
-  //CHECK_EQ(scale_w->shape.size(), 0);
-  std::cout << scale_h->dtype << std::endl; 
-  std::cout << scale_w->dtype << std::endl;
-  std::cout << data->shape[0]->dtype << std::endl;
+  CHECK_EQ(scale_h->shape.size(), 0);
+  CHECK_EQ(scale_w->shape.size(), 0);
   static const Layout kNCHW("NCHW");
 
   const UpSamplingAttrs* param = attrs.as<UpSamplingAttrs>();
   CHECK(param != nullptr);
   const Layout in_layout(param->layout);
-
   auto layout_converter = tir::BijectiveLayout(in_layout, kNCHW);
   CHECK(layout_converter.defined())
       << "UpSampling only supports input layouts that are convertible from NCHW."
       << " But got " << in_layout;
-  std::vector<IndexExpr> oshape {Any(), Any(), Any(), Any()}; // output will be 4D array
-  // assign output type
-  reporter->Assign(types[3], TensorType(oshape, data->dtype));
+
+  auto oshape = layout_converter.ForwardShape(data->shape);
+  
+  oshape.Set(2, Any());
+  oshape.Set(3, Any());
+  
+  // error happens in here, specifically in the transform shape function
+  auto outshape = layout_converter.BackwardShape(oshape);
+
+  reporter->Assign(types[3], TensorType(layout_converter.BackwardShape(oshape), data->dtype));
   return true;
 }
 

@@ -19,9 +19,9 @@ import topi
 from tvm import te
 from ..util import simplify
 
-
+# if output_shape is set, reshape_size must also be set
 def upsampling(data, scale_h, scale_w, layout="NCHW", method='nearest_neighbor',
-               align_corners=False, output_shape=None):
+               align_corners=False, output_shape=None, reshape_size=None):
     """Perform upsampling on the data.
        Nearest neighbor and bilinear upsampling are supported.
 
@@ -55,24 +55,24 @@ def upsampling(data, scale_h, scale_w, layout="NCHW", method='nearest_neighbor',
         if not output_shape: #static case
             reshape_size = (simplify(topi.cast(te.round(data.shape[2] * scale_h), data.shape[2].dtype)),
                         simplify(topi.cast(te.round(data.shape[3] * scale_w), data.shape[3].dtype)))
-        else: #dynamic case
-            reshape_size = (simplify(topi.cast(te.round(output_shape[2] * scale_h), output_shape[2].dtype)),
-                        simplify(topi.cast(te.round(output_shape[3] * scale_w), output_shape[3].dtype)))
-
+        else: #dynamic case don't need to multiply 
+            reshape_size = (simplify(topi.cast(te.round(output_shape[2]), output_shape[2].dtype)),
+                        simplify(topi.cast(te.round(output_shape[3]), output_shape[3].dtype)))
+    
     elif layout == "NHWC":
         if not output_shape: #static case
             reshape_size = (simplify(topi.cast(te.round(data.shape[1] * scale_h), data.shape[1].dtype)),
                         simplify(topi.cast(te.round(data.shape[2] * scale_w), data.shape[2].dtype)))
         else: #dynamic case
-            reshape_size = (simplify(topi.cast(te.round(output_shape[1] * scale_h), output_shape[1].dtype)),
-                        simplify(topi.cast(te.round(output_shape[2] * scale_w), output_shape[2].dtype)))
-
+            reshape_size = (simplify(topi.cast(te.round(output_shape[1]), output_shape[1].dtype)),
+                        simplify(topi.cast(te.round(output_shape[2]), output_shape[2].dtype)))
     else:
         raise ValueError("not support this layout {} yet".format(layout))
     coord_trans = "align_corners" if align_corners else "asymmetric"
+    print("topi.image.resize", topi.image.resize(data, reshape_size, layout=layout,
+                             method=method, coordinate_transformation_mode=coord_trans, output_shape=output_shape))
     return topi.image.resize(data, reshape_size, layout=layout,
                              method=method, coordinate_transformation_mode=coord_trans, output_shape=output_shape)
-
 
 def upsampling3d(data, scale_d, scale_h, scale_w, layout="NCDHW", method='nearest_neighbor',
                  coordinate_transformation_mode="half_pixel"):

@@ -31,24 +31,6 @@ def verify_func(func, data, ref_res):
         if "llvm" not in target: continue
         for kind in ["vm", "debug"]:
             mod = tvm.ir.IRModule.from_expr(func)
-            seq = tvm.transform.Sequential([
-                relay.transform.InferType(),
-                relay.transform.FoldConstant(),
-                tvm.ir.transform.PrintIR(),
-                relay.transform.EliminateCommonSubexpr(),
-                relay.transform.AlterOpLayout()
-            ])
-
-            def print_ir(mod, info, is_before):
-                if is_before:
-                    print("Running pass: {}", info)
-                    print(mod)
-
-            with relay.build_config(opt_level=3, trace=print_ir):
-                with tvm.target.create("llvm"):
-                    mod = seq(mod)
-
-
             intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
             op_res = intrp.evaluate()(*data)
             tvm.testing.assert_allclose(op_res.asnumpy(), ref_res, rtol=1e-5)

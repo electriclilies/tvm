@@ -24,7 +24,6 @@ import tvm
 from tvm import relay
 from tvm.relay.testing import ctx_list, run_infer_type
 import random
-from test_dynamic_op_level3 import verify_func
 
 def test_dyn_broadcast_to():
     dtype = 'uint8'

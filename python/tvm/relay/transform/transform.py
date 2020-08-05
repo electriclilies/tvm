@@ -488,6 +488,21 @@ def ToANormalForm():
     """
     return _ffi_api.ToANormalForm()
 
+def ToBasicBlockNormalForm():
+    """Turn an expression to Basic Block Normal Form.
+    We define a block as a group of expressions implied by the scope structure.
+    Each graph node can only belong to a single block.
+    For any value that is being used in multiple blocks, it has to be referred
+    by a Var which is defined in a block, whose scope is the least common ancestor
+    of blocks this value is used.
+
+    Returns
+    -------
+    ret: tvm.transform.Pass
+        The registered pass that transforms an expression into Basic Block Normal Form.
+    """
+    return _ffi_api.ToBasicBlockNormalForm()
+
 
 def ToCPS(expr, mod=None):
     """
@@ -909,6 +924,7 @@ def DenseToSparse(weight_name, weight_shape):
     """
     return _ffi_api.DenseToSparse(weight_name, weight_shape)
 
+
 def SimplifyFCTranspose(target_weight_name):
     """
     Rewrite ```y = nn.dense(x, transpose(w, [1, 0]))``` to ```y = nn.dense(x, wt)```
@@ -926,3 +942,15 @@ def SimplifyFCTranspose(target_weight_name):
         The registered SimplifyFCTranspose pass.
     """
     return _ffi_api.SimplifyFCTranspose(target_weight_name)
+
+
+def SimplifyExpr():
+    """
+    Simplify the Relay expression, including merging consecutive reshapes.
+
+    Returns
+    -------
+    ret : tvm.transform.Pass
+        The registered SimplifyExpr pass.
+    """
+    return _ffi_api.SimplifyExpr()

@@ -18,8 +18,8 @@
 """Backend compiler related feature registration"""
 from __future__ import absolute_import
 
-from topi.nn.util import get_pad_tuple
-from topi.util import get_const_tuple
+from tvm.topi.nn.util import get_pad_tuple
+from tvm.topi.util import get_const_tuple
 
 from ..expr import Tuple, TupleGetItem, const
 from . import nn as _nn
@@ -512,6 +512,18 @@ def batch_matmul_grad(orig, grad):
 def reshape_grad(orig, grad):
     """Gradient of reshape"""
     return [reshape_like(grad, orig.args[0])]
+
+
+@register_gradient("dyn.reshape")
+def dyn_reshape_grad(orig, grad):
+    """Gradient of dyn_reshape"""
+    return [reshape_like(grad, orig.args[0]), zeros_like(orig.args[1])]
+
+
+@register_gradient("shape_of")
+def shape_of_grad(orig, grad):
+    """Gradient of shape_of"""
+    return [zeros_like(orig.args[0])]
 
 
 @register_gradient("cast")

@@ -23,11 +23,6 @@
  */
 #include "transform.h"
 
-#include <topi/broadcast.h>
-#include <topi/elemwise.h>
-#include <topi/nn.h>
-#include <topi/reduction.h>
-#include <topi/transform.h>
 #include <tvm/ir/error.h>
 #include <tvm/relay/attrs/transform.h>
 #include <tvm/relay/op.h>
@@ -35,6 +30,11 @@
 #include <tvm/tir/data_layout.h>
 #include <tvm/tir/expr.h>
 #include <tvm/tir/op.h>
+#include <tvm/topi/broadcast.h>
+#include <tvm/topi/elemwise.h>
+#include <tvm/topi/nn.h>
+#include <tvm/topi/reduction.h>
+#include <tvm/topi/transform.h>
 
 #include <vector>
 
@@ -576,6 +576,8 @@ bool ReshapeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
         infer_dim = indexdiv(infer_dim, oshape[i]);
       }
     }
+    arith::Analyzer ana;
+    infer_dim = ana.Simplify(infer_dim);
     oshape.Set(infer_idx, infer_dim);
   }
 
@@ -805,6 +807,55 @@ RELAY_REGISTER_OP("scatter")
     .set_attr<TOpIsStateful>("TOpIsStateful", false)
     .set_attr<TOpPattern>("TOpPattern", kOpaque)
     .set_support_level(10);
+
+// Scatter_add
+TVM_REGISTER_NODE_TYPE(ScatterAddAttrs);
+
+// Scatter Add
+bool ScatterAddRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
+                   const TypeReporter& reporter) {
+  CHECK_EQ(num_inputs, 3);
+  CHECK_EQ(types.size(), 4);
+  auto data = types[0].as<TensorTypeNode>();
+  if (data == nullptr) {
+    return false;
+  }
+  auto indices = types[1].as<TensorTypeNode>();
+  if (indices == nullptr) {
+    return false;
+  }
+  auto updates = types[2].as<TensorTypeNode>();
+  if (updates == nullptr) {
+    return false;
+  }
+  CHECK(indices->dtype.is_int()) << "indices of scatter_add must be tensor of integer";
+  const auto param = attrs.as<ScatterAddAttrs>();
+  CHECK(param != nullptr);
+  reporter->Assign(types[3], TensorType(data->shape, data->dtype));
+  return true;
+}
+
+TVM_REGISTER_GLOBAL("relay.op._make.scatter_add")
+    .set_body_typed([](Expr data, Expr indices, Expr updates, int axis) {
+      auto attrs = make_object<ScatterAddAttrs>();
+      attrs->axis = std::move(axis);
+      static const Op& op = Op::Get("scatter_add");
+      return Call(op, {data, indices, updates}, Attrs(attrs), {});
+    });
+
+RELAY_REGISTER_OP("scatter_add")
+    .describe(
+        R"doc(Update data by adding values in updates at positions defined by indices)doc" TVM_ADD_FILELINE)
+    .set_num_inputs(3)
+    .add_argument("data", "Tensor", "The input data tensor.")
+    .add_argument("indicies", "Tensor", "The indicies location tensor.")
+    .add_argument("updates", "Tensor", "The values to update the input with.")
+    .add_type_rel("ScatterAdd", ScatterAddRel)
+    .set_attr<TOpIsStateful>("TOpIsStateful", false)
+    .set_attr<TOpPattern>("TOpPattern", kOpaque)
+    .set_support_level(10);
+
+////
 
 // Take
 TVM_REGISTER_NODE_TYPE(TakeAttrs);
@@ -2541,13 +2592,13 @@ Expr MakeReverseReshape(Expr data, Array<Integer> newshape) {
   auto attrs = make_object<ReshapeAttrs>();
   attrs->newshape = std::move(newshape);
   attrs->reverse = true;
-  static const Op& op = Op::Get("_contrib_reverse_reshape");
+  static const Op& op = Op::Get("contrib_reverse_reshape");
   return Call(op, {data}, Attrs(attrs), {});
 }
 
-TVM_REGISTER_GLOBAL("relay.op._make._contrib_reverse_reshape").set_body_typed(MakeReverseReshape);
+TVM_REGISTER_GLOBAL("relay.op._make.contrib_reverse_reshape").set_body_typed(MakeReverseReshape);
 
-RELAY_REGISTER_OP("_contrib_reverse_reshape")
+RELAY_REGISTER_OP("contrib_reverse_reshape")
     .describe(R"code(Reshapes the input array where the special values are inferred from
 right to left.
 
@@ -2676,9 +2727,6 @@ bool GatherNDRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   Array<IndexExpr> oshape;
   for (size_t i = 1; i < kdim + 1; ++i) oshape.push_back(indices->shape[i]);
   for (size_t i = mdim->value; i < ndim; ++i) oshape.push_back(data->shape[i]);
-  if (oshape.size() == 0) {
-    oshape.push_back(tir::make_const(DataType::Int(32), 1));
-  }
   reporter->Assign(types[2], TensorType(oshape, data->dtype));
   return true;
 }

@@ -24,7 +24,7 @@ from tvm import te
 from tvm.relay.testing import ctx_list
 import random
 from test_dynamic_op_level3 import verify_func
-import topi.testing
+import tvm.topi.testing
 from tvm.relay.testing import run_infer_type
 
 def test_dyn_upsampling():
@@ -37,9 +37,9 @@ def test_dyn_upsampling():
             (n, h, w, c) = dshape
         
         if method == "nearest_neighbor":
-            ref_res = topi.testing.upsampling_python(x_data, (scale_h, scale_w), layout)
+            ref_res = tvm.topi.testing.upsampling_python(x_data, (scale_h, scale_w), layout)
         else:
-            ref_res = topi.testing.bilinear_resize_python(x_data, (int(round(h*scale_h)),
+            ref_res = tvm.topi.testing.bilinear_resize_python(x_data, (int(round(h*scale_h)),
                                                   int(round(w*scale_w))), layout)
         x = relay.Var("x", relay.TensorType(dshape, "float32"))
         scale_h_var = relay.var("scale_h", relay.TensorType((), "float32"))

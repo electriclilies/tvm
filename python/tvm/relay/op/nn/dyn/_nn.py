@@ -20,10 +20,10 @@
 from __future__ import absolute_import
 
 import tvm
-import topi
+from tvm import topi
 
 from tvm import te
-from topi.util import get_const_tuple
+from tvm.topi.util import get_const_tuple
 
 from tvm.runtime import convert
 from tvm.te.hybrid import script

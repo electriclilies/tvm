@@ -41,12 +41,6 @@ def compute_upsampling(attrs, inputs, out_dtype):
     layout = attrs.layout
     method = attrs.method
     align_corners = attrs.align_corners
-    """
-    if layout == "NCHW":
-        reshape_size = (data.shape[2] * scale_h, data.shape[3] * scale_w)
-    elif layout == "NHWC":
-        reshape_size = (data.shape[1] * scale_h, data.shape[2] * scale_w)
-    """
     return [topi.nn.upsampling(data, scale_h, scale_w, layout, method, align_corners, out_dtype.shape)]
 
 register_injective_schedule("nn.dyn.upsampling")
@@ -63,12 +57,6 @@ register_broadcast_schedule("nn.dyn.pad")
 @script
 def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w, ndim):
     out = output_tensor((ndim,), "int64")
-    """
-    out[0] = int64(3)
-    out[1] = int64(7)
-    out[2] = int64(11)
-    out[3] = int64(13)
-    """
     batch_size = dshape[0]
     in_height = dshape[1]
     in_width = dshape[2]
@@ -82,12 +70,6 @@ def _upsampling_nhwc_shape_func(dshape, scale_h, scale_w, ndim):
 @script
 def _upsampling_nchw_shape_func(dshape, scale_h, scale_w, ndim):
         out = output_tensor((ndim,), "int64")
-        """
-        out[0] = int64(3)
-        out[1] = int64(7)
-        out[2] = int64(11)
-        out[3] = int64(13)
-        """
         batch_size = dshape[0]
         channels = dshape[1]
         in_height = dshape[2]

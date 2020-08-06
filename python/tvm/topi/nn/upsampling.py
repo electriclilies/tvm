@@ -69,8 +69,6 @@ def upsampling(data, scale_h, scale_w, layout="NCHW", method='nearest_neighbor',
     else:
         raise ValueError("not support this layout {} yet".format(layout))
     coord_trans = "align_corners" if align_corners else "asymmetric"
-    print("topi.image.resize", topi.image.resize(data, reshape_size, layout=layout,
-                             method=method, coordinate_transformation_mode=coord_trans, output_shape=output_shape))
     return topi.image.resize(data, reshape_size, layout=layout,
                              method=method, coordinate_transformation_mode=coord_trans, output_shape=output_shape)
 

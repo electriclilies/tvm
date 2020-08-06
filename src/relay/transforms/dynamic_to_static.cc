@@ -82,6 +82,7 @@ class DynamicToStaticMutator : public MixedModeMutator {
         return MakeFull(call_node->args[0], ToVector(shape->data), param->dtype);
       }
     }
+    /*
     if (call_node->op == Op::Get("dyn.upsampling")) {
       const ConstantNode* scale_h = call_node->args[1].as<ConstantNode>();
       const ConstantNode* scale_w = call_node->args[2].as<ConstantNode>();
@@ -92,10 +93,9 @@ class DynamicToStaticMutator : public MixedModeMutator {
         auto scale_w_val = scale_w->data.as<FloatImmNode>()->value;
         const UpSamplingAttrs* param = call_node->attrs.as<UpSamplingAttrs>();
         CHECK(param);
-        return MakeUpsampling(call_node->args[0], scale_h_val, scale_w_val, param->layout,
-                              param->method, param->align_corners);
+        return MakeUpSampling(call_node->args[0], scale_h_val, scale_w_val, param->layout, param->method, param->align_corners);
       }
-    }
+    }*/
     return post;
   }
 

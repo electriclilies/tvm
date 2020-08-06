@@ -262,6 +262,4 @@ if __name__=="__main__":
     test_dynamic_to_static_broadcast_to()
     test_dynamic_to_static_zeros_ones()
     test_dynamic_to_static_full()
-    """
     test_dynamic_to_static_upsampling()
-    """

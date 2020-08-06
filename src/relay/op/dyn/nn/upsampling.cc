@@ -54,7 +54,7 @@ bool UpSamplingRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   const UpSamplingAttrs* param = attrs.as<UpSamplingAttrs>();
   CHECK(param);
   const Layout in_layout(param->layout);
-  std::cout << "in layout: " << in_layout << std::endl;
+
   auto layout_converter = tir::BijectiveLayout(in_layout, kNCHW);
   CHECK(layout_converter.defined())
       << "UpSampling only supports input layouts that are convertible from NCHW."
@@ -108,8 +108,8 @@ RELAY_REGISTER_OP("nn.dyn.upsampling")
     .set_attrs_type<UpSamplingAttrs>()
     .set_num_inputs(3)
     .add_argument("data", "Tensor", "The input tensor.")
-    .add_argument("scale_h", "integer", "The scale for the height.")
-    .add_argument("scale_w", "integer", "The scale for the width.")
+    .add_argument("scale_h", "double", "The scale for the height.")
+    .add_argument("scale_w", "double", "The scale for the width.")
     .set_support_level(2)
     .add_type_rel("DynamicUpSampling", UpSamplingRel)
     .set_attr<FInferCorrectLayout>("FInferCorrectLayout",

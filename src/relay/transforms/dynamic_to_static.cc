@@ -25,6 +25,7 @@
 #include <tvm/relay/attrs/algorithm.h>
 #include <tvm/relay/expr_functor.h>
 #include <tvm/relay/transform.h>
+#include <tvm/relay/attrs/nn.h>
 
 #include "pattern_util.h"
 
@@ -79,6 +80,20 @@ class DynamicToStaticMutator : public MixedModeMutator {
         const InitOpAttrs* param = call_node->attrs.as<InitOpAttrs>();
         CHECK(param);
         return MakeFull(call_node->args[0], ToVector(shape->data), param->dtype);
+      }
+    }
+    if (call_node->op == Op::Get("dyn.upsampling")) {
+      const ConstantNode* scale_h = call_node->args[1].as<ConstantNode>();
+      const ConstantNode* scale_w = call_node->args[2].as<ConstantNode>();
+      if (scale_h && scale_w) {
+        CHECK_EQ(scale_h->data->ndim, 0);
+        CHECK_EQ(scale_w->data->ndim, 0); 
+        auto scale_h_val = scale_h->data.as<FloatImmNode>()->value;
+        auto scale_w_val = scale_w->data.as<FloatImmNode>()->value;
+        const UpSamplingAttrs* param = call_node->attrs.as<UpSamplingAttrs>();
+        CHECK(param);
+        return MakeUpsampling(call_node->args[0], scale_h_val, scale_w_val, param->layout,
+                              param->method, param->align_corners);
       }
     }
     return post;

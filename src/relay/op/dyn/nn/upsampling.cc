@@ -52,22 +52,21 @@ bool UpSamplingRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   static const Layout kNCHW("NCHW");
 
   const UpSamplingAttrs* param = attrs.as<UpSamplingAttrs>();
-  CHECK(param != nullptr);
+  CHECK(param);
   const Layout in_layout(param->layout);
+  std::cout << "in layout: " << in_layout << std::endl;
   auto layout_converter = tir::BijectiveLayout(in_layout, kNCHW);
   CHECK(layout_converter.defined())
       << "UpSampling only supports input layouts that are convertible from NCHW."
       << " But got " << in_layout;
 
-  auto oshape = layout_converter.ForwardShape(data->shape);
-  
-  oshape.Set(2, Any());
-  oshape.Set(3, Any());
-  
-  // error happens in here, specifically in the transform shape function
-  auto outshape = layout_converter.BackwardShape(oshape);
+  auto nchw_oshape = layout_converter.ForwardShape(data->shape);
 
-  reporter->Assign(types[3], TensorType(layout_converter.BackwardShape(oshape), data->dtype));
+  nchw_oshape.Set(2, Any());
+  nchw_oshape.Set(3, Any());
+  auto oshape = layout_converter.BackwardShape(nchw_oshape);
+
+  reporter->Assign(types[3], TensorType(oshape, data->dtype));
   return true;
 }
 

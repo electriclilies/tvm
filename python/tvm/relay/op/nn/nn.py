@@ -1420,7 +1420,7 @@ def prelu(data, alpha, axis=1):
 
 def pad(data,
         pad_width,
-        pad_value=0.0,
+        pad_value=0,
         pad_mode='constant'):
     r"""Padding
 

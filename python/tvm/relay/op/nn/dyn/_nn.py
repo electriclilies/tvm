@@ -87,12 +87,12 @@ def upsampling_shape_func(attrs, inputs, _):
     if (attrs.layout == "NCHW"):
         return [_upsampling_nchw_shape_func(inputs[0].shape, inputs[1], inputs[2], convert(len(inputs[0].shape)))]
 
-
 @script
 def _dyn_pad_shape_func(data, pad_width):
-    out = output_tensor((data.shape[0],), "int64")
-    for i in const_range(out.shape[0]):
-        out[i] = pad_width[i, 0] + pad_width[i, 1] + data.shape[i]
+    ndim = len(data.shape)
+    out = output_tensor((ndim,), "int64")
+    for i in const_range(ndim):
+        out[i] = int64(pad_width[i, 0] + pad_width[i, 1] + data.shape[i])
     return out
 
 @register_shape_func("nn.dyn.pad", True)

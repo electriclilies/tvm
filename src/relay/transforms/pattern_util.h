@@ -637,12 +637,6 @@ static inline Expr BroadCastTo(Expr data, Array<IndexExpr> shape) {
   return MakeBroadCastTo(data, CheckConstantShapeArrayInteger(shape));
 }
 
-/*
-static inline Expr UpSampling(Expr data, double scale_h, double scale_w, String layout, String method,
-                    bool align_corners) {
-                      return MakeUpSampling(data, scale_h, scale_w, layout, method, align_corners);
-}*/
-
 Expr StopFusion(Expr data);
 
 Expr CastHint(Expr data, DataType dtype);

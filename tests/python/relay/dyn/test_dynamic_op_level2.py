@@ -85,14 +85,11 @@ def test_upsampling_infer_type():
     zz = run_infer_type(z)
     assert zz.checked_type == relay.TensorType((n, c, relay.Any(), relay.Any()), "int8")
     
-    # Doesn't work right now because of BijectiveShape being terrible
-    """
     n, c, h, w = te.size_var("n"), te.size_var("c"), te.size_var("h"), te.size_var("w")
     data = relay.var("data", relay.TensorType((n, h, w, c), "int8"))
     z2 = relay.nn.upsampling(data, scale_h, scale_w, layout="NHWC")
     zz2 = run_infer_type(z2)
     assert zz2.checked_type == relay.TensorType((n, relay.Any(), relay.Any(), c), "int8")
-    """
 
 #tests upsampling type inference with scale_h passed in as a constant and scale_w as a variable
 def test_upsampling_infer_type_const():
@@ -139,15 +136,12 @@ def test_dyn_pad():
         verify_func(func, [data, pad_width], ref_res)
 
     verify_pad((4, 10, 7, 7), ((1, 1), (2, 2), (3, 3), (4, 4)), 2.0, "int32")
-    verify_pad((2, 2, 2, 2), ((1, 1), (1, 1), (1, 1), (1, 1)), 3.0, "float32")
     verify_pad((2, 7), ((1, 4), (2, 2)), 4.0, "float64")
     verify_pad_default_fill((4, 10, 7, 7), ((1, 1), (2, 2), (3, 3), (4, 4)), "float64")
-    verify_pad_default_fill((2, 2, 2, 2), ((1, 1), (1, 1), (1, 1), (1, 1)), "float32")
-    verify_pad_default_fill((2, 7), ((1, 4), (2, 2)), "int64")
-
+    verify_pad_default_fill((2, 7), ((1, 4), (2, 2)), "int32")
 
 if __name__ == "__main__":
-    #test_upsampling_infer_type()
-    #test_upsampling_infer_type_const()
-    #test_dyn_upsampling_run()
+    test_upsampling_infer_type()
+    test_upsampling_infer_type_const()
+    test_dyn_upsampling_run()
     test_dyn_pad()

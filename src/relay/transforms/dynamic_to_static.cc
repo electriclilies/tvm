@@ -82,20 +82,39 @@ class DynamicToStaticMutator : public MixedModeMutator {
         return MakeFull(call_node->args[0], ToVector(shape->data), param->dtype);
       }
     }
-    /*
-    if (call_node->op == Op::Get("dyn.upsampling")) {
+    if (call_node->op == Op::Get("nn.dyn.upsampling")) {
       const ConstantNode* scale_h = call_node->args[1].as<ConstantNode>();
       const ConstantNode* scale_w = call_node->args[2].as<ConstantNode>();
       if (scale_h && scale_w) {
         CHECK_EQ(scale_h->data->ndim, 0);
         CHECK_EQ(scale_w->data->ndim, 0); 
-        auto scale_h_val = scale_h->data.as<FloatImmNode>()->value;
-        auto scale_w_val = scale_w->data.as<FloatImmNode>()->value;
         const UpSamplingAttrs* param = call_node->attrs.as<UpSamplingAttrs>();
         CHECK(param);
-        return MakeUpSampling(call_node->args[0], scale_h_val, scale_w_val, param->layout, param->method, param->align_corners);
+        return MakeUpSampling(call_node->args[0], ToScalar(scale_h->data), ToScalar(scale_w->data), param->layout, param->method, param->align_corners);
       }
-    }*/
+    }
+    if (call_node->op == Op::Get("nn.dyn.pad")) {
+      const ConstantNode* pad_width = call_node->args[1].as<ConstantNode>();
+      const ConstantNode* pad_fill = call_node->args[2].as<ConstantNode>();
+      if(pad_width && pad_fill) {
+        CHECK_EQ(pad_fill->data->ndim, 0);   // pad_val is 1d
+        CHECK_EQ(pad_width->data->ndim, 2); // pad_width is 2d
+        const TensorTypeNode* data_tt = call_node->args[0].as<TensorTypeNode>();
+        const TensorTypeNode* pad_width_tt = call_node->args[1].as<TensorTypeNode>();
+
+        int data_rank = data_tt->shape.size();
+        int pad_width_dim1 = pad_width_tt->shape[0].as<IntImmNode>()->value;
+        int pad_width_dim2 = pad_width_tt->shape[1].as<IntImmNode>()->value;
+
+        CHECK(pad_width_dim1 == data_rank && pad_width_dim2 == 2) << "Pad width must have shape (N, 2), where N is the rank of input data";
+
+        // no way to turn pad_width into Array<Array<PrimExpr>>
+
+        const PadAttrs* param = call_node->attrs.as<PadAttrs>();
+        CHECK(param);
+        //return MakePad(call_node->args[0], pad_width->data, ToScalar(pad_fill->value), param->pad_mode);
+      }
+    }
     return post;
   }
 

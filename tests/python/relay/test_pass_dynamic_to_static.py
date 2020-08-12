@@ -249,10 +249,11 @@ def test_dynamic_to_static_upsampling():
         x_data = relay.var("x", relay.TensorType(data_shape, dtype))
         y = relay.var("y", relay.TensorType((2,), dtype))
         scale_h = relay.var("h", relay.TensorType((), "float32"))
-        print(relay.shape_of(y))
+        print(relay.shape_of(y)[0])
         scale_w = relay.var("w", relay.scalar_type("float64"))
         
     verify_upsampling((1, 16, 32, 32), 2, 2, 'int8')
+
 if __name__=="__main__":
     test_dynamic_to_static_reshape()
     test_dynamic_to_static_double_reshape()

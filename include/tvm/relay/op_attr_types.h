@@ -223,8 +223,12 @@ enum AnyCodegenStrategy {
 /*! \brief A runtime representation of shape. */
 using Shape = Array<IndexExpr>;
 
+// shape func attribute
+// may need to make this lower level
 using FShapeFunc = runtime::TypedPackedFunc<Array<te::Tensor>(
     const Attrs& attrs, const Array<te::Tensor>& inputs, const Array<IndexExpr>& out_ndims)>;
+
+// using FShapeFunc = PrimFunction;
 
 }  // namespace relay
 }  // namespace tvm

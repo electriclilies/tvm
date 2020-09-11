@@ -227,6 +227,7 @@ class Interpreter : public ExprFunctor<ObjectRef(const Expr& n)>,
 
   ObjectRef Lookup(const Var& local) { return stack_.Lookup(local); }
 
+// entry point to ast
   ObjectRef Eval(const Expr& expr) { return VisitExpr(expr); }
 
   ObjectRef VisitExpr_(const VarNode* var_node) final { return Lookup(GetRef<Var>(var_node)); }
@@ -234,7 +235,7 @@ class Interpreter : public ExprFunctor<ObjectRef(const Expr& n)>,
   ObjectRef VisitExpr_(const GlobalVarNode* op) final {
     return Eval(mod_->Lookup(GetRef<GlobalVar>(op)));
   }
-
+  /// f => \x1 ... xn -> f(x1, ..., xn)
   ObjectRef VisitExpr_(const OpNode* id) override {
     // TODO(@jroesch): Eta-expand and return in this case.
     LOG(FATAL) << "internal error, need to wrap intrinsic into call synthetic call node "
@@ -498,9 +499,12 @@ class Interpreter : public ExprFunctor<ObjectRef(const Expr& n)>,
           fields.push_back(fset_output(i, rtype->fields[i]));
         }
       }
+      // Call packed function with linearized arguments.
       packed_func.CallPacked(TVMArgs(values.data(), codes.data(), arg_len), &rv);
+      // Pack the linear arguments back into tuple.
       return ADT::Tuple(fields);
     } else {
+      // We have a single return value.
       ObjectRef out_tensor;
       if (is_dyn) {
         CHECK_EQ(out_shapes.size(), 1);
@@ -510,7 +514,9 @@ class Interpreter : public ExprFunctor<ObjectRef(const Expr& n)>,
       } else {
         out_tensor = fset_output(0, ret_type);
       }
+      // Call for effect, this mutates the output buffers.
       packed_func.CallPacked(TVMArgs(values.data(), codes.data(), arg_len), &rv);
+      // Return the output tensor.
       return out_tensor;
     }
   }

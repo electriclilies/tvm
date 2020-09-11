@@ -32,8 +32,8 @@ class IRModule(Node):
 
     Parameters
     ----------
-    functions: Optional[dict].
-        Map of global var to BaseFunc
+    functions: Optional[Dict[GlobalVar, BaseFunc]]
+        A map from global variables to functions.
     """
     def __init__(self, functions=None, type_definitions=None):
         if functions is None:

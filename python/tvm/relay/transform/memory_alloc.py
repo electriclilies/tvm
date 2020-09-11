@@ -150,6 +150,7 @@ class ManifestAllocPass(ExprMutator):
     def emit_shape_func(self, scope, func, new_args):
         """Insert the shape function given a primitive function."""
         shape_func_ins = []
+        # Invoke shape functions right here.
         engine = compile_engine.get()
         cfunc = engine.lower_shape_func(func, self.target_host)
         input_states = cfunc.shape_func_param_states

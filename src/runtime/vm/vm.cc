@@ -467,12 +467,11 @@ void VirtualMachine::RunLoop() {
         auto offset = LoadScalarInt(instr.alloc_tensor.offset);
         auto storage = Downcast<Storage>(storage_obj);
         auto obj = storage->AllocNDArray(offset, shape, instr.alloc_tensor.dtype);
-
         WriteRegister(instr.dst, obj);
         pc_++;
         goto main_loop;
       }
-      case Opcode::AllocTensorReg: {
+      case Opcode::AllocTensorReg: { // dynamic instruction
         DLContext cpu_ctx;
         cpu_ctx.device_type = kDLCPU;
         cpu_ctx.device_id = 0;

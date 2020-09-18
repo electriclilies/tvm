@@ -8,7 +8,9 @@ def quantize(func):
         def visit_call(self, call):
             if call.op == relay.op.get('nn.conv2d'):
                 #TODO Actually use quantize instead of hard casting
-                args = [relay.cast(self.visit(arg), 'int8') for arg in call.args]
+                zero_point = relay.const(0, dtype='int32')
+                scale = relay.const(1, dtype='float32')
+                args = [relay.qnn.op.quantize(self.visit(arg), scale, zero_point) for arg in call.args]
                 zero_point = relay.const(0, dtype='int32')
                 scale = relay.const(1, dtype='float32')
                 args = args + [zero_point, zero_point, scale, scale]
@@ -34,7 +36,7 @@ def quantize(func):
                 new_attr_dict['out_dtype'] = 'int32'
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
                 #TODO We should dequantize instead of cast.
-                return relay.cast(qnn_call, 'float32')
+                return relay.qnn.op.dequantize(qnn_call, scale, zero_point)
             else:
                 return super().visit_call(call)
 

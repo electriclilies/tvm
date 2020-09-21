@@ -3,7 +3,47 @@ from tvm import relay
 from tvm.relay import ExprMutator, Call, Var, Constant, TupleGetItem, Function
 from tvm.relay.frontend.common import infer_type
 
-def quantize(func):
+
+def _bind_params(func, params):
+    """Bind the params to the expression.
+    """
+    name_dict = {}
+    for arg in func.params:
+        name = arg.name_hint
+        if name in name_dict:
+            name_dict[name] = None
+        else:
+            name_dict[name] = arg
+    bind_dict = {}
+    for k, v in params.items():
+        if k not in name_dict:
+            continue
+        arg = name_dict[k]
+        if arg is None:
+            raise ValueError("Multiple args in the function have name %s" % k)
+        bind_dict[arg] = relay.expr.const(v)
+    return relay.expr.bind(func, bind_dict)
+
+
+def prerequisite_optimize(mod, params=None):
+    """ Prerequisite optimization passes for quantization. Perform
+    "SimplifyInference", "FoldScaleAxis", "FoldConstant", and
+    "CanonicalizeOps" optimization before quantization. """
+    optimize = tvm.transform.Sequential(
+        [relay.transform.SimplifyInference(),
+         relay.transform.FoldConstant(),
+         relay.transform.FoldScaleAxis(),
+         relay.transform.CanonicalizeOps(),
+         relay.transform.FoldConstant()])
+
+    if params is not None:
+        mod['main'] = _bind_params(mod['main'], params)
+
+    mod = optimize(mod)
+    return mod
+
+
+def quantize(mod, params=None):
     class QuantizeMutator(ExprMutator):
         # add pad explicitly
         def visit_call(self, call):
@@ -22,8 +62,8 @@ def quantize(func):
                     if attr == 'kernel_size':
                         kernel_size = call.attrs[attr]
                         if kernel_size is None:
-                            # what to do?
                             type_info = infer_type()
+                            kernel_size = tuple(type_info.checked_type.shape[2:4]) #assumes OIHW layout
                         else:
                             kernel_size = tuple([k.value for k in call.attrs[attr]])
                     elif attr == 'channels':
@@ -43,6 +83,8 @@ def quantize(func):
             else:
                 return super().visit_call(call)
 
+    # SimplifyInference, FoldConstants, FoldScaleAxis
+    mod = prerequisite_optimize(mod, params)
     quantize_pass = QuantizeMutator()
-    func = quantize_pass.visit(func)
-    return tvm.IRModule.from_expr(func)
+    mod['main'] = quantize_pass.visit(mod['main'])
+    return mod

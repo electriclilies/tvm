@@ -9,22 +9,22 @@ import quantize_pass
 onnx_model = onnx.load('resnet18-v1-7.onnx')
 input_dict = {'data': [1, 3, 224, 224]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
-mod = quantize_pass.quantize(mod['main'])
+mod = quantize_pass.quantize(mod, params)
 
 print("ONNX resnet 18 quantized with our quantize pass:")
 print(mod['main'])
 
 
-pytorch_model = resnet.resnet18(pretrained=True)
-input_name = "input"  # the input name can be be arbitrary for PyTorch frontend.
-input_shape = (1, 3, 224, 224)
-named_input_shape = [(input_name, input_shape)]
-input_data = torch.randn(input_shape)
-script_module = torch.jit.trace(pytorch_model, input_data)
-
-input_shapes = [(input_name, (1, 3, 224, 224))]
-mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
-mod = quantize_pass.quantize(mod['main'])
-
-print("Pytorch resnet 18 quantized with our quantize pass:")
-print(mod['main'])
+#pytorch_model = resnet.resnet18(pretrained=True)
+#input_name = "input"  # the input name can be be arbitrary for PyTorch frontend.
+#input_shape = (1, 3, 224, 224)
+#named_input_shape = [(input_name, input_shape)]
+#input_data = torch.randn(input_shape)
+#script_module = torch.jit.trace(pytorch_model, input_data)
+#
+#input_shapes = [(input_name, (1, 3, 224, 224))]
+#mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
+#mod = quantize_pass.quantize(mod['main'])
+#
+#print("Pytorch resnet 18 quantized with our quantize pass:")
+#print(mod['main'])

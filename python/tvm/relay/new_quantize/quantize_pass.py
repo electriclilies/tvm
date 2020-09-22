@@ -106,6 +106,7 @@ def quantize(mod, params=None):
 def requantize(mod):
     class RequantizeCallback(DFPatternCallback):
         def __init__(self):
+            super(RequantizeCallback, self).__init__()
             self.quantize_data = wildcard()
 
             self.input_scale = wildcard()

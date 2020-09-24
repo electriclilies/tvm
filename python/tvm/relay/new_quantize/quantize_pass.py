@@ -45,21 +45,22 @@ def prerequisite_optimize(mod, params=None):
     return mod
 
 
-def quantize(mod, params=None):
+def quantize(mod, params):
     class QuantizeMutator(ExprMutator):
-        # add pad explicitly
         def visit_call(self, call):
+            # do zero_point, scale need to be different for different calls? 
+            # can we match dequantize relu maxpool quantize
+            # what to do about add? 
+            zero_point = relay.const(0, dtype='int32')
+            scale = relay.const(1, dtype='float32')
             if call.op == relay.op.get('nn.conv2d'):
-
-                zero_point = relay.const(0, dtype='int32')
-                scale = relay.const(1, dtype='float32')
 
                 args = [relay.qnn.op.quantize(self.visit(arg), scale, zero_point) for arg in call.args]
                 
-                args = args + [zero_point, zero_point, scale, scale] #is this right now? not sure. 
-                kernel_type_info = infer_type(args[1]) # make sure this is right
+                args = args + [zero_point, zero_point, scale, scale]
+                kernel_type_info = infer_type(args[1])
 
-                new_attr_dict= {}
+                new_attr_dict = {}
                 for attr in call.attrs.keys():
                     attr_value = call.attrs[attr]
                     if isinstance(attr_value, tvm.ir.container.Array):
@@ -93,6 +94,18 @@ def quantize(mod, params=None):
 
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
                 return relay.qnn.op.dequantize(qnn_call, scale, zero_point)
+
+            
+            # if call.op == relay.op.get('add'):
+            #     # if both args are either dequantize(quantize?) or QNN ops
+            #     args = [relay.qnn.op.quantize(self.visit(arg), scale, zero_point) for arg in call.args]
+
+            #     # TODO: change scale, zeropt to be better.. 
+            #     new_attrs = {'lhs_scale' : scale, 'lhs_zero_point' : zero_point, 'rhs_scale' : scale,
+            #     'rhs_zero_point' : zero_point, 'output_scale' : scale, 'output_zero_point' : zero_point}
+            #     q_add = relay.qnn.op.add(*args, **new_attrs)
+                
+            #     return relay.qnn.op.dequantize(q_add, scale, zero_point)
             else:
                 return super().visit_call(call)
 
@@ -100,6 +113,8 @@ def quantize(mod, params=None):
     mod = prerequisite_optimize(mod, params)
     quantize_pass = QuantizeMutator()
     mod['main'] = quantize_pass.visit(mod['main'])
+    print("prequantized stuff")
+    print(mod)
     mod['main'] = requantize(mod['main'])
     return mod
 
@@ -107,32 +122,58 @@ def requantize(mod):
     class RequantizeCallback(DFPatternCallback):
         def __init__(self):
             super(RequantizeCallback, self).__init__()
-            self.quantize_data = wildcard()
+
+            self.dequantize_data = wildcard()
 
             self.input_scale = wildcard()
             self.input_zero_point = wildcard()
 
             self.output_scale = wildcard()
             self.output_zero_point = wildcard()
-            
-            is_quantize_op = is_op('qnn.quantize')(self.quantize_data, self.input_scale,
-                                 self.input_zero_point, wildcard())
-            is_dequantize_op = is_op('qnn.dequantize')(wildcard(), self.output_scale,
-                                      self.output_zero_point, wildcard())
-            
-            self.pattern = is_quantize_op(is_dequantize_op)
+
+            self.first_add_arg = wildcard()
+            self.second_add_arg = wildcard()
+
+            is_dequantize_op = is_op('qnn.dequantize')(self.dequantize_data, self.output_scale,
+                                      self.output_zero_point)
+
+            # how to copy over the attributes?
+            is_add_op = is_op('add')(is_dequantize_op, self.first_add_arg).optional(lambda x: is_op("add")(x, self.second_add_arg))
+            #is_maxpool_op = is_add_op.optional(lambda x: is_op("nn.max_pool2d")(is_add_op)) #finish me later
+            is_relu_op = is_op('nn.relu')(is_add_op)
+            is_quantize_op = is_op('qnn.quantize')(is_relu_op, self.input_scale,
+                                 self.input_zero_point)
+            self.pattern = is_quantize_op
 
         def callback(self, pre, post, node_map):
-            quantize_data = node_map[self.quantize_data][0]
+            dequantize_data = node_map[self.dequantize_data][0]
 
             input_scale = node_map[self.input_scale][0]
-            input_zero_point = node_map[self.input_scale][0]
+            input_zero_point = node_map[self.input_zero_point][0]
 
             output_scale = node_map[self.output_scale][0]
             output_zero_point = node_map[self.output_zero_point][0]
-            # do we need to move axis, dtype? (they are attrs -- also how to extract?)
-            # what is requantize rounding param do?
-            return relay.qnn.op.requantize(quantize_data, input_scale, input_zero_point, output_scale, output_zero_point)
 
+            first_add_arg = node_map[self.first_add_arg][0]
+
+            # optional add
+            if self.second_add_arg in node_map:
+                second_add_arg = node_map[self.second_add_arg][0]
+            else:
+                second_add_arg = None
+
+            # optional maxpool
+            # how do I tell if maxpool was in the pattern?
+
+            # TODO: requantize before or after ops?
+            requantize = relay.qnn.op.requantize(dequantize_data, input_scale, input_zero_point, output_scale, output_zero_point)
+
+            add = relay.op.add(requantize, relay.qnn.op.quantize(first_add_arg, output_scale, output_zero_point)) # TODO: do something better than just casting
+            # if 2 adds in a row, construct the second
+            if second_add_arg:
+                add = relay.op.add(add, relay.qnn.op.quantize(second_add_arg, output_scale, output_zero_point))
+            relu = relay.op.nn.relu(add)
+            # do we want to requantize before or after the ops
+            return relu
     return rewrite(RequantizeCallback(), mod)
     

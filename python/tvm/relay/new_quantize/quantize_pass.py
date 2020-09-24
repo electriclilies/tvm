@@ -134,15 +134,20 @@ def requantize(mod):
             self.first_add_arg = wildcard()
             self.second_add_arg = wildcard()
 
+            
             is_dequantize_op = is_op('qnn.dequantize')(self.dequantize_data, self.output_scale,
                                       self.output_zero_point)
 
             # how to copy over the attributes?
             #how do I tell if max pool was there?
             is_add_op = is_op('add')(is_dequantize_op, self.first_add_arg).optional(lambda x: is_op("add")(x, self.second_add_arg))
-            is_maxpool_op = is_add_op.optional(lambda x: is_op("nn.max_pool2d")(x))
-            is_relu_op = is_op('nn.relu')(is_maxpool_op) # swap relu and maxpool
-            is_quantize_op = is_op('qnn.quantize')(is_relu_op, self.input_scale,
+            is_relu_op = is_op('nn.relu')(is_add_op)
+            
+            #self.maxpool_pattern = is_op("nn.max_pool2d")(is_relu_op)
+            #is_maxpool_op = self.maxpool_pattern | is_relu_op
+
+            is_maxpool_op = is_op("nn.max_pool2d")(is_relu_op)
+            is_quantize_op = is_op('qnn.quantize')(is_maxpool_op, self.input_scale,
                                  self.input_zero_point)
             self.pattern = is_quantize_op
 
@@ -164,7 +169,7 @@ def requantize(mod):
                 second_add_arg = None
 
             # optional maxpool
-
+            print("fjdkls")
             # how do I tell if maxpool was in the pattern? partitioner
 
             # TODO: requantize before or after ops?

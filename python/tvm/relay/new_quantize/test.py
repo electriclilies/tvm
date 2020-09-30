@@ -25,7 +25,7 @@ script_module = torch.jit.trace(pytorch_model, input_data)
 
 input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
-mod, node_map = quantize_pass.quantize(mod, params, skip_layers=[1, 7, 9, 20])
-print(mod)
+preoptimized_fn, fn, node_map = quantize_pass.quantize(mod, params, skip_layers=[0, 1, 2, 3])
+print(fn)
 # print("Pytorch resnet 18 quantized with our quantize pass:")
 # print(mod['main'])

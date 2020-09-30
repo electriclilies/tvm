@@ -45,43 +45,63 @@ def prerequisite_optimize(mod, params=None):
     return mod
 
 
-# Returns (preoptimized_funcs, quantized_func, node_map), where node_map maps each AST node in the preoptimized function
-# to the 
+# Returns (preoptimized_funcs, quantized_func, node_map), where node_map maps each AST node in the quantized
+# graph to the preoptimized graph
 
-def quantize(mod, params, skip_layers=[]):
+def quantize(mod, params, skip_layers=[], global_quantization=True):
     class QuantizeMutator(ExprMutator):
         def __init__(self, skip_layers):
             super().__init__()
-            self.zero_point = relay.const(0, dtype='int32')
-            self.scale = relay.const(1, dtype='float32')
             
             # if we are skipping layers, remove duplicates and sort
             self.skip_layers = list(set(skip_layers))
             self.skip_layers.sort()
+            self.skip_layers_ptr = 0
 
             # number of conv2d and dense we have seen
             self.compute_layer_count = 0
             
             self.node_map = {} #TODO: make into its own class
 
+            self.scales = [] #TODO: connect me to node_map somehow, also maybe change from set bc bad runtime
+            self.zero_points = []
+        
+        # helper to construct the relay scale variable for this layer
+        def scale(self, name):
+            var = relay.var(str(name) + "_scale_" + str(len(self.scales)))
+            self.scales.append(var)
+            return var
+
+        # helper to construct the relay zero_point variable for this layer
+        def zero_point(self, name):
+            var = relay.var(str(name) + "_zero_pt_" + str(len(self.zero_points)))
+            self.zero_points.append(var)
+            return var
+
         def visit_call(self, call):
             if call.op == relay.op.get('nn.conv2d'):
-
-                args = [relay.qnn.op.quantize(self.visit(arg), self.scale, self.zero_point) for arg in call.args]
-
+                data, weight = self.visit(call.args[0]), self.visit(call.args[1])
                 # check if we are skipping quantization on this layer after recursive call
-                if self.skip_layers: # skip_layers is false if is [] or None
-                    if (self.compute_layer_count == self.skip_layers[0]):
-                        self.skip_layers.pop(0)
-                        self.compute_layer_count = self.compute_layer_count + 1
+                self.compute_layer_count = self.compute_layer_count + 1 # conv2d is compute layer
+                if self.skip_layers and (self.skip_layers_ptr < len(self.skip_layers)): # skip_layers is false if is [] or None
+                    print("skip_layers_ptr", self.skip_layers_ptr)
+                    if (self.compute_layer_count == self.skip_layers[self.skip_layers_ptr] + 1):
+                        self.skip_layers_ptr = self.skip_layers_ptr + 1
                         return super().visit_call(call)
 
-                self.compute_layer_count = self.compute_layer_count + 1 # conv2d is compute layer
+                # Create quantization parameters for arguments to this convolution.
+                data_scale = self.scale('conv2d_data') 
+                data_zp = self.zero_point('conv2d_data')
+                weight_scale = self.scale('conv2d_weight')
+                weight_zp = self.zero_point('conv2d_weight')
+                
+                args = [relay.qnn.op.quantize(data, data_scale, data_zp),
+                        relay.qnn.op.quantize(weight, weight_scale, weight_zp)]
 
-                args = args + [self.zero_point, self.zero_point, self.scale, self.scale]
-                kernel_type_info = infer_type(args[1])
+                args = args + [data_zp, weight_zp, data_scale, weight_scale]
 
                 new_attr_dict = {}
+                kernel_type_info = infer_type(call.args[1])
                 for attr in call.attrs.keys():
                     attr_value = call.attrs[attr]
                     if isinstance(attr_value, tvm.ir.container.Array):
@@ -114,57 +134,107 @@ def quantize(mod, params, skip_layers=[]):
                     args[0] = relay.op.nn.pad(args[0], pad_width, pad_val) 
 
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
-                out = relay.qnn.op.dequantize(qnn_call, self.scale, self.zero_point)
+                out = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
                 
-                self.node_map[call] = out
+                self.node_map[out] = call
                 return out
-            if call.op == relay.op.get('nn.dense'):
-                
-                args = [relay.qnn.op.quantize(self.visit(arg), self.scale, self.zero_point) for arg in call.args]
-                
-                # check if we are skipping quantization on this layer after recursive call
-                if self.skip_layers: # skip_layers is false if is [] or None
-                    if (self.compute_layer_count == self.skip_layers[0]):
-                        self.skip_layers.pop(0)
-                        self.compute_layer_count = self.compute_layer_count + 1
-                        return super().visit_call(call)
-                
-                self.compute_layer_count = self.compute_layer_count + 1 # dense is a compute layer
 
-                args = args + [self.zero_point, self.zero_point, self.scale, self.scale, call.attrs['units']]
+            if call.op == relay.op.get('nn.dense'):
+                data, weight = self.visit(call.args[0]), self.visit(call.args[1])
+                # check if we are skipping quantization on this layer after recursive call
+                self.compute_layer_count = self.compute_layer_count + 1 # dense is a compute layer
+                if self.skip_layers and (self.skip_layers_ptr < len(self.skip_layers)):
+                    if (self.compute_layer_count == self.skip_layers[self.skip_layers_ptr] + 1):
+                        self.skip_layers_ptr = self.skip_layers_ptr + 1
+                        return super().visit_call(call)
+
+                # Create quantization parameters for arguments to this dense layer.
+                data_scale = self.scale('dense_data') 
+                data_zp = self.zero_point('dense_data')
+                weight_scale = self.scale('dense_weight')
+                weight_zp = self.zero_point('dense_weight')
+                
+                args = [relay.qnn.op.quantize(data, data_scale, data_zp),
+                        relay.qnn.op.quantize(weight, weight_scale, weight_zp)]
+                                
+
+                args = args + [data_zp, weight_zp, data_scale, weight_scale, call.attrs['units']]
 
                 qnn_call = relay.qnn.op.dense(*args)
-                out = relay.qnn.op.dequantize(qnn_call, self.scale, self.zero_point)
+                out = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
                 
-                self.node_map[call] = out
+                self.node_map[out] = call
                 return out
+
             if call.op == relay.op.get('add'):
-                args = [relay.qnn.op.quantize(self.visit(arg), self.scale, self.zero_point) for arg in call.args]
+                lhs = self.visit(call.args[0])
+                rhs = self.visit(call.args[1])
+                # don't quantize add if it follows a skipped layer
+                if self.skip_layers and self.skip_layers_ptr is not 0:
+                    last_layer = self.compute_layer_count - 1
+                    last_skipped = self.skip_layers[self.skip_layers_ptr - 1]
+                    if (last_layer == last_skipped):
+                        return super().visit_call(call)
 
-                q_add = relay.op.add(*args)
-                out = relay.qnn.op.dequantize(q_add, self.scale, self.zero_point)
+                 # Create quantization parameters for arguments to this addition
+                lhs_scale = self.scale('add_lhs') 
+                lhs_zp = self.zero_point('add_lhs')
+                rhs_scale = self.scale('add_rhs')
+                rhs_zp = self.zero_point('add_rhs')
+                out_scale = self.scale('add_out')
+                out_zp = self.zero_point('add_out')
 
-                self.node_map[call] = out
+                args = [relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp),
+                        relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)]
+
+                args = args + [lhs_scale, lhs_zp, rhs_scale, rhs_zp, out_scale, out_zp]
+                q_add = relay.qnn.op.add(*args)
+                out = relay.qnn.op.dequantize(q_add, out_scale, out_zp)
+
+                self.node_map[out] = call
                 return out
 
             if call.op == relay.op.get('multiply'):
-                args = [relay.qnn.op.quantize(self.visit(arg), self.scale, self.zero_point) for arg in call.args]
+                lhs = self.visit(call.args[0])
+                rhs = self.visit(call.args[1])
+                # don't quantize add if it follows a skipped layer
+                if self.skip_layers and self.skip_layers_ptr is not 0:
+                    last_layer = self.compute_layer_count - 1
+                    last_skipped = self.skip_layers[self.skip_layers_ptr - 1]
+                    if (last_layer == last_skipped):
+                        return super().visit_call(call)
 
-                q_mul = relay.op.add(*args)
+                # Create quantization parameters for arguments to this multiplication.
+                lhs_scale = self.scale('mul_lhs')
+                lhs_zp = self.zero_point('mul_lhs')
+                rhs_scale = self.scale('mul_rhs')
+                rhs_zp = self.zero_point('mul_rhs')
+                out_scale = lhs_scale * rhs_scale
+                out_zp = relay.const('0', dtype='int32')
 
-                return relay.qnn.op.dequantize(q_mul, self.scale, self.zero_point)
+                args = [relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp),
+                        relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)]
+                
+                args = args + [lhs_scale, lhs_zp, rhs_scale, rhs_zp, out_scale, out_zp]
+                q_mul = relay.qnn.op.add(*args)
+                out = relay.qnn.op.dequantize(q_mul, out_scale, out_zp)
+                
+                self.node_map[out] = call
+                return out
             
             else:
                 return super().visit_call(call)
 
 
     # SimplifyInference, FoldConstants, FoldScaleAxis
-    mod = prerequisite_optimize(mod, params)
+    preoptimized_mod = prerequisite_optimize(mod, params)
     quantize_pass = QuantizeMutator(skip_layers)
-    mod['main'] = quantize_pass.visit(mod['main'])
+
+    q_fn = quantize_pass.visit(preoptimized_mod['main'])
+    q_fn = relay.Function(list(q_fn.params) + list(quantize_pass.scales) + list(quantize_pass.zero_points), q_fn.body)
 
     #mod['main'] = requantize(mod['main'])
-    return (mod, quantize_pass.node_map)
+    return (preoptimized_mod['main'], q_fn, quantize_pass.node_map)
 
 # Optionally repeats pattern n times. If n = 1, returns pattern. Otherwise, returns a pattern that will match
 # pattern repeated any number of times up to n

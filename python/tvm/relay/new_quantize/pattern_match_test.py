@@ -18,7 +18,7 @@ def get_fn():
     #c = c + y
     print(c)
     #is_supported_op1 = is_op("add")(wildcard(), wildcard()) #| is_op("multiply")(wildcard(), wildcard()) | is_op("nn.max_pool2d")(wildcard()) | is_var() # allow constants
-    is_supported_op1 = is_op("add")(wildcard(), wildcard()) | is_var()
+    #is_supported_op1 = is_op("add")(wildcard(), wildcard()) | is_var()
     #rec_depth = 1000
     #for _ in range(rec_depth): # pull out repeat into a separate func
     #is_supported_op2 = is_op("add")(is_supported_op1, is_supported_op1) | is_op("multiply")(is_supported_op1, is_supported_op1) | is_op("nn.max_pool2d")(is_supported_op1) | is_var()
@@ -27,7 +27,9 @@ def get_fn():
 
     # bug :((((
     # this does not work
-    #is_supported_op2 = is_op("add")(is_supported_op1, is_supported_op1)
+    is_supported_op1 = is_op("add")(wildcard(), wildcard()) | is_var()
+
+    is_supported_op2 = is_op("add")(is_supported_op1, is_supported_op1)
     # this works
     is_supported_op2 = is_op("add")(is_op("add")(wildcard(), wildcard()) | is_var(), is_op("add")(wildcard(), wildcard()) | is_var())
     assert is_supported_op2.match(c)

@@ -192,7 +192,6 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
                 qnn_call = relay.qnn.op.dense(*args)
                 out = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
                 
-                self.node_map[out] = call
                 return out
 
             if call.op == relay.op.get('add'):
@@ -220,7 +219,6 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
                 q_add = relay.qnn.op.add(*args)
                 out = relay.qnn.op.dequantize(q_add, out_scale, out_zp)
 
-                self.node_map[out] = call
                 return out
 
             if call.op == relay.op.get('multiply'):
@@ -248,7 +246,6 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
                 q_mul = relay.qnn.op.add(*args)
                 out = relay.qnn.op.dequantize(q_mul, out_scale, out_zp)
                 
-                self.node_map[out] = call
                 return out
             
             else:

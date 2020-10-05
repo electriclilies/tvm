@@ -44,11 +44,15 @@ def prerequisite_optimize(mod, params=None):
         mod = optimize(mod)
     return mod
 
+# Returns (preoptimized_funcs, quantized_func, calibration_map), where calibration_map maps the scale and zero_point
+# vars for a quantized layer to the values before and after quantization. If quantize_all_calibration_layers is true,
+# all layers before the current layer will be quantized. Otherwise, the layers before the current layer will be 
+# unquantized (ie, the same as the layers in the pre-optimized graph)
+# Key is always (node_scale, node_zp)
+# TODO: find a better name for quantize_all_calibration_layers
 
-# Returns (preoptimized_funcs, quantized_func, node_map), where node_map maps each AST node in the quantized
-# graph to the preoptimized graph
-
-def quantize(mod, params, skip_layers=[], global_quantization=True):
+# TODO: should we use relay vars themselves as keys or strings? probably vars.
+def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
     class QuantizeMutator(ExprMutator):
         def __init__(self, skip_layers):
             super().__init__()
@@ -61,7 +65,7 @@ def quantize(mod, params, skip_layers=[], global_quantization=True):
             # number of conv2d and dense we have seen
             self.compute_layer_count = 0
             
-            self.node_map = {} #TODO: make into its own class
+            self.calibration_map = {} #TODO: make into its own class
 
             self.scales = [] #TODO: connect me to node_map somehow, also maybe change from set bc bad runtime
             self.zero_points = []
@@ -77,6 +81,11 @@ def quantize(mod, params, skip_layers=[], global_quantization=True):
             var = relay.var(str(name) + "_zero_pt_" + str(len(self.zero_points)))
             self.zero_points.append(var)
             return var
+
+        # helper to construct dictionary of output for before and after quantization
+        # TODO : is dictionary the best structure for this? would tuple be better?
+        def calibration_map_helper(self, before_quantize, after_quantize):
+            return {'before_quantize': before_quantize, 'after_quantize' : after_quantize}
 
         def visit_call(self, call):
             if call.op == relay.op.get('nn.conv2d'):
@@ -94,9 +103,28 @@ def quantize(mod, params, skip_layers=[], global_quantization=True):
                 data_zp = self.zero_point('conv2d_data')
                 weight_scale = self.scale('conv2d_weight')
                 weight_zp = self.zero_point('conv2d_weight')
+
+                quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
+                quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
                 
-                args = [relay.qnn.op.quantize(data, data_scale, data_zp),
-                        relay.qnn.op.quantize(weight, weight_scale, weight_zp)]
+                args = [quantized_data, quantized_weight]
+
+                # put scale and zp in calibration_map
+                # TODO: is this the best way to do KEY?
+                # TODO: does this read better if I consolidate it all at the end of the function? 
+                data_key = (data_scale, data_zp)
+                weight_key = (weight_scale, weight_zp)
+                
+                if quantize_all_calibration_layers:
+                    self.calibration_map[data_key] = self.calibration_map_helper(data, quantized_data)
+                    self.calibration_map[weight_key] = self.calibration_map_helper(weight, quantized_weight)
+                else:
+                    # pre_data and pre_weight are the data and weight before we quantized them 
+                    pre_data, pre_weight = (call.args[0], call.args[1])
+                    quantized_data = relay.qnn.op.quantize(pre_data, data_scale, data_zp)
+                    quantized_weight = relay.qnn.op.quantize(pre_weight, weight_scale, weight_zp)
+                    self.calibration_map[data_key] = self.calibration_map_helper(pre_data, quantized_data)
+                    self.calibration_map[weight_key] = self.calibration_map_helper(pre_weight, quantized_weight)
 
                 args = args + [data_zp, weight_zp, data_scale, weight_scale]
 
@@ -135,8 +163,9 @@ def quantize(mod, params, skip_layers=[], global_quantization=True):
 
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
                 out = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
-                
-                self.node_map[out] = call
+                # TODO: Do we need to do any comparison between the dequantized and the unquantized output? If so, need another scheme for multiplied stuff..
+                # in some sense, the output of this is what we really care about though... 
+
                 return out
 
             if call.op == relay.op.get('nn.dense'):

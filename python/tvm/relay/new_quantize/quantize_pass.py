@@ -4,6 +4,7 @@ from tvm.relay import ExprMutator, Call, Var, Constant, TupleGetItem, Function
 from tvm.relay.frontend.common import infer_type
 from tvm.relay.op.nn.util import get_pad_tuple2d
 from tvm.relay.dataflow_pattern import rewrite, wildcard, is_op, DFPatternCallback
+from collections import OrderedDict
 
 def _bind_params(func, params): # TODO: make into a util
     """Bind the params to the expression.
@@ -34,7 +35,7 @@ def prerequisite_optimize(mod, params=None):
         [relay.transform.SimplifyInference(),
          relay.transform.FoldConstant(),
          relay.transform.FoldScaleAxis(),
-         relay.transform.CanonicalizeOps(),
+         relay.transform.CanonicalizeOps(), #TODO: should this be in prereq optimize?
          relay.transform.FoldConstant()])
 
     if params is not None:
@@ -44,7 +45,7 @@ def prerequisite_optimize(mod, params=None):
         mod = optimize(mod)
     return mod
 
-# Returns (preoptimized_funcs, quantized_func, calibration_map), where calibration_map maps the scale and zero_point
+# Returns (quantized_mod, calibration_map), where calibration_map maps the scale and zero_point
 # vars for a quantized layer to the values before and after quantization. If quantize_all_calibration_layers is true,
 # all layers before the current layer will be quantized. Otherwise, the layers before the current layer will be 
 # unquantized (ie, the same as the layers in the pre-optimized graph)
@@ -52,7 +53,7 @@ def prerequisite_optimize(mod, params=None):
 # TODO: find a better name for quantize_all_calibration_layers
 
 # TODO: should we use relay vars themselves as keys or strings? probably vars.
-def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
+def quantize(mod, params, skip_layers=[]):
     class QuantizeMutator(ExprMutator):
         def __init__(self, skip_layers):
             super().__init__()
@@ -65,20 +66,21 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
             # number of conv2d and dense we have seen
             self.compute_layer_count = 0
             
-            self.calibration_map = {} #TODO: make into its own class
+            self.calibration_map = OrderedDict()
 
-            self.scales = [] #TODO: connect me to node_map somehow, also maybe change from set bc bad runtime
+            # TODO: remove if not using
+            self.scales = []
             self.zero_points = []
         
         # helper to construct the relay scale variable for this layer
         def scale(self, name):
-            var = relay.var(str(name) + "_scale_" + str(len(self.scales)))
+            var = relay.var(str(name) + "_scale_" + str(len(self.scales)), relay.scalar_type('float32'))
             self.scales.append(var)
             return var
 
         # helper to construct the relay zero_point variable for this layer
         def zero_point(self, name):
-            var = relay.var(str(name) + "_zero_pt_" + str(len(self.zero_points)))
+            var = relay.var(str(name) + "_zero_pt_" + str(len(self.zero_points)), relay.scalar_type('int32'))
             self.zero_points.append(var)
             return var
 
@@ -104,28 +106,19 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
                 weight_scale = self.scale('conv2d_weight')
                 weight_zp = self.zero_point('conv2d_weight')
 
-                quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
-                quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
-                
-                args = [quantized_data, quantized_weight]
+                args = [relay.qnn.op.quantize(data, data_scale, data_zp),
+                        relay.qnn.op.quantize(weight, weight_scale, weight_zp)]
 
-                # put scale and zp in calibration_map
-                # TODO: is this the best way to do KEY?
-                # TODO: does this read better if I consolidate it all at the end of the function? 
+                # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
                 data_key = (data_scale, data_zp)
                 weight_key = (weight_scale, weight_zp)
-                
-                if quantize_all_calibration_layers:
-                    self.calibration_map[data_key] = self.calibration_map_helper(data, quantized_data)
-                    self.calibration_map[weight_key] = self.calibration_map_helper(weight, quantized_weight)
-                else:
-                    # pre_data and pre_weight are the data and weight before we quantized them 
-                    pre_data, pre_weight = (call.args[0], call.args[1])
-                    quantized_data = relay.qnn.op.quantize(pre_data, data_scale, data_zp)
-                    quantized_weight = relay.qnn.op.quantize(pre_weight, weight_scale, weight_zp)
-                    self.calibration_map[data_key] = self.calibration_map_helper(pre_data, quantized_data)
-                    self.calibration_map[weight_key] = self.calibration_map_helper(pre_weight, quantized_weight)
 
+                # Each quantized node maps to the tuple (original graph, quantized_graph) up until this node.
+                # Then, the calibration pass can choose which of the two to use.
+                pre_data, pre_weight = (call.args[0], call.args[1])
+                self.calibration_map[data_key] = (pre_data, data)
+                self.calibration_map[weight_key] = (pre_weight, weight) 
+                
                 args = args + [data_zp, weight_zp, data_scale, weight_scale]
 
                 new_attr_dict = {}
@@ -163,8 +156,6 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
 
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
                 out = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
-                # TODO: Do we need to do any comparison between the dequantized and the unquantized output? If so, need another scheme for multiplied stuff..
-                # in some sense, the output of this is what we really care about though... 
 
                 return out
 
@@ -185,7 +176,14 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
                 
                 args = [relay.qnn.op.quantize(data, data_scale, data_zp),
                         relay.qnn.op.quantize(weight, weight_scale, weight_zp)]
+
+                # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
+                data_key = (data_scale, data_zp)
+                weight_key = (weight_scale, weight_zp)
                                 
+                pre_data, pre_weight = (call.args[0], call.args[1])
+                self.calibration_map[data_key] = (pre_data, data)
+                self.calibration_map[weight_key] = (pre_weight, weight)
 
                 args = args + [data_zp, weight_zp, data_scale, weight_scale, call.attrs['units']]
 
@@ -217,7 +215,18 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
 
                 args = args + [lhs_scale, lhs_zp, rhs_scale, rhs_zp, out_scale, out_zp]
                 q_add = relay.qnn.op.add(*args)
-                out = relay.qnn.op.dequantize(q_add, out_scale, out_zp)
+
+                # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
+                lhs_key = (lhs_scale, lhs_zp)
+                rhs_key = (rhs_scale, rhs_zp)
+                out_key = (out_scale, out_zp)
+                                
+                pre_lhs, pre_rhs = (call.args[0], call.args[1])
+                self.calibration_map[lhs_key] = (pre_lhs, lhs)
+                self.calibration_map[rhs_key] = (pre_rhs, rhs)
+                self.calibration_map[out_key] = (call, q_add)
+
+                out = relay.qnn.op.dequantize(q_add, out_scale, out_zp) # TODO: what should we do with out_scale?
 
                 return out
 
@@ -239,6 +248,14 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
                 out_scale = lhs_scale * rhs_scale
                 out_zp = relay.const('0', dtype='int32')
 
+                # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
+                lhs_key = (lhs_scale, lhs_zp)
+                rhs_key = (rhs_scale, rhs_zp)
+                                
+                pre_lhs, pre_rhs = (call.args[0], call.args[1])
+                self.calibration_map[lhs_key] = (pre_lhs, lhs)
+                self.calibration_map[rhs_key] = (pre_rhs, rhs)
+
                 args = [relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp),
                         relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)]
                 
@@ -257,10 +274,14 @@ def quantize(mod, params, skip_layers=[], quantize_all_calibration_layers=True):
     quantize_pass = QuantizeMutator(skip_layers)
 
     q_fn = quantize_pass.visit(preoptimized_mod['main'])
-    q_fn = relay.Function(list(q_fn.params) + list(quantize_pass.scales) + list(quantize_pass.zero_points), q_fn.body)
+    #q_fn = relay.Function(list(q_fn.params) + list(quantize_pass.scales) + list(quantize_pass.zero_points), q_fn.body)
+    
+    quantized_mod = preoptimized_mod
+    quantized_mod['main'] = q_fn
 
-    #mod['main'] = requantize(mod['main'])
-    return (preoptimized_mod['main'], q_fn, quantize_pass.node_map)
+    # we return a mod for consistency with other passes
+    return (quantized_mod, quantize_pass.calibration_map)
+
 
 # Optionally repeats pattern n times. If n = 1, returns pattern. Otherwise, returns a pattern that will match
 # pattern repeated any number of times up to n

@@ -246,7 +246,7 @@ def quantize(mod, params, skip_layers=[]):
                 rhs_scale = self.scale('mul_rhs')
                 rhs_zp = self.zero_point('mul_rhs')
                 out_scale = lhs_scale * rhs_scale
-                out_zp = relay.const('0', dtype='int32')
+                out_zp = relay.const(0, dtype='int32')
 
                 # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
                 lhs_key = (lhs_scale, lhs_zp)
@@ -274,7 +274,7 @@ def quantize(mod, params, skip_layers=[]):
     quantize_pass = QuantizeMutator(skip_layers)
 
     q_fn = quantize_pass.visit(preoptimized_mod['main'])
-    #q_fn = relay.Function(list(q_fn.params) + list(quantize_pass.scales) + list(quantize_pass.zero_points), q_fn.body)
+    q_fn = relay.Function(list(q_fn.params) + list(quantize_pass.scales) + list(quantize_pass.zero_points), q_fn.body)
     
     quantized_mod = preoptimized_mod
     quantized_mod['main'] = q_fn

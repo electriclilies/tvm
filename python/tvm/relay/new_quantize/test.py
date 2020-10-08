@@ -30,19 +30,15 @@ input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
 quantized_mod, calibration_map = quantize_pass.quantize(mod, params) # Maybe this should return a mod..
 
-calibration_var_vals = global_calibration_pass.global_calibrate(calibration_map, 4.0, 0)
+calibration_var_vals = global_calibration_pass.global_calibrate(calibration_map, 1.2, 1)
 
 input_np = np.random.randn(1, 3, 224, 224).astype('float32')
 
 inputs = calibration_var_vals
 
-print("hi")
-print(inputs)
 quantized_mod['main'] = relay.build_module.bind_params_by_name(quantized_mod['main'], inputs)
-print("ggrrr")
+
 with tvm.transform.PassContext(opt_level=3):
-    print("before build")
-    print(quantized_mod)
     lib = relay.build(quantized_mod, target='llvm')
 
 from tvm.contrib import graph_runtime

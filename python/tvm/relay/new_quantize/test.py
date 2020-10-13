@@ -5,6 +5,7 @@ from torchvision.models import resnet
 from tvm import relay
 import quantize_pass
 import global_calibration_pass
+from global_calibration_pass_using_pass_infra import GlobalCalibrater
 import numpy as np
 from tvm.relay.testing import ctx_list
 
@@ -26,24 +27,23 @@ named_input_shape = [(input_name, input_shape)]
 input_data = torch.randn(input_shape)
 script_module = torch.jit.trace(pytorch_model, input_data)
 
-print("hi")
 input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
 quantized_mod, calibration_map = quantize_pass.quantize(mod, params)
 
-print("quantize_pass done")
-calibration_var_vals = global_calibration_pass.global_calibrate(calibration_map, 0.05, 0)
-
 input_np = np.random.randn(1, 3, 224, 224).astype('float32')
-inputs = calibration_var_vals
 
-quantized_mod['main'] = relay.build_module.bind_params_by_name(quantized_mod['main'], inputs)
+global_calibrater = GlobalCalibrater(0.05, 0, quantized_mod, calibration_map, params)
+
+calibrated_mod = global_calibrater.calibrate()
+print(calibrated_mod['main'])
 
 with tvm.transform.PassContext(opt_level=3):
-    q_lib = relay.build(quantized_mod, target='llvm')
+    q_lib = relay.build(calibrated_mod, target='llvm')
     lib = relay.build(mod, target='llvm')
 
 from tvm.contrib import graph_runtime
+"""
 gmod = graph_runtime.GraphModule(lib["default"](tvm.cpu()))
 gmod.set_input(**params)
 gmod.set_input('input', input_np)
@@ -51,7 +51,7 @@ gmod.run()
 out = gmod.get_output(0).asnumpy()
 print("Unquantized Output:")
 print(out)
-
+"""
 print(" ___________ ")
 
 q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))

@@ -21,7 +21,7 @@ def calibrate(quantized_mod, calibration_map, scale_value, zero_point_value):
     for (scale, zp) in scale_zp_value_map.keys():
         prev = relay.Let(scale, calibration_map[scale], prev)
         prev = relay.Let(zp, calibration_map[zp], prev)
-    print(prev)
+
     quantized_mod.body = prev
     
     return quantized_mod

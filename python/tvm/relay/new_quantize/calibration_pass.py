@@ -33,27 +33,30 @@ class Calibrater:
         return relay.build_module.bind_params_by_name(subgraph_fn, {name : value})
     
     # assume previous scale, zp are already bound in subgraph
-    def evaluate_subgraph(self, subgraph_fn, input):
-        # TODO: how do I turn this into a CHECK
-        print(subgraph_fn)
-        with tvm.transform.PassContext(opt_level=0):
-            lib = relay.build(subgraph_fn, 'llvm', params=self.params) # TODO: what to do about params?
+    def evaluate_subgraph(self, subgraph_fn, inputs):
+        with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
+            lib = relay.build(subgraph_fn, 'llvm') # TODO: what to do about params?
         module = graph_runtime.GraphModule(lib["default"](tvm.cpu())) # TODO: make the target easy to change
+        module.set_input(**inputs) # TODO: make subgraphs into functions
         
+        if self.params:
+            module.set_input(**self.params)
+
+        module.run()
+
+        # there is only one output
+        return module.get_output(0).asnumpy()
 
     def calibrate(self):
-        for (scale_var, zp_var), (subgraph, quantized_subgraph) in self.calibration_map.items():
+        for (scale_var, zp_var), (subgraph_fn, quantized_subgraph_fn) in self.calibration_map.items():
             
             # bind parameters whose scales were set in previous passes to quantized subgraph
-            fn = relay.Function(relay.analysis.free_vars(subgraph), subgraph)
-            q_fn = relay.Function(relay.analysis.free_vars(quantized_subgraph), quantized_subgraph)
-            
             # bind previously set scale and zp in quantized subgraph function
-            q_fn = relay.build_module.bind_params_by_name(q_fn, self.var_map)
+            quantized_subgraph_fn = relay.build_module.bind_params_by_name(quantized_subgraph_fn, self.var_map)
 
             scale_name = scale_var.name_hint
             zp_name = zp_var.name_hint
-            (scale_value, zp_value) = self.calibration_callback(scale_name, zp_name, fn, q_fn)
+            (scale_value, zp_value) = self.calibration_callback(scale_name, zp_name, subgraph_fn, quantized_subgraph_fn)
 
             self.var_map[scale_name] = np.array(scale_value).astype('float32')
             self.var_map[zp_name] = np.array(zp_value).astype('int32')

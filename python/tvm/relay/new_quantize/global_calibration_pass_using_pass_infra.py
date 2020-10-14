@@ -9,11 +9,20 @@ class GlobalCalibrater(Calibrater):
         self.zp_value = np.array(zp_value).astype('int32')
     
     def calibration_callback(self, scale_name, zp_name, subgraph_fn, quantized_subgraph_fn):
-        print(scale_name)
-        print(zp_name)
-        quantized_subgraph_fn = self.bind_variable(quantized_subgraph_fn, scale_name, self.scale_value)
-        quantized_subgraph_fn = self.bind_variable(quantized_subgraph_fn, zp_name, self.zp_value)
-        input_np = np.random.randn(1, 3, 224, 224).astype('float32')
 
-        self.evaluate_subgraph(quantized_subgraph_fn, input_np)
+        #if scale_name == "add_lhs_scale_7" or scale_name == "conv2d_weight_scale_6":
+        if True:
+            
+            #print(scale_name)
+            #print(zp_name)
+            #print("Subgraph")
+            #print(subgraph_fn)
+            #print("Quantized Subgraph")
+            #print(quantized_subgraph_fn)
+            
+            quantized_subgraph_fn = self.bind_variable(quantized_subgraph_fn, scale_name, self.scale_value)
+            quantized_subgraph_fn = self.bind_variable(quantized_subgraph_fn, zp_name, self.zp_value)
+            input_np = np.random.randn(1, 3, 224, 224).astype('float32')
+            
+            print(self.evaluate_subgraph(quantized_subgraph_fn, {'input' : input_np}))
         return (self.scale_value, self.zp_value)

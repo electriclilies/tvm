@@ -55,9 +55,11 @@ def prerequisite_optimize(mod, params=None):
 # TODO: should we use relay vars themselves as keys or strings? probably vars.
 def quantize(mod, params, skip_layers=[]):
     class QuantizeMutator(ExprMutator):
-        def __init__(self, skip_layers):
+        def __init__(self, inputs, skip_layers):
             super().__init__()
-            
+
+            self.inputs = inputs
+
             # if we are skipping layers, remove duplicates and sort
             self.skip_layers = list(set(skip_layers))
             self.skip_layers.sort()
@@ -69,7 +71,7 @@ def quantize(mod, params, skip_layers=[]):
             # counts the number of times we've added a scale and zp for variable naming
             self.scales_count = 0
             self.zp_count = 0
-
+        
             self.calibration_map = OrderedDict()
 
         # helper to construct the relay scale variable for this layer
@@ -83,6 +85,11 @@ def quantize(mod, params, skip_layers=[]):
             var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), relay.scalar_type('int32'))
             self.zp_count = self.zp_count + 1
             return var
+
+        def create_subgraph_fn(self, subgraph):
+            # TODO: this might be wrong.. 
+            # TODO: union self.inputs and free_vars here or check whether input in free_vars in calibrate. ASK JOSH WHAT IS BETTER
+            return relay.Function(list(set(list(self.inputs) + list(relay.analysis.free_vars(subgraph)))), subgraph)
 
         def visit_call(self, call):
             if call.op == relay.op.get('nn.conv2d'):
@@ -113,8 +120,10 @@ def quantize(mod, params, skip_layers=[]):
                 # Each quantized node maps to the tuple (original graph, quantized_graph) including the current node.
                 # Then, the calibration pass can choose which of the two to use.
                 pre_data, pre_weight = (call.args[0], call.args[1])
-                self.calibration_map[data_key] = (pre_data, q_data)
-                self.calibration_map[weight_key] = (pre_weight, q_weight) 
+
+                # TODO: there is probably a way to do this better ie reuse the relay.free_vars? maybe..
+                self.calibration_map[data_key] = (self.create_subgraph_fn(pre_data), self.create_subgraph_fn(q_data))
+                self.calibration_map[weight_key] = (self.create_subgraph_fn(pre_weight), self.create_subgraph_fn(q_weight)) 
                 
                 args = args + [data_zp, weight_zp, data_scale, weight_scale]
 
@@ -180,8 +189,8 @@ def quantize(mod, params, skip_layers=[]):
                 weight_key = (weight_scale, weight_zp)
                                 
                 pre_data, pre_weight = (call.args[0], call.args[1])
-                self.calibration_map[data_key] = (pre_data, q_data)
-                self.calibration_map[weight_key] = (pre_weight, q_weight)
+                self.calibration_map[data_key] = (self.create_subgraph_fn(pre_data), self.create_subgraph_fn(q_data))
+                self.calibration_map[weight_key] = (self.create_subgraph_fn(pre_weight), self.create_subgraph_fn(q_weight))
 
                 args = args + [data_zp, weight_zp, data_scale, weight_scale, call.attrs['units']]
 
@@ -220,9 +229,9 @@ def quantize(mod, params, skip_layers=[]):
                 out_key = (out_scale, out_zp)
                                 
                 pre_lhs, pre_rhs = (call.args[0], call.args[1])
-                self.calibration_map[lhs_key] = (pre_lhs, lhs)
-                self.calibration_map[rhs_key] = (pre_rhs, rhs)
-                self.calibration_map[out_key] = (call, q_add)
+                self.calibration_map[lhs_key] = (self.create_subgraph_fn(pre_lhs), self.create_subgraph_fn(lhs))
+                self.calibration_map[rhs_key] = (self.create_subgraph_fn(pre_rhs), self.create_subgraph_fn(rhs))
+                self.calibration_map[out_key] = (self.create_subgraph_fn(call), self.create_subgraph_fn(q_add))
 
                 out = relay.qnn.op.dequantize(q_add, out_scale, out_zp) # TODO: what should we do with out_scale?
 
@@ -251,8 +260,8 @@ def quantize(mod, params, skip_layers=[]):
                 rhs_key = (rhs_scale, rhs_zp)
                                 
                 pre_lhs, pre_rhs = (call.args[0], call.args[1])
-                self.calibration_map[lhs_key] = (pre_lhs, lhs)
-                self.calibration_map[rhs_key] = (pre_rhs, rhs)
+                self.calibration_map[lhs_key] = (self.create_subgraph_fn(pre_lhs), self.create_subgraph_fn(lhs))
+                self.calibration_map[rhs_key] = (self.create_subgraph_fn(pre_rhs), self.create_subgraph_fn(rhs))
 
                 args = [relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp),
                         relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)]
@@ -269,7 +278,8 @@ def quantize(mod, params, skip_layers=[]):
 
     # SimplifyInference, FoldConstants, FoldScaleAxis
     preoptimized_mod = prerequisite_optimize(mod, params)
-    quantize_pass = QuantizeMutator(skip_layers)
+    inputs = preoptimized_mod['main'].params
+    quantize_pass = QuantizeMutator(inputs, skip_layers)
 
     q_fn = quantize_pass.visit(preoptimized_mod['main'])
     q_fn = relay.Function(list(q_fn.params) + list(relay.analysis.free_vars(q_fn)), q_fn.body)

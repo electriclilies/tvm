@@ -23,8 +23,8 @@ class Calibrater:
     def calibration_callback(self, scale_name, zp_name, subgraph_fn, quantized_subgraph_fn):
         raise NotImplementedError
 
-    # is the start of this a constant? (dominator)
-    def is_weight(self, subgraph):
+    # helper function to determine whether input is a weight
+    def is_weight(self, var):
         raise NotImplementedError
     
     # bind variable name in subgraph to value (allows user to bind variable multiple times in a subgraph)
@@ -44,7 +44,7 @@ class Calibrater:
 
         module.run()
 
-        # there is only one output
+        # subgraph only has one output # TODO: double check this is true
         return module.get_output(0).asnumpy()
 
     def calibrate(self):

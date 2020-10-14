@@ -33,7 +33,7 @@ quantized_mod, calibration_map = quantize_pass.quantize(mod, params)
 
 input_np = np.random.randn(1, 3, 224, 224).astype('float32')
 
-global_calibrater = GlobalCalibrater(0.05, 0, quantized_mod, calibration_map, params)
+global_calibrater = GlobalCalibrater(0.05, 0, 0.01, 0, quantized_mod, calibration_map, params)
 
 calibrated_mod = global_calibrater.calibrate()
 print(calibrated_mod['main'])

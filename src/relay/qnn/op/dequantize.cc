@@ -27,8 +27,8 @@
 #include <tvm/relay/op_attr_types.h>
 #include <tvm/relay/qnn/attrs.h>
 
-#include "../../transforms/pattern_util.h"
-#include "../util.h"
+#include "../../transforms/pattern_utils.h"
+#include "../utils.h"
 
 namespace tvm {
 namespace relay {
@@ -44,7 +44,6 @@ bool DequantizeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   if (data == nullptr) {
     return false;
   }
-  
   const auto input_dtype = data->dtype;
   CHECK(input_dtype == DataType::Int(8) || input_dtype == DataType::UInt(8) ||
         input_dtype == DataType::Int(32))

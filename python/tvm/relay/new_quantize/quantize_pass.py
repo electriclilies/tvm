@@ -5,6 +5,7 @@ from tvm.relay.frontend.common import infer_type
 from tvm.relay.op.nn.util import get_pad_tuple2d
 from tvm.relay.dataflow_pattern import rewrite, wildcard, is_op, DFPatternCallback
 from collections import OrderedDict
+import copy
 
 def _bind_params(func, params): # TODO: make into a util
     """Bind the params to the expression.
@@ -49,13 +50,12 @@ def prerequisite_optimize(mod, params=None):
 # vars for a quantized layer to the values before and after quantization. If quantize_all_calibration_layers is true,
 # all layers before the current layer will be quantized. Otherwise, the layers before the current layer will be 
 # unquantized (ie, the same as the layers in the pre-optimized graph)
-# Key is always (node_scale, node_zp)
-# TODO: find a better name for quantize_all_calibration_layers
+# calibration_map is (node_scale, node_zp) = (input, quantized_input, output, quantized_output)
+# note that quantized_output may contain an
 
-# TODO: should we use relay vars themselves as keys or strings? probably vars.
-def quantize(mod, params, skip_layers=[]):
+def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers default be?
     class QuantizeMutator(ExprMutator):
-        def __init__(self, inputs, skip_layers):
+        def __init__(self, inputs, skip_layers=[0]):
             super().__init__()
 
             self.inputs = inputs
@@ -86,47 +86,24 @@ def quantize(mod, params, skip_layers=[]):
             self.zp_count = self.zp_count + 1
             return var
 
-        def create_subgraph_fn(self, subgraph):
-            # TODO: this might be wrong.. 
-            # TODO: union self.inputs and free_vars here or check whether input in free_vars in calibrate. ASK JOSH WHAT IS BETTER
+        # helper to wrap the entries in a calibration_map value in relay functions, so they are executable
+        def subgraph_to_fn(self, subgraph):
             return relay.Function(list(set(list(self.inputs) + list(relay.analysis.free_vars(subgraph)))), subgraph)
 
         def visit_call(self, call):
             if call.op == relay.op.get('nn.conv2d'):
-                data, weight = self.visit(call.args[0]), self.visit(call.args[1])
-                # check if we are skipping quantization on this layer after recursive call
+                
+                pre_data, pre_weight = call.args[0], call.args[1]
+                data, weight = self.visit(pre_data), self.visit(pre_weight)
+
+                # Check if we are skipping quantization on this layer after recursive call
                 self.compute_layer_count = self.compute_layer_count + 1 # conv2d is compute layer
                 if self.skip_layers and (self.skip_layers_ptr < len(self.skip_layers)): # skip_layers is false if is [] or None
-                    print("skip_layers_ptr", self.skip_layers_ptr)
                     if (self.compute_layer_count == self.skip_layers[self.skip_layers_ptr] + 1):
                         self.skip_layers_ptr = self.skip_layers_ptr + 1
                         return super().visit_call(call)
 
-                # Create quantization parameters for arguments to this convolution.
-                data_scale = self.scale('conv2d_data') 
-                data_zp = self.zero_point('conv2d_data')
-                weight_scale = self.scale('conv2d_weight')
-                weight_zp = self.zero_point('conv2d_weight')
-
-                q_data = relay.qnn.op.quantize(data, data_scale, data_zp)
-                q_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
-
-                args = [q_data, q_weight]
-
-                # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
-                data_key = (data_scale, data_zp)
-                weight_key = (weight_scale, weight_zp)
-
-                # Each quantized node maps to the tuple (original graph, quantized_graph) including the current node.
-                # Then, the calibration pass can choose which of the two to use.
-                pre_data, pre_weight = (call.args[0], call.args[1])
-
-                # TODO: there is probably a way to do this better ie reuse the relay.free_vars? maybe..
-                self.calibration_map[data_key] = (self.create_subgraph_fn(pre_data), self.create_subgraph_fn(q_data))
-                self.calibration_map[weight_key] = (self.create_subgraph_fn(pre_weight), self.create_subgraph_fn(q_weight)) 
-                
-                args = args + [data_zp, weight_zp, data_scale, weight_scale]
-
+                # Find kernel_size, channels (will be passed to qnn.conv2d)
                 new_attr_dict = {}
                 kernel_type_info = infer_type(call.args[1])
                 for attr in call.attrs.keys():
@@ -148,26 +125,55 @@ def quantize(mod, params, skip_layers=[]):
                         padding = call.attrs[attr]
                     else:
                         new_attr_dict[str(attr)] = attr_value
-                args = args + [kernel_size, channels]
+
                 #TODO Figure out if this could be better.
                 # Override output dtype.
                 new_attr_dict['out_dtype'] = 'int32'
 
+                # Create quantization variables for arguments to this convolution.
+                data_scale = self.scale('conv2d_data') 
+                data_zp = self.zero_point('conv2d_data')
+                weight_scale = self.scale('conv2d_weight')
+                weight_zp = self.zero_point('conv2d_weight')
+                
+                # Quantize the data and construct args for qnn.conv2d
+                quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
+                quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
+
+                args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, kernel_size, channels]
+                
                 if padding is not None:
-                    #TODO Need to make this work with other layouts.
+                    #TODO: Need to make this work with other layouts.
                     top, left, bottom, right = [p.value for p in get_pad_tuple2d(padding)]
                     pad_width = ((0, 0), (0, 0), (top, bottom), (left, right))
                     pad_val = 0
-                    args[0] = relay.op.nn.pad(args[0], pad_width, pad_val) 
+                    args[0] = relay.op.nn.pad(args[0], pad_width, pad_val)
 
+                # Construct quantized qnn.conv2d and dequantize
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
-                out = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
 
-                return out
+                # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
+                data_key = (data_scale, data_zp)
+                weight_key = (weight_scale, weight_zp)
+
+                pre_data_fn = self.subgraph_to_fn(pre_data)
+                quantized_data_fn = self.subgraph_to_fn(quantized_data)
+                pre_weight_fn = self.subgraph_to_fn(pre_weight)
+                quantized_weight_fn = self.subgraph_to_fn(quantized_weight)
+                call_fn = self.subgraph_to_fn(call)
+                dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
+
+                self.calibration_map[(data_key, weight_key)] = (((pre_data_fn, quantized_data_fn), (pre_weight_fn, quantized_weight_fn)), (call_fn, dequantized_call_fn))
+
+                return dequantized_call
 
             if call.op == relay.op.get('nn.dense'):
-                data, weight = self.visit(call.args[0]), self.visit(call.args[1])
-                # check if we are skipping quantization on this layer after recursive call
+
+                pre_data, pre_weight = call.args[0], call.args[1]
+                data, weight = self.visit(pre_data), self.visit(pre_weight)
+
+                # Check if we are skipping quantization on this layer after recursive call
                 self.compute_layer_count = self.compute_layer_count + 1 # dense is a compute layer
                 if self.skip_layers and (self.skip_layers_ptr < len(self.skip_layers)):
                     if (self.compute_layer_count == self.skip_layers[self.skip_layers_ptr] + 1):
@@ -180,30 +186,36 @@ def quantize(mod, params, skip_layers=[]):
                 weight_scale = self.scale('dense_weight')
                 weight_zp = self.zero_point('dense_weight')
                 
-                q_data = relay.qnn.op.quantize(data, data_scale, data_zp)
-                q_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
-                args = [q_data, q_weight]
-
-                # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
-                data_key = (data_scale, data_zp)
-                weight_key = (weight_scale, weight_zp)
-                                
-                pre_data, pre_weight = (call.args[0], call.args[1])
-                self.calibration_map[data_key] = (self.create_subgraph_fn(pre_data), self.create_subgraph_fn(q_data))
-                self.calibration_map[weight_key] = (self.create_subgraph_fn(pre_weight), self.create_subgraph_fn(q_weight))
-
-                args = args + [data_zp, weight_zp, data_scale, weight_scale, call.attrs['units']]
+                # Quantize data and construct args for qnn.dense
+                quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
+                quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
+                args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, call.attrs['units']]
 
                 qnn_call = relay.qnn.op.dense(*args)
-                out = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
-                
-                return out
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
+
+                # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
+                data_key = (data_scale, data_zp)
+                weight_key = (weight_scale, weight_zp)
+
+                pre_data_fn = self.subgraph_to_fn(pre_data)
+                quantized_data_fn = self.subgraph_to_fn(quantized_data)
+                pre_weight_fn = self.subgraph_to_fn(pre_weight)
+                quantized_weight_fn = self.subgraph_to_fn(quantized_weight)
+                call_fn = self.subgraph_to_fn(call)
+                dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
+
+                self.calibration_map[(data_key, weight_key)] = (((pre_data_fn, quantized_data_fn), (pre_weight_fn, quantized_weight_fn)), (call_fn, dequantized_call_fn))
+
+                return dequantized_call
 
             if call.op == relay.op.get('add'):
-                lhs = self.visit(call.args[0])
-                rhs = self.visit(call.args[1])
-                # don't quantize add if it follows a skipped layer
-                if self.skip_layers and self.skip_layers_ptr is not 0:
+
+                pre_lhs, pre_rhs = call.args[0], call.args[1]
+                lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
+
+                # Don't quantize the add if it is in a skipped layer
+                if self.skip_layers and self.skip_layers_ptr != 0:
                     last_layer = self.compute_layer_count - 1
                     last_skipped = self.skip_layers[self.skip_layers_ptr - 1]
                     if (last_layer == last_skipped):
@@ -214,34 +226,41 @@ def quantize(mod, params, skip_layers=[]):
                 lhs_zp = self.zero_point('add_lhs')
                 rhs_scale = self.scale('add_rhs')
                 rhs_zp = self.zero_point('add_rhs')
-                out_scale = self.scale('add_out')
-                out_zp = self.zero_point('add_out')
 
-                args = [relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp),
-                        relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)]
+                # Quantize inputs and construct args for add
+                quantized_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
+                quantized_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
 
-                args = args + [lhs_scale, lhs_zp, rhs_scale, rhs_zp, out_scale, out_zp]
-                q_add = relay.qnn.op.add(*args)
+                # Scale represents the lowest possible value representable in the quantized type,
+                # so the smallest representable output is lhs_scale + rhs_scale
+                args = [quantized_lhs, quantized_rhs, lhs_scale, lhs_zp, rhs_scale, rhs_zp, lhs_scale + rhs_scale, relay.const(0, dtype='int32')]
+                
+                # Construct quantized qnn.add and dequantize
+                qnn_call = relay.qnn.op.add(*args)
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, lhs_scale + rhs_scale, relay.const(0, dtype='int32'))
 
-                # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
+                # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
                 lhs_key = (lhs_scale, lhs_zp)
                 rhs_key = (rhs_scale, rhs_zp)
-                out_key = (out_scale, out_zp)
-                                
-                pre_lhs, pre_rhs = (call.args[0], call.args[1])
-                self.calibration_map[lhs_key] = (self.create_subgraph_fn(pre_lhs), self.create_subgraph_fn(lhs))
-                self.calibration_map[rhs_key] = (self.create_subgraph_fn(pre_rhs), self.create_subgraph_fn(rhs))
-                self.calibration_map[out_key] = (self.create_subgraph_fn(call), self.create_subgraph_fn(q_add))
+                
+                pre_lhs_fn = self.subgraph_to_fn(pre_lhs)
+                quantized_lhs_fn = self.subgraph_to_fn(quantized_lhs)
+                pre_rhs_fn = self.subgraph_to_fn(pre_rhs)
+                quantized_rhs_fn = self.subgraph_to_fn(quantized_rhs)
+                call_fn = self.subgraph_to_fn(call)
+                dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
 
-                out = relay.qnn.op.dequantize(q_add, out_scale, out_zp) # TODO: what should we do with out_scale?
+                self.calibration_map[(lhs_key, rhs_key)] = (((pre_lhs_fn, quantized_lhs_fn), (pre_rhs_fn, quantized_rhs_fn)), (call_fn, dequantized_call_fn))
 
-                return out
+                return dequantized_call
 
             if call.op == relay.op.get('multiply'):
-                lhs = self.visit(call.args[0])
-                rhs = self.visit(call.args[1])
-                # don't quantize add if it follows a skipped layer
-                if self.skip_layers and self.skip_layers_ptr is not 0:
+
+                pre_lhs, pre_rhs = call.args[0], call.args[1]
+                lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
+
+                # Don't quantize multiply if it is in a skipped layer
+                if self.skip_layers and self.skip_layers_ptr != 0:
                     last_layer = self.compute_layer_count - 1
                     last_skipped = self.skip_layers[self.skip_layers_ptr - 1]
                     if (last_layer == last_skipped):
@@ -252,29 +271,34 @@ def quantize(mod, params, skip_layers=[]):
                 lhs_zp = self.zero_point('mul_lhs')
                 rhs_scale = self.scale('mul_rhs')
                 rhs_zp = self.zero_point('mul_rhs')
-                out_scale = lhs_scale * rhs_scale
-                out_zp = relay.const(0, dtype='int32')
 
-                # Each QNN op is denoted by its pair of variables as a tuple (scale, zero_point)
+                # Quantize inputs and construct args for multiply
+                quantized_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
+                quantized_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
+
+                args = [quantized_lhs, quantized_rhs, lhs_scale, lhs_zp, rhs_scale, rhs_zp, lhs_scale * rhs_scale, relay.const(0, dtype='int32')]
+                
+                # Construct quantized qnn.multiply and dequantize
+                qnn_call = relay.qnn.op.mul(*args)
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, lhs_scale * rhs_scale, relay.const(0, dtype='int32'))
+
+                # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
                 lhs_key = (lhs_scale, lhs_zp)
                 rhs_key = (rhs_scale, rhs_zp)
-                                
-                pre_lhs, pre_rhs = (call.args[0], call.args[1])
-                self.calibration_map[lhs_key] = (self.create_subgraph_fn(pre_lhs), self.create_subgraph_fn(lhs))
-                self.calibration_map[rhs_key] = (self.create_subgraph_fn(pre_rhs), self.create_subgraph_fn(rhs))
 
-                args = [relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp),
-                        relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)]
-                
-                args = args + [lhs_scale, lhs_zp, rhs_scale, rhs_zp, out_scale, out_zp]
-                q_mul = relay.qnn.op.add(*args)
-                out = relay.qnn.op.dequantize(q_mul, out_scale, out_zp)
-                
-                return out
+                pre_lhs_fn = self.subgraph_to_fn(pre_lhs)
+                quantized_lhs_fn = self.subgraph_to_fn(quantized_lhs)
+                pre_rhs_fn = self.subgraph_to_fn(pre_rhs)
+                quantized_rhs_fn = self.subgraph_to_fn(quantized_rhs)
+                call_fn = self.subgraph_to_fn(call)
+                dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
+
+                self.calibration_map[(lhs_key, rhs_key)] = (((pre_lhs_fn, quantized_lhs_fn), (pre_rhs_fn, quantized_rhs_fn)), (call_fn, dequantized_call_fn))
+
+                return dequantized_call
             
             else:
                 return super().visit_call(call)
-
 
     # SimplifyInference, FoldConstants, FoldScaleAxis
     preoptimized_mod = prerequisite_optimize(mod, params)
@@ -284,7 +308,9 @@ def quantize(mod, params, skip_layers=[]):
     q_fn = quantize_pass.visit(preoptimized_mod['main'])
     q_fn = relay.Function(list(q_fn.params) + list(relay.analysis.free_vars(q_fn)), q_fn.body)
     
-    quantized_mod = preoptimized_mod
+    # TODO: how to construct a module with a named func as main??
+
+    quantized_mod = copy.deepcopy(preoptimized_mod)
     quantized_mod['main'] = q_fn
 
     # we return a mod for consistency with other passes

@@ -17,14 +17,18 @@ class Calibrater:
 
         self.var_map = {} # map of variables to final output
 
-    # return a tuple of (scale_value, zero_point_value) which the pass will then set in
-    # the module returned from calibrate, the unquantized function wrapped in a function, and the
-    # quantized subgraph wrapped in a function. You will need to bind the scale_var and zp_var for the current
-    # layer before running the quantized subgraph
-    def calibration_callback(self, scale_name, zp_name, data_fn, quantized_data_fn):
-        raise NotImplementedError
-
-    def op_output_callback(self, op_output_fn, quantized_op_output_fn):
+    # For an op in the original graph with 2 inputs, var_pairs is a 3d tuple of the form 
+    # (((input1_scale, input1_zp), (input2_scale, input2_zp))).
+    # The corresponding input_subgraph_pairs are 
+    # (((input1_data_fn, input1_quantized_data_fn), (input2_data_fn, input2_quantized_data_fn)))
+    # where input1_data_fn is the original, unquantized version of input1 in runnable function form, and
+    # input1_quantized_data_fn is the quantized version of input1 in runnable function form. 
+    # The output_subgraph_pair is (output_data_fn, output_quantized_data_fn)
+    # output_data_fn is the original, unquantized version of the operation in runnable function form, and
+    # output_quantized_data_fn is the dequantized output of the quantized operation
+    # You will need to pass scales and zero points to output_quantized_data_fn for all the scales and zero points
+    # corresponding to this node (ie, all the scale and zero point variables in var_pairs)
+    def calibration_callback(self, var_pairs, input_subgraph_fn_pairs, output_subgraph_fn_pair):
         raise NotImplementedError
 
     # helper function to determine whether input is a weight
@@ -41,9 +45,9 @@ class Calibrater:
     def evaluate_subgraph(self, subgraph_fn, inputs):
         # TODO: add constant folding..
         with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-            lib = relay.build(subgraph_fn, 'llvm') # TODO: what to do about params?
+            lib = relay.build(subgraph_fn, 'llvm', self.params)
         module = graph_runtime.GraphModule(lib["default"](tvm.cpu())) # TODO: make the target easy to change
-        module.set_input(**inputs) # TODO: make subgraphs into functions
+        module.set_input(**inputs)
         
         if self.params:
             module.set_input(**self.params)
@@ -54,10 +58,9 @@ class Calibrater:
         return module.get_output(0).asnumpy()
 
     def calibrate(self):
-        for (variable_pairs), (subgraph_pairs, output_pair) in self.calibration_map.items():
-            #print("variable pairs: ", variable_pairs)
-            #print("subgraph_pairs: ", subgraph_pairs)
-            #print("output_pair: ", output_pair)
+        for (variable_pairs), (input_subgraph_pairs, output_subgraph_pair) in self.calibration_map.items():
+            
+            """
             for ((scale_var, zp_var), (subgraph_fn, quantized_subgraph_fn)) in zip(variable_pairs, subgraph_pairs):
                 # bind previously set scale and zp in quantized subgraph function
                 quantized_subgraph_fn = relay.build_module.bind_params_by_name(quantized_subgraph_fn, self.var_map)
@@ -68,10 +71,13 @@ class Calibrater:
 
                 self.var_map[scale_name] = np.array(scale_value).astype('float32')
                 self.var_map[zp_name] = np.array(zp_value).astype('int32')
-            
-            # TODO: figure out if this is the best way to do this later -- will people ever want to set vars just using op_output_callback?
-            (op_output_fn, quantized_op_output_fn) = output_pair
-            self.op_output_callback(op_output_fn, quantized_op_output_fn)
+            """
+            value_pairs = self.calibration_callback(variable_pairs, input_subgraph_pairs, output_subgraph_pair)
+            for ((scale_var, zp_var), (scale_value, zp_value)) in zip(variable_pairs, value_pairs):
+                scale_name = scale_var.name_hint
+                zp_name = zp_var.name_hint
+                self.var_map[scale_name] = scale_value
+                self.var_map[zp_name] = zp_value
 
         # TODO: change me to create a new mod. 
         calibrated_func = relay.build_module.bind_params_by_name(self.quantized_mod['main'], self.var_map)

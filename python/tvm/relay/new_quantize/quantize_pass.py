@@ -310,7 +310,7 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
     
     # TODO: how to construct a module with a named func as main??
 
-    quantized_mod = copy.deepcopy(preoptimized_mod)
+    quantized_mod = tvm.ir.IRModule()
     quantized_mod['main'] = q_fn
 
     # we return a mod for consistency with other passes

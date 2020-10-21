@@ -1,6 +1,7 @@
 import tvm
 from tvm import relay
 from tvm.contrib import graph_runtime
+from tvm.relay import ExprVisitor
 
 import numpy as np
 import copy
@@ -31,8 +32,25 @@ class Calibrater:
         raise NotImplementedError
 
     # helper function to determine whether input is a weight
+    # this will be kind of repetitive, maybe we can
     def is_weight(self, expr):
-        pass
+
+        class WeightVisitor(ExprVisitor):
+            def __init__(self):
+                super().__init__()
+                self.is_weight = False
+            
+            def visit_call(self, call):
+                if (call.op.num_inputs == 1):
+                    self.visit(call.args[0])
+            
+            def visit_constant(self, constant):
+                self.is_weight = True
+        
+        weightvisitor = WeightVisitor()
+        weightvisitor.visit(expr)
+
+        return weightvisitor.is_weight
     
     # bind variable name in subgraph to value (allows user to bind variable multiple times in a subgraph)
     def bind_variable(self, subgraph_fn, name, value):
@@ -65,11 +83,9 @@ class Calibrater:
                 self.var_map[scale_name] = scale_value
                 self.var_map[zp_name] = zp_value
 
-        # TODO: change me to create a new mod. 
         calibrated_func = relay.build_module.bind_params_by_name(self.quantized_mod['main'], self.var_map)
-        # TODO: HOW OT EXPLICITLY CONSTRUCT A MOD WITH A NAMED FUNCTION
         
-        calibrated_mod = copy.deepcopy(self.quantized_mod)
+        calibrated_mod = tvm.ir.IRModule()
         calibrated_mod['main'] = calibrated_func
         
         optimize = tvm.transform.Sequential(

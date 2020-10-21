@@ -14,5 +14,15 @@ class GlobalCalibrater(Calibrater):
     def calibration_callback(self, var_pairs, input_subgraph_fn_pairs, output_subgraph_fn_pair):
         output_values = []
         for ((scale, zp), (data_subgraph_fn, quantized_data_subgraph_fn)) in zip(var_pairs, input_subgraph_fn_pairs):
-            output_values.append((self.scale_value, self.zp_value))
+
+            if self.is_weight(data_subgraph_fn):
+                print("is weight")
+                scale_value = self.weight_scale_value
+                zp_value = self.weight_zp_value
+            else:
+                print("isnt weight")
+                scale_value = self.scale_value
+                zp_value = self.zp_value
+
+            output_values.append((scale_value, zp_value))
         return tuple(output_values)

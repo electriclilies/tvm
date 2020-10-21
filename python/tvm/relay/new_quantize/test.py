@@ -3,11 +3,9 @@ import onnx
 import torch
 from torchvision.models import resnet
 from tvm import relay
-import quantize_pass
-import global_calibration_pass
-from global_calibration_pass_using_pass_infra import GlobalCalibrater, TestCalibrater
 import numpy as np
-from tvm.relay.testing import ctx_list
+from tvm.relay.new_quantize import quantize_pass, GlobalCalibrater
+import tvm.testing
 
 # ONNX TEST
 """
@@ -32,8 +30,7 @@ mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
 quantized_mod, calibration_map = quantize_pass.quantize(mod, params, skip_layers=[])
 
 #global_calibrater = GlobalCalibrater(0.044, 0, 0.005, 0, quantized_mod, calibration_map, params)
-#global_calibrater = GlobalCalibrater(0.05, 0, 0.005, 0, quantized_mod, calibration_map, params)
-global_calibrater = TestCalibrater(quantized_mod, calibration_map, params)
+global_calibrater = GlobalCalibrater(0.05, 0, 0.005, 0, quantized_mod, calibration_map, params)
 calibrated_mod = global_calibrater.calibrate()
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
@@ -47,8 +44,9 @@ gmod.set_input(**params)
 gmod.set_input('input', input_np)
 gmod.run()
 out = gmod.get_output(0).asnumpy()
-#print("Unquantized Output:")
+print("Unquantized Output:")
 print(out)
+
 
 print(" ___________ ")
 q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))
@@ -56,7 +54,7 @@ q_gmod.set_input('input', input_np)
 q_gmod.set_input(**params)
 q_gmod.run()
 q_out = q_gmod.get_output(0).asnumpy()
-#print("Quantized output:")
-#print(q_out)
+print("Quantized output:")
+print(q_out)
 
 tvm.testing.assert_allclose(q_out, out, rtol=1e-1, atol=1e-1)

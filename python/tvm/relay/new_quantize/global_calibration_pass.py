@@ -1,27 +1,18 @@
-from tvm import relay
+import tvm
+from tvm.relay.new_quantize import Calibrater
 import numpy as np
 
-# TODO: make this an argument to pass into calibrate
-def global_calibrate(calibration_map, scale_value, zero_point_value):
-    var_map = {}
-    # is there a reason we store the relay var and not the name in the calibration_map?
-    # given changes coming with var2id might be better to do string. 
-    for (scale_var, zp_var) in calibration_map.keys():
-        var_map[scale_var.name_hint] = np.array(scale_value).astype('float32') #relay.const(scale_value, dtype='float32')
-        var_map[zp_var.name_hint] = np.array(zero_point_value).astype('int32') #relay.const(zero_point_value, dtype='int32')
-    
-    return var_map
+class GlobalCalibrater(Calibrater):
 
-# this doesn't work because we get free vars in the output func from quantize pass then.
-def calibrate(quantized_mod, calibration_map, scale_value, zero_point_value):
-    prev = quantized_mod.body
-
-    scale_zp_value_map = global_calibrate(calibration_map, scale_value, zero_point_value)
+    def __init__(self, scale_value, zp_value, weight_scale_value, weight_zp_value, mod, calibration_map, params=None):
+        super().__init__(mod, calibration_map, params)
+        self.scale_value = np.array(scale_value).astype('float32')
+        self.zp_value = np.array(zp_value).astype('int32')
+        self.weight_scale_value = np.array(weight_scale_value).astype('float32')
+        self.weight_zp_value = np.array(weight_zp_value).astype('int32')
     
-    for (scale, zp) in scale_zp_value_map.keys():
-        prev = relay.Let(scale, calibration_map[scale], prev)
-        prev = relay.Let(zp, calibration_map[zp], prev)
-
-    quantized_mod.body = prev
-    
-    return quantized_mod
+    def calibration_callback(self, var_pairs, input_subgraph_fn_pairs, output_subgraph_fn_pair):
+        output_values = []
+        for ((scale, zp), (data_subgraph_fn, quantized_data_subgraph_fn)) in zip(var_pairs, input_subgraph_fn_pairs):
+            output_values.append((self.scale_value, self.zp_value))
+        return tuple(output_values)

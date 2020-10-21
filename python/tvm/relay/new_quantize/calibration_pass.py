@@ -1,4 +1,3 @@
-
 import tvm
 from tvm import relay
 from tvm.contrib import graph_runtime
@@ -59,19 +58,6 @@ class Calibrater:
 
     def calibrate(self):
         for (variable_pairs), (input_subgraph_pairs, output_subgraph_pair) in self.calibration_map.items():
-            
-            """
-            for ((scale_var, zp_var), (subgraph_fn, quantized_subgraph_fn)) in zip(variable_pairs, subgraph_pairs):
-                # bind previously set scale and zp in quantized subgraph function
-                quantized_subgraph_fn = relay.build_module.bind_params_by_name(quantized_subgraph_fn, self.var_map)
-
-                scale_name = scale_var.name_hint
-                zp_name = zp_var.name_hint
-                (scale_value, zp_value) = self.calibration_callback(scale_name, zp_name, subgraph_fn, quantized_subgraph_fn)
-
-                self.var_map[scale_name] = np.array(scale_value).astype('float32')
-                self.var_map[zp_name] = np.array(zp_value).astype('int32')
-            """
             value_pairs = self.calibration_callback(variable_pairs, input_subgraph_pairs, output_subgraph_pair)
             for ((scale_var, zp_var), (scale_value, zp_value)) in zip(variable_pairs, value_pairs):
                 scale_name = scale_var.name_hint
@@ -82,17 +68,13 @@ class Calibrater:
         # TODO: change me to create a new mod. 
         calibrated_func = relay.build_module.bind_params_by_name(self.quantized_mod['main'], self.var_map)
         # TODO: HOW OT EXPLICITLY CONSTRUCT A MOD WITH A NAMED FUNCTION
+        
         calibrated_mod = copy.deepcopy(self.quantized_mod)
         calibrated_mod['main'] = calibrated_func
-
+        
         optimize = tvm.transform.Sequential(
             [relay.transform.FoldConstant()])
         with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
-            print("constant folding")
             calibrated_mod = optimize(calibrated_mod)
-            print("done")
         
-        print("calibrated mod")
-        print(calibrated_mod)
-        print("_____________")
         return calibrated_mod

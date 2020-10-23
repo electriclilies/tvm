@@ -17,11 +17,11 @@
 import numpy as np
 import tvm
 import tvm.relay as relay
+import tvm.testing
 from tvm.relay.new_quantize import quantize_pass
 from tvm.relay.frontend.common import infer_type
 from tvm.contrib import graph_runtime
 from tvm.relay.new_quantize import GlobalCalibrater
-
 
 def check_quantization(op, expected_op):
 
@@ -31,12 +31,56 @@ def check_quantization(op, expected_op):
 
     (quantized_mod, calibration_map) = quantize_pass.quantize(original_mod)
     expected_func = relay.Function((list(relay.analysis.free_vars(expected_op))), expected_op)
-    print(quantized_mod['main'])
-    print(expected_func)
     tvm.ir.assert_structural_equal(quantized_mod['main'].body, expected_func.body, map_free_vars=True)
-    # TODO: check stuff about calibration map
 
-# Test that conv2d is transformed to qnn.conv2d correctly
+# Checks that the calibration_map is constructed correctly
+# Note: normally the user should not use calibration_map directly. Please write a calibration_callback instead
+def check_calibration_map(calibration_map, inputs):
+    for (variable_pairs), (input_subgraph_pairs, output_subgraph_pair) in calibration_map.items():
+        output_subgraph_fn = output_subgraph_pair[0]
+        quantized_output_subgraph_fn = output_subgraph_pair[1]
+        assert isinstance(output_subgraph_fn, relay.Function)
+        assert isinstance(quantized_output_subgraph_fn, relay.Function)
+        output_params = output_subgraph_pair[0].params
+        q_output_params = output_subgraph_pair[1].params
+        for ((scale, zp), (data_subgraph_fn, quantized_data_subgraph_fn)) in zip(variable_pairs, input_subgraph_pairs):
+            assert isinstance(scale, relay.Var)
+            assert isinstance(zp, relay.Var)
+            assert isinstance(data_subgraph_fn, relay.Function)
+            assert isinstance(quantized_data_subgraph_fn, relay.Function)
+
+            data_params = data_subgraph_fn.params
+            q_data_params = quantized_data_subgraph_fn.params
+
+            # Scale, zp vars should not be in unquantized subgraphs
+            assert scale not in data_params
+            assert zp not in data_params
+            assert scale not in output_params
+            assert zp not in output_params
+
+            # Scale, zp vars should be in quantized subgraphs
+            assert scale in q_data_params
+            assert zp in q_data_params
+            assert scale in q_output_params
+            assert zp in q_output_params
+
+            # Make sure all the functions build and run
+            get_tvm_output(tvm.ir.IRModule.from_expr(data_subgraph_fn), inputs)
+            new_inputs = inputs
+            new_inputs[scale.name_hint] = np.array((0.05,)).astype('float32')
+            new_inputs[zp.name_hint] = np.array((0,)).astype('int32')
+            print(quantized_data_subgraph_fn)
+            print(new_inputs)
+            get_tvm_output(tvm.ir.IRModule.from_expr(quantized_data_subgraph_fn), new_inputs)
+            """
+            for subgraph_fn in [data_subgraph_fn, output_subgraph_fn]:
+                with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
+                    lib = relay.build(subgraph_fn, 'llvm', params=None)
+                module = graph_runtime.GraphModule(lib["default"](tvm.cpu()))
+                module.set_input({scale.name_hint: 0.05, zp.name_hint: 0})
+                module.run(*inputs)
+            """
+# Test that conv2d is transformed to qnn.conv2d correctly and that calibration_map is correct
 def test_conv2d():
 
     data = relay.var('data', shape=(1, 3, 224, 224), dtype='float32')
@@ -53,7 +97,7 @@ def test_conv2d():
     
     check_quantization(conv2d, deq_conv2d)
 
-# Test that dense is transformed to qnn.dense correctly
+# Test that dense is transformed to qnn.dense correctly and that calibration_map is correct
 def test_dense():
     data = relay.var('data', shape=(16, 4))
     dense_weight = relay.var('dense_weight', shape=(4, 4))
@@ -68,8 +112,9 @@ def test_dense():
     deq_dense = relay.qnn.op.dequantize(q_dense, data_scale * weight_scale, relay.const(0, dtype='int32'))
 
     check_quantization(dense, deq_dense)
+    
 
-# Test that add is transformed to qnn.add correctly
+# Test that add is transformed to qnn.add correctly and that calibration_map is correct
 def test_add():
     lhs = relay.var('lhs', shape=(1, 2, 3))
     rhs = relay.var('rhs', shape=(1, 2, 3))
@@ -84,7 +129,7 @@ def test_add():
 
     check_quantization(add, deq_add)
 
-# Test that multiply is transformed to qnn.mul correctly
+# Test that multiply is transformed to qnn.mul correctly and that calibration_map is correct
 def test_mul():
     lhs = relay.var('lhs', shape=(1, 2, 3))
     rhs = relay.var('rhs', shape=(1, 2, 3))
@@ -104,8 +149,7 @@ def get_tvm_output(mod, inputs, target='llvm', ctx=tvm.cpu()):
         lib = relay.build(mod, target=target)
 
     gmod = graph_runtime.GraphModule(lib["default"](tvm.cpu()))
-    for i, inp in enumerate(inputs):
-        gmod.set_input(i, inp)
+    gmod.set_input(**inputs)
     gmod.run()
     return gmod.get_output(0).asnumpy()
 
@@ -114,7 +158,6 @@ def verify_conv_output(data_shape, weight_shape):
     data = relay.var('data', shape=data_shape, dtype='float32')
     weight = relay.var('weight', shape=weight_shape, dtype='float32')
     conv2d = relay.op.nn.conv2d(data, weight, strides=[1, 1], padding=([int(np.ceil(weight_shape[-1] / 2) - 1)] * len(data_shape)), channels=weight_shape[0], kernel_size=weight_shape[2:])
-    print(conv2d)
 
     data_np = np.random.randn(*data_shape).astype('float32')
     weight_np = np.random.randn(*weight_shape).astype('float32')
@@ -122,15 +165,16 @@ def verify_conv_output(data_shape, weight_shape):
     original_mod = tvm.ir.IRModule.from_expr(conv2d)
 
     (quantized_mod, calibration_map) = quantize_pass.quantize(original_mod)
-    #print(get_tvm_output(original_mod, [data_np, weight_np]))
+
     global_calibrater = GlobalCalibrater(0.05, 0, 0.05, 0)
     calibrated_mod = global_calibrater.calibrate(quantized_mod, calibration_map)
-    print("-----QUANTIZED-----")
-    out = get_tvm_output(calibrated_mod, [data_np, weight_np])
-    print(out)
-    print("-----ORIGINAL------")
-    q_out = get_tvm_output(original_mod, [data_np, weight_np])
-    print(q_out)
+    inputs = {'data': data_np, 'weight': weight_np}
+
+    out = get_tvm_output(calibrated_mod, inputs)
+    q_out = get_tvm_output(original_mod, inputs)
+    tvm.testing.assert_allclose(out, q_out, atol=0.5)
+
+    check_calibration_map(calibration_map, inputs)
 
 def test_conv_output():
     verify_conv_output([1, 1, 3, 3], [4, 1, 3, 3])

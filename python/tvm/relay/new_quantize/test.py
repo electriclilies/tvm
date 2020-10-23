@@ -27,7 +27,6 @@ script_module = torch.jit.trace(pytorch_model, input_data)
 
 input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
-print(mod)
 quantized_mod, calibration_map = quantize_pass.quantize(mod, params, skip_layers=[])
 
 #global_calibrater = GlobalCalibrater(0.044, 0, 0.005, 0, quantized_mod, calibration_map, params)

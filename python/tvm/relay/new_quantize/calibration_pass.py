@@ -61,8 +61,10 @@ class Calibrater:
     # runs the subgraph_fn passing in inputs as the inputs to the module
     def evaluate_subgraph(self, subgraph_fn, inputs, target, ctx):
         with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-            lib = relay.build(subgraph_fn, target, self.params)
-        module = graph_runtime.GraphModule(lib["default"](ctx)) # TODO: make the target easy to change
+            lib = relay.build(subgraph_fn, target=target)
+        module = graph_runtime.GraphModule(lib["default"](ctx))
+        if self.params:
+            module.set_input(**self.params)
         module.set_input(**inputs)
         
         if self.params:

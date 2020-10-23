@@ -27,11 +27,14 @@ script_module = torch.jit.trace(pytorch_model, input_data)
 
 input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
+print(mod)
 quantized_mod, calibration_map = quantize_pass.quantize(mod, params, skip_layers=[])
 
 #global_calibrater = GlobalCalibrater(0.044, 0, 0.005, 0, quantized_mod, calibration_map, params)
-global_calibrater = GlobalCalibrater(0.05, 0, 0.005, 0, quantized_mod, calibration_map, params)
-calibrated_mod = global_calibrater.calibrate()
+global_calibrater = GlobalCalibrater(0.05, 0, 0.005, 0)
+calibrated_mod = global_calibrater.calibrate(quantized_mod, calibration_map, params)
+
+exit()
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
     q_lib = relay.build(calibrated_mod, target='llvm')
@@ -44,8 +47,8 @@ gmod.set_input(**params)
 gmod.set_input('input', input_np)
 gmod.run()
 out = gmod.get_output(0).asnumpy()
-print("Unquantized Output:")
-print(out)
+#print("Unquantized Output:")
+#print(out)
 
 
 print(" ___________ ")
@@ -54,7 +57,7 @@ q_gmod.set_input('input', input_np)
 q_gmod.set_input(**params)
 q_gmod.run()
 q_out = q_gmod.get_output(0).asnumpy()
-print("Quantized output:")
-print(q_out)
+#print("Quantized output:")
+#print(q_out)
 
 tvm.testing.assert_allclose(q_out, out, rtol=1e-1, atol=1e-1)

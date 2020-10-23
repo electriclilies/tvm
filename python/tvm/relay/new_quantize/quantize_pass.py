@@ -308,8 +308,6 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
     q_fn = quantize_pass.visit(preoptimized_mod['main'])
     q_fn = relay.Function(list(q_fn.params) + list(relay.analysis.free_vars(q_fn)), q_fn.body)
     
-    # TODO: how to construct a module with a named func as main??
-
     quantized_mod = tvm.ir.IRModule()
     quantized_mod['main'] = q_fn
 

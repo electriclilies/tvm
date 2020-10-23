@@ -10,12 +10,12 @@ class Calibrater:
     # calibration_map is a map from relay scale and zero point variables to subgraphs. 
     # it is one of the outputs of the quantize pass. see the documentation of that pass
     # for more details
-    def __init__(self, quantized_mod, calibration_map, params=None):
-        self.calibration_map = calibration_map
-        self.quantized_mod = quantized_mod
-        self.params = params
+    def __init__(self):
+        self.calibration_map = None
+        self.quantized_mod = None
+        self.params = None
 
-        self.var_map = {} # map of variables to final output
+        self.var_map = {} # map of variables to final calibration value
 
     # For an op in the original graph with 2 inputs, var_pairs is a 3d tuple of the form 
     # (((input1_scale, input1_zp), (input2_scale, input2_zp))).
@@ -59,11 +59,10 @@ class Calibrater:
     
     # assume previous scale, zp are already bound in subgraph
     # runs the subgraph_fn passing in inputs as the inputs to the module
-    def evaluate_subgraph(self, subgraph_fn, inputs):
-        # TODO: add constant folding..
+    def evaluate_subgraph(self, subgraph_fn, inputs, target, ctx):
         with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-            lib = relay.build(subgraph_fn, 'llvm', self.params)
-        module = graph_runtime.GraphModule(lib["default"](tvm.cpu())) # TODO: make the target easy to change
+            lib = relay.build(subgraph_fn, target, self.params)
+        module = graph_runtime.GraphModule(lib["default"](ctx)) # TODO: make the target easy to change
         module.set_input(**inputs)
         
         if self.params:
@@ -74,7 +73,12 @@ class Calibrater:
         # subgraph only has one output # TODO: double check this is true
         return module.get_output(0).asnumpy()
 
-    def calibrate(self):
+    # TODO: move mod, calibration_map, params to inputs here
+    def calibrate(self, quantized_mod, calibration_map, params=None):
+        self.quantized_mod = quantized_mod
+        self.calibration_map = calibration_map
+        self.params = params
+        self.var_map = {}
         for (variable_pairs), (input_subgraph_pairs, output_subgraph_pair) in self.calibration_map.items():
             value_pairs = self.calibration_callback(variable_pairs, input_subgraph_pairs, output_subgraph_pair)
             for ((scale_var, zp_var), (scale_value, zp_value)) in zip(variable_pairs, value_pairs):

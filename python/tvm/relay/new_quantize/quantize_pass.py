@@ -76,13 +76,16 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
 
         # helper to construct the relay scale variable for this layer
         def scale(self, name):
-            var = relay.var(str(name) + "_scale_" + str(self.scales_count), relay.scalar_type('float32'))
+            var = relay.var(str(name) + "_scale_" + str(self.scales_count), dtype=relay.scalar_type('float32'))
+
             self.scales_count = self.scales_count + 1
             return var
 
         # helper to construct the relay zero_point variable for this layer
         def zero_point(self, name):
-            var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), relay.scalar_type('int32'))
+            var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), dtype=relay.scalar_type('int32'))
+
+            
             self.zp_count = self.zp_count + 1
             return var
 

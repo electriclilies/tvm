@@ -2,9 +2,30 @@ import tvm
 from tvm import relay
 from tvm.contrib import graph_runtime
 from tvm.relay import ExprVisitor
+from tvm.relay.frontend.common import infer_type
 
 import numpy as np
 import copy
+
+def _bind_params(func, params): # TODO: make into a util
+    """Bind the params to the expression.
+    """
+    name_dict = {}
+    for arg in func.params:
+        name = arg.name_hint
+        if name in name_dict:
+            name_dict[name] = None
+        else:
+            name_dict[name] = arg
+    bind_dict = {}
+    for k, v in params.items():
+        if k not in name_dict:
+            continue
+        arg = name_dict[k]
+        if arg is None:
+            raise ValueError("Multiple args in the function have name %s" % k)
+        bind_dict[arg] = relay.expr.const(v)
+    return relay.expr.bind(func, bind_dict)
 
 class Calibrater:
     # calibration_map is a map from relay scale and zero point variables to subgraphs. 
@@ -52,16 +73,33 @@ class Calibrater:
 
         return weightvisitor.is_weight
     
-    # bind variable name in subgraph to value (allows user to bind variable multiple times in a subgraph)
+    # Bind variables that we set in previous callbacks
+    def bind_set_variables(self, subgraph_fn):
+        return relay.build_module.bind_params_by_name(subgraph_fn, self.var_map)
+
+    # Bind variable name to value in subgraph_fn (allows user to bind variable multiple times in a subgraph)
     def bind_variable(self, subgraph_fn, name, value):
-        # TODO: do we have to make subgraph into a mod?
         return relay.build_module.bind_params_by_name(subgraph_fn, {name : value})
+
+    # Binds a map of variable names to values in subgraph_function
+    def bind_variables(self, subgraph_fn, var_map):
+        return relay.build_module.bind_params_by_name(subgraph_fn, var_map)
     
     # assume previous scale, zp are already bound in subgraph
     # runs the subgraph_fn passing in inputs as the inputs to the module
     def evaluate_subgraph(self, subgraph_fn, inputs, target, ctx):
+        # TODO: Throw a readable error if user has not set a lot of vars in var_map
+
+        optimize = tvm.transform.Sequential(
+            [relay.transform.FoldConstant()])
+        
+        subgraph_mod = tvm.ir.IRModule()
+        subgraph_mod['main'] = subgraph_fn
+
         with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-            lib = relay.build(subgraph_fn, target=target)
+            subgraph_mod = optimize(subgraph_mod)
+            lib = relay.build(subgraph_mod, target=target)
+        
         module = graph_runtime.GraphModule(lib["default"](ctx))
         if self.params:
             module.set_input(**self.params)
@@ -89,8 +127,7 @@ class Calibrater:
                 self.var_map[scale_name] = scale_value
                 self.var_map[zp_name] = zp_value
 
-        calibrated_func = relay.build_module.bind_params_by_name(self.quantized_mod['main'], self.var_map)
-        
+        calibrated_func = _bind_params(self.quantized_mod['main'], self.var_map)
         calibrated_mod = tvm.ir.IRModule()
         calibrated_mod['main'] = calibrated_func
         

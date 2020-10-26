@@ -64,22 +64,6 @@ def check_calibration_map(calibration_map, inputs):
             assert scale in q_output_params
             assert zp in q_output_params
 
-            # Make sure all the functions build and run
-            get_tvm_output(tvm.ir.IRModule.from_expr(data_subgraph_fn), inputs)
-            new_inputs = inputs
-            new_inputs[scale.name_hint] = np.array((0.05,)).astype('float32')
-            new_inputs[zp.name_hint] = np.array((0,)).astype('int32')
-            print(quantized_data_subgraph_fn)
-            print(new_inputs)
-            get_tvm_output(tvm.ir.IRModule.from_expr(quantized_data_subgraph_fn), new_inputs)
-            """
-            for subgraph_fn in [data_subgraph_fn, output_subgraph_fn]:
-                with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-                    lib = relay.build(subgraph_fn, 'llvm', params=None)
-                module = graph_runtime.GraphModule(lib["default"](tvm.cpu()))
-                module.set_input({scale.name_hint: 0.05, zp.name_hint: 0})
-                module.run(*inputs)
-            """
 # Test that conv2d is transformed to qnn.conv2d correctly and that calibration_map is correct
 def test_conv2d():
 

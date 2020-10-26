@@ -120,12 +120,8 @@ class Calibrater:
         self.params = params
         self.var_map = {}
         for (variable_pairs), (input_subgraph_pairs, output_subgraph_pair) in self.calibration_map.items():
-            value_pairs = self.calibration_callback(variable_pairs, input_subgraph_pairs, output_subgraph_pair)
-            for ((scale_var, zp_var), (scale_value, zp_value)) in zip(variable_pairs, value_pairs):
-                scale_name = scale_var.name_hint
-                zp_name = zp_var.name_hint
-                self.var_map[scale_name] = scale_value
-                self.var_map[zp_name] = zp_value
+            value_dict = self.calibration_callback(variable_pairs, input_subgraph_pairs, output_subgraph_pair)
+            self.var_map.update(value_dict) # Merge value_dict into self.var_map
 
         calibrated_func = _bind_params(self.quantized_mod['main'], self.var_map)
         calibrated_mod = tvm.ir.IRModule()

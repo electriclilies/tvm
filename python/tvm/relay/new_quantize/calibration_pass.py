@@ -85,11 +85,12 @@ class Calibrater:
     def bind_variables(self, subgraph_fn, var_map):
         return relay.build_module.bind_params_by_name(subgraph_fn, var_map)
     
+    #TODO: write evaluate_subgraph_on_inputs
+
     # assume previous scale, zp are already bound in subgraph
     # runs the subgraph_fn passing in inputs as the inputs to the module
     def evaluate_subgraph(self, subgraph_fn, inputs, target, ctx):
         # TODO: Throw a readable error if user has not set a lot of vars in var_map
-
         optimize = tvm.transform.Sequential(
             [relay.transform.FoldConstant()])
         
@@ -103,6 +104,7 @@ class Calibrater:
         module = graph_runtime.GraphModule(lib["default"](ctx))
         if self.params:
             module.set_input(**self.params)
+
         module.set_input(**inputs)
         
         if self.params:

@@ -168,6 +168,8 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
                 dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
 
                 self.calibration_map[(data_key, weight_key)] = (((pre_data_fn, quantized_data_fn), (pre_weight_fn, quantized_weight_fn)), (call_fn, dequantized_call_fn))
+                
+                #TODO: fuse bias_add with conv2d during quantization
 
                 return dequantized_call
 

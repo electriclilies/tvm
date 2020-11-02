@@ -4,7 +4,7 @@ import torch
 from torchvision.models import resnet
 from tvm import relay
 import numpy as np
-from tvm.relay.new_quantize import quantize_pass, GlobalCalibrater, KLDivergenceCalibrater
+from tvm.relay.new_quantize import quantize_pass, GlobalCalibrater
 import tvm.testing
 
 # ONNX TEST
@@ -30,10 +30,11 @@ mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
 quantized_mod, calibration_map = quantize_pass.quantize(mod, params, skip_layers=[])
 
 input_np = np.random.randn(1, 3, 224, 224).astype('float32')
-#global_calibrater = GlobalCalibrater(0.05, 0, 0.005, 0)
-kl_calibrater = KLDivergenceCalibrater(input_np)
-calibrated_mod = kl_calibrater.calibrate(quantized_mod, calibration_map, params)
 
+global_calibrater = GlobalCalibrater(0.05, 0, 0.005, 0)
+calibrated_mod = global_calibrater.calibrate(quantized_mod, calibration_map, params)
+
+print(calibrated_mod)
 #calibrated_mod = global_calibrater.calibrate(quantized_mod, calibration_map, params)
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):

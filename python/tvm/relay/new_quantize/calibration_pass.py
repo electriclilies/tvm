@@ -7,7 +7,7 @@ from tvm.relay.frontend.common import infer_type
 import numpy as np
 import copy
 
-def _bind_params(func, params): # TODO: make into a util
+def _bind_params(func, params): # TODO: replace me with relay.bind_params
     """Bind the params to the expression.
     """
     name_dict = {}

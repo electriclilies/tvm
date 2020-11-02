@@ -232,17 +232,25 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
                 rhs_scale = self.scale('add_rhs')
                 rhs_zp = self.zero_point('add_rhs')
 
-                # Quantize inputs and construct args for add
+                # Quantize, dequantize, and requantize inputs to have scale lhs_scale + rhs_scale
+                # (Scale represents the lowest possible value representable in the quantized type,
+                # so the smallest representable output is lhs_scale + rhs_scale)
+                
+                # We do this to avoid the requantize op in qnn's add, which causes issues with compilation
+                # Requantize will be inserted in a future pass
                 quantized_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
                 quantized_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
 
-                # Scale represents the lowest possible value representable in the quantized type,
-                # so the smallest representable output is lhs_scale + rhs_scale
-                args = [quantized_lhs, quantized_rhs, lhs_scale, lhs_zp, rhs_scale, rhs_zp, lhs_scale + rhs_scale, relay.const(0, dtype='int32')]
-                
-                # Construct quantized qnn.add and dequantize
-                qnn_call = relay.qnn.op.add(*args)
-                dequantized_call = relay.qnn.op.dequantize(qnn_call, lhs_scale + rhs_scale, relay.const(0, dtype='int32'))
+                dequantized_lhs = relay.qnn.op.dequantize(quantized_lhs, lhs_scale, relay.const(0, dtype='int32'))
+                dequantized_rhs = relay.qnn.op.dequantize(quantized_rhs, rhs_scale, relay.const(0, dtype='int32'))
+
+                add_scale = relay.op.add(lhs_scale, rhs_scale)
+
+                requantized_lhs = relay.qnn.op.quantize(dequantized_lhs, add_scale, relay.const(0, dtype='int32'))
+                requantized_rhs = relay.qnn.op.quantize(dequantized_rhs, add_scale, relay.const(0, dtype='int32'))
+        
+                add = relay.op.add(requantized_lhs, requantized_rhs)
+                dequantized_call = relay.qnn.op.dequantize(add, lhs_scale + rhs_scale, relay.const(0, dtype='int32'))
 
                 # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
                 lhs_key = (lhs_scale, lhs_zp)
@@ -281,11 +289,13 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
                 quantized_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
                 quantized_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
 
-                args = [quantized_lhs, quantized_rhs, lhs_scale, lhs_zp, rhs_scale, rhs_zp, lhs_scale * rhs_scale, relay.const(0, dtype='int32')]
+                # Use normal relay multiply instead of qnn multiply to avoid requantize in qnn.mul
+                # Subtract zero points to center on zero so that we can multiply lhs, rhs directly
+                zeroed_quantized_lhs = relay.op.subtract(quantized_lhs, lhs_zp)
+                zeroed_quantized_rhs = relay.op.subtract(quantized_rhs, rhs_zp)
                 
-                # Construct quantized qnn.multiply and dequantize
-                qnn_call = relay.qnn.op.mul(*args)
-                dequantized_call = relay.qnn.op.dequantize(qnn_call, lhs_scale * rhs_scale, relay.const(0, dtype='int32'))
+                multiply = relay.op.multiply(zeroed_quantized_lhs, zeroed_quantized_rhs)
+                dequantized_call = relay.qnn.op.dequantize(multiply, lhs_scale * rhs_scale, relay.const(0, dtype='int32'))
 
                 # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
                 lhs_key = (lhs_scale, lhs_zp)

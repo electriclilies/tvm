@@ -3,7 +3,7 @@ from tvm import relay
 from tvm.contrib import graph_runtime
 from tvm.relay import ExprMutator, Call, Var, Constant, TupleGetItem, Function
 from tvm.relay.frontend.common import infer_type
-from tvm.relay.op.nn.util import get_pad_tuple2d
+from tvm.relay.op.nn.utils import get_pad_tuple2d
 from tvm.relay.dataflow_pattern import rewrite, wildcard, is_op, DFPatternCallback
 from collections import OrderedDict
 import copy

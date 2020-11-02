@@ -85,33 +85,13 @@ class Calibrater:
     def bind_variables(self, subgraph_fn, var_map):
         return relay.build_module.bind_params_by_name(subgraph_fn, var_map)
     
-    #TODO: write evaluate_subgraph_on_inputs
-
     # assume previous scale, zp are already bound in subgraph
     # runs the subgraph_fn passing in inputs as the inputs to the module
-    def evaluate_subgraph(self, subgraph_fn, inputs, target, ctx):
+    def evaluate_subgraph(self, subgraph_mod, inputs):
         # TODO: Throw a readable error if user has not set a lot of vars in var_map
-        optimize = tvm.transform.Sequential(
-            [relay.transform.FoldConstant()])
-        
-        subgraph_mod = tvm.ir.IRModule()
-        subgraph_mod['main'] = subgraph_fn
-
-        with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-            subgraph_mod = optimize(subgraph_mod)
-            lib = relay.build(subgraph_mod, target=target)
-        
-        module = graph_runtime.GraphModule(lib["default"](ctx))
-        if self.params:
-            module.set_input(**self.params)
-
-        module.set_input(**inputs)
-        
-        if self.params:
-            module.set_input(**self.params)
-
+        subgraph_mod.set_input(**self.var_map) # TODO: make sure this is OK if var map contains things not in the inputs
+        subgraph_mod.set_input(**inputs) # TODO: assert that this doesnt create any weird behavior
         module.run()
-
         # subgraph only has one output # TODO: double check this is true
         return module.get_output(0).asnumpy()
 

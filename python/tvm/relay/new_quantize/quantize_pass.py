@@ -1,5 +1,6 @@
 import tvm
 from tvm import relay
+from tvm.contrib import graph_runtime
 from tvm.relay import ExprMutator, Call, Var, Constant, TupleGetItem, Function
 from tvm.relay.frontend.common import infer_type
 from tvm.relay.op.nn.util import get_pad_tuple2d
@@ -53,12 +54,16 @@ def prerequisite_optimize(mod, params=None):
 # calibration_map is (node_scale, node_zp) = (input, quantized_input, output, quantized_output)
 # note that quantized_output may contain an
 
-def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers default be?
+# TODO: What should default target, ctx be
+def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should skip layers default be?
     class QuantizeMutator(ExprMutator):
-        def __init__(self, inputs, skip_layers=[0]):
+        def __init__(self, inputs, target, ctx, params, skip_layers=[0]):
             super().__init__()
 
             self.inputs = inputs
+            self.target = target
+            self.ctx = ctx
+            self.params = params
 
             # if we are skipping layers, remove duplicates and sort
             self.skip_layers = list(set(skip_layers))
@@ -89,9 +94,26 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
             self.zp_count = self.zp_count + 1
             return var
 
-        # helper to wrap the entries in a calibration_map value in relay functions, so they are executable
-        def subgraph_to_fn(self, subgraph):
-            return relay.Function(list(set(list(self.inputs) + list(relay.analysis.free_vars(subgraph)))), subgraph)
+        # Helper to wrap the entries in a calibration_map value in relay functions, so they are executable
+        # Also compiles the function to a mod, so that it is immediately executable, with the provided
+        # target, ctx, and params
+        def subgraph_to_mod(self, subgraph):
+            func = relay.Function(list(set(list(self.inputs) + list(relay.analysis.free_vars(subgraph)))), subgraph)
+            
+            subgraph_mod = tvm.ir.IRModule()
+            subgraph_mod['main'] = func
+
+            with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
+                lib = relay.build(subgraph_mod, target=self.target)
+            
+            # TODO: do I return lib or the graph_runtime.GraphModule? if so need target, ctx
+            # should I set params here
+            module = graph_runtime.GraphModule(lib["default"](self.ctx))
+            
+            if self.params:
+                module.set_input(**self.params)
+            
+            return module
 
         def visit_call(self, call):
             if call.op == relay.op.get('nn.conv2d'):
@@ -160,14 +182,14 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
                 data_key = (data_scale, data_zp)
                 weight_key = (weight_scale, weight_zp)
 
-                pre_data_fn = self.subgraph_to_fn(pre_data)
-                quantized_data_fn = self.subgraph_to_fn(quantized_data)
-                pre_weight_fn = self.subgraph_to_fn(pre_weight)
-                quantized_weight_fn = self.subgraph_to_fn(quantized_weight)
-                call_fn = self.subgraph_to_fn(call)
-                dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
+                pre_data_mod = self.subgraph_to_mod(pre_data)
+                quantized_data_mod = self.subgraph_to_mod(quantized_data)
+                pre_weight_mod = self.subgraph_to_mod(pre_weight)
+                quantized_weight_mod = self.subgraph_to_mod(quantized_weight)
+                call_mod = self.subgraph_to_mod(call)
+                dequantized_call_mod = self.subgraph_to_mod(dequantized_call)
 
-                self.calibration_map[(data_key, weight_key)] = (((pre_data_fn, quantized_data_fn), (pre_weight_fn, quantized_weight_fn)), (call_fn, dequantized_call_fn))
+                self.calibration_map[(data_key, weight_key)] = (((pre_data_mod, quantized_data_mod), (pre_weight_mod, quantized_weight_mod)), (call_mod, dequantized_call_mod))
                 
                 #TODO: fuse bias_add with conv2d during quantization
 
@@ -203,14 +225,14 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
                 data_key = (data_scale, data_zp)
                 weight_key = (weight_scale, weight_zp)
 
-                pre_data_fn = self.subgraph_to_fn(pre_data)
-                quantized_data_fn = self.subgraph_to_fn(quantized_data)
-                pre_weight_fn = self.subgraph_to_fn(pre_weight)
-                quantized_weight_fn = self.subgraph_to_fn(quantized_weight)
-                call_fn = self.subgraph_to_fn(call)
-                dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
+                pre_data_mod = self.subgraph_to_mod(pre_data)
+                quantized_data_mod = self.subgraph_to_mod(quantized_data)
+                pre_weight_mod = self.subgraph_to_mod(pre_weight)
+                quantized_weight_mod = self.subgraph_to_mod(quantized_weight)
+                call_mod = self.subgraph_to_mod(call)
+                dequantized_call_mod = self.subgraph_to_mod(dequantized_call)
 
-                self.calibration_map[(data_key, weight_key)] = (((pre_data_fn, quantized_data_fn), (pre_weight_fn, quantized_weight_fn)), (call_fn, dequantized_call_fn))
+                self.calibration_map[(data_key, weight_key)] = (((pre_data_mod, quantized_data_mod), (pre_weight_mod, quantized_weight_mod)), (call_mod, dequantized_call_mod))
 
                 return dequantized_call
 
@@ -256,14 +278,14 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
                 lhs_key = (lhs_scale, lhs_zp)
                 rhs_key = (rhs_scale, rhs_zp)
                 
-                pre_lhs_fn = self.subgraph_to_fn(pre_lhs)
-                quantized_lhs_fn = self.subgraph_to_fn(quantized_lhs)
-                pre_rhs_fn = self.subgraph_to_fn(pre_rhs)
-                quantized_rhs_fn = self.subgraph_to_fn(quantized_rhs)
-                call_fn = self.subgraph_to_fn(call)
-                dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
+                pre_lhs_mod = self.subgraph_to_mod(pre_lhs)
+                quantized_lhs_mod = self.subgraph_to_mod(quantized_lhs)
+                pre_rhs_mod = self.subgraph_to_mod(pre_rhs)
+                quantized_rhs_mod = self.subgraph_to_mod(quantized_rhs)
+                call_mod = self.subgraph_to_mod(call)
+                dequantized_call_mod = self.subgraph_to_mod(dequantized_call)
 
-                self.calibration_map[(lhs_key, rhs_key)] = (((pre_lhs_fn, quantized_lhs_fn), (pre_rhs_fn, quantized_rhs_fn)), (call_fn, dequantized_call_fn))
+                self.calibration_map[(lhs_key, rhs_key)] = (((pre_lhs_mod, quantized_lhs_mod), (pre_rhs_mod, quantized_rhs_mod)), (call_mod, dequantized_call_mod))
 
                 return dequantized_call
 
@@ -301,14 +323,14 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
                 lhs_key = (lhs_scale, lhs_zp)
                 rhs_key = (rhs_scale, rhs_zp)
 
-                pre_lhs_fn = self.subgraph_to_fn(pre_lhs)
-                quantized_lhs_fn = self.subgraph_to_fn(quantized_lhs)
-                pre_rhs_fn = self.subgraph_to_fn(pre_rhs)
-                quantized_rhs_fn = self.subgraph_to_fn(quantized_rhs)
-                call_fn = self.subgraph_to_fn(call)
-                dequantized_call_fn = self.subgraph_to_fn(dequantized_call)
+                pre_lhs_mod = self.subgraph_to_mod(pre_lhs)
+                quantized_lhs_mod = self.subgraph_to_mod(quantized_lhs)
+                pre_rhs_mod = self.subgraph_to_mod(pre_rhs)
+                quantized_rhs_mod = self.subgraph_to_mod(quantized_rhs)
+                call_mod = self.subgraph_to_mod(call)
+                dequantized_call_mod = self.subgraph_to_mod(dequantized_call)
 
-                self.calibration_map[(lhs_key, rhs_key)] = (((pre_lhs_fn, quantized_lhs_fn), (pre_rhs_fn, quantized_rhs_fn)), (call_fn, dequantized_call_fn))
+                self.calibration_map[(lhs_key, rhs_key)] = (((pre_lhs_mod, quantized_lhs_mod), (pre_rhs_mod, quantized_rhs_mod)), (call_mod, dequantized_call_mod))
 
                 return dequantized_call
             
@@ -318,7 +340,7 @@ def quantize(mod, params=None, skip_layers=[1]): #TODO: what should skip layers 
     # SimplifyInference, FoldConstants, FoldScaleAxis
     preoptimized_mod = prerequisite_optimize(mod, params)
     inputs = preoptimized_mod['main'].params
-    quantize_pass = QuantizeMutator(inputs, skip_layers)
+    quantize_pass = QuantizeMutator(inputs, target, ctx, params, skip_layers)
 
     q_fn = quantize_pass.visit(preoptimized_mod['main'])
     q_fn = relay.Function(list(q_fn.params) + list(relay.analysis.free_vars(q_fn)), q_fn.body)

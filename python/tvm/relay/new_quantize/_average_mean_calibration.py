@@ -68,7 +68,7 @@ class AverageMeanCalibrater(Calibrater):
             while not self.dataset_manager.is_empty():
                 image, _ = self.dataset_manager.get_next_batch()
                 
-                out = self.evaluate_subgraph(data_subgraph_fn, {'flatten_input': image}, 'llvm', tvm.cpu())
+                out = self.evaluate_subgraph(data_subgraph_fn, {'flatten_input': image})
 
                 min_sum += np.min(out)
                 max_sum += np.max(out)
@@ -117,7 +117,7 @@ mnist_train_manager = TFDatasetManager(ds_test, batch_size, 128)
 onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/mnist_model.onnx')
 input_dict = {'flatten_input': [batch_size, 28, 28, 1]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
-quantized_mod, calibration_map = quantize_pass.quantize(mod, params, skip_layers=[1])
+quantized_mod, calibration_map = quantize_pass.quantize(mod, params=params, target='llvm', ctx=tvm.cpu(), skip_layers=[1])
 
 average_mean_calibrater = AverageMeanCalibrater(mnist_train_manager)
 calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)

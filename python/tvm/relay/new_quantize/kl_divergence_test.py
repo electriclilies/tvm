@@ -7,6 +7,7 @@ from torchvision.models import resnet
 
 import numpy as np
 import math
+import scipy.stats
 
 # Calculates the KL-divergence, given two distributions p_dist (unquantized values), q_dist (quantized values)
 # Currently we assume the tensor is passed in in NCHW format.
@@ -31,53 +32,55 @@ def calculate_kl_divergence(p_dist, q_dist, axis=0, elem_wise=False):
     else:
         return np.average(elemwise_divergence)
 
-# This really just emulates a list-- either add functionality or remove
-class Dataset():
-    def __init__(self, dataset):
-        self.dataset = dataset
-        self.idx = 0
-
-    def __iter__(self):
-        self.idx = 0
-        return self
-
-    def __next__(self):
-        if self.idx >= len(self.dataset):
-            raise StopIteration
-        else: 
-            data = self.dataset[self.idx]
-            self.idx += 1
-        return data
-
-class KLDivergenceCalibrater(Calibrater):
-    def __init__(self, input):
-        super().__init__()
-        self.input = input
-
     def calibration_callback(self, var_pairs, input_subgraph_fn_pairs, output_subgraph_fn_pair):
         value_dict = {}
         for ((scale_var, zp_var), (data_subgraph_fn, quantized_data_subgraph_fn)) in zip(var_pairs, input_subgraph_fn_pairs):
             
-            quantized_data_subgraph_fn = self.bind_set_variables(quantized_data_subgraph_fn)
+            data = self.evaluate(data_subgraph_fn, {'input', self.input}, 'llvm', tvm.cpu())
             
-            # Set zero point to zero, since no benefit from non-zero zero points
-            quantized_data_subgraph_fn = self.bind_variable(quantized_data_subgraph_fn, zp_var.name_hint, 0)
-
-            # Calculate the KL-divergence between the unquantized data and the quantized data,
-            # and record the scale with the lowest KL-divergence
-            unquantized_output = self.evaluate_subgraph(data_subgraph_fn, {'input': self.input}, 'llvm', tvm.cpu())
-
-            best_kl = math.inf # KL-divergence is between 0 and infinity (only infinity if p(x) = n but q(x) = 0)
-            best_scale = 1 # TODO: change default scale... 
-
-            for scale_value in [0.1, 0.2, 0.3, 0.4]: #TODO: pick these more intelligently
-                scaled_quantized_data_subgraph_fn = self.bind_variable(quantized_data_subgraph_fn, scale_var.name_hint, scale_value)
-                scaled_output = self.evaluate_subgraph(scaled_quantized_data_subgraph_fn, {'input': self.input}, 'llvm', tvm.cpu()) # TODO: change the way input var name is handled
+            # Put output at this layer into histogram, arbitrarily pick 2048 bins
+            hist, bin_edges = np.histogram(data, bins=2048)
+            
+            divergence = []
+            for i in range(128, 2048):
                 
-                kl_divergence = calculate_kl_divergence(unquantized_output, scaled_output)
-                if kl_divergence <= best_kl:
-                    best_kl = kl_divergence
-                    best_scale = scale_value
+                # Reference distribution P is the original distribution
+                reference_dist_p = hist[0:i-1]
+                
+                # Number of points outside of reference dist P
+                outliers_count = np.sum(hist[i:2047])
+
+                reference_dist_p[i-1] += outliers_count
+
+                # Create quantized distribution by redistributing reference_dist_p
+                # EX: if we have reference_dist_p = [1, 0, 2, 3, 5, 3, 1, 7], and we want to quantize to 2 bins,
+                #     we merge them to get [1 + 0 + 2 + 3, 3 + 5 + 1, 7 = [6, 16]
+                #     Then we proportionally expand back to 8, preserving zeros, getting
+                #     Q = [6/3, 0, 6/3, 6/3, 16/4, 16/4, 16/4, 16/4]
+                #     Finally we normalize and calculate KL-divergence
+
+                # Source: https://on-demand.gputechconf.com/gtc/2017/presentation/s7310-8-bit-inference-with-tensorrt.pdf
+
+                # Split reference_dist_p into 128 chunks
+                reshaped_p = np.reshape(reference_dist_p, ((i / 128), 128)) # TODO: How to deal w/ i not divisible by 128?
+                
+                # Merge reference_dist_p by summing
+                Q = np.sum(reshaped_p, axis=0)
+
+                # Count the non-zero elements in each chunk
+                num_nonzero = np.count_nonzero(reshaped_p, axis=0)
+
+                expanded_q = []
+
+                for j in range(i):
+                    if reference_dist_p[j] == 0: # Preserve 0s
+                        expanded_q.append(0)
+                    else:
+                        expanded_q.append(num_nonzero[i/128] / Q[i/128])
+
+                divergence.append(scipy.stats.entropy(reference_dist_p, expanded_q))
+
+            # TODO: go thru divergence, find best i and calculate threshold, scale
 
             value_dict[scale_var.name_hint] = np.array(best_scale).astype('float32')
             value_dict[zp_var.name_hint] = np.array(0).astype('int32')
@@ -111,6 +114,8 @@ kl = calculate_kl_divergence(n_input, np.around(n_input, decimals=2))
 kl_calibrater = KLDivergenceCalibrater(n_input)
 calibrated_mod = kl_calibrater.calibrate(quantized_mod, calibration_map, params)
 
+print(calibrated_mod)
+
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
     q_lib = relay.build(calibrated_mod, target='llvm')
@@ -133,3 +138,6 @@ q_gmod.run()
 q_out = q_gmod.get_output(0).asnumpy()
 print("Quantized output:")
 print(q_out)
+
+print("Quantized Mod: ")
+print(q_gmod)

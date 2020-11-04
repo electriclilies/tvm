@@ -23,13 +23,15 @@ from tvm.relay.frontend.common import infer_type
 from tvm.contrib import graph_runtime
 from tvm.relay.new_quantize import GlobalCalibrater
 
+# TODO: how to do target
 def check_quantization(op, expected_op):
 
     original_mod = tvm.ir.IRModule()
     original_func = relay.Function((list(relay.analysis.free_vars(op))), op)
     original_mod['main'] = original_func
-
-    (quantized_mod, calibration_map) = quantize_pass.quantize(original_mod)
+    print("quantizing")
+    (quantized_mod, calibration_map) = quantize_pass.quantize(original_mod, target='llvm', ctx=tvm.cpu())
+    print("done quantizing")
     expected_func = relay.Function((list(relay.analysis.free_vars(expected_op))), expected_op)
     tvm.ir.assert_structural_equal(quantized_mod['main'].body, expected_func.body, map_free_vars=True)
 
@@ -83,9 +85,9 @@ def test_conv2d():
 
 # Test that dense is transformed to qnn.dense correctly and that calibration_map is correct
 def test_dense():
-    data = relay.var('data', shape=(16, 4))
-    dense_weight = relay.var('dense_weight', shape=(4, 4))
-    units = 4
+    data = relay.var('data', shape=(16, 8))
+    dense_weight = relay.var('dense_weight', shape=(8, 8))
+    units = 8
     dense = relay.nn.dense(data, weight=dense_weight, units=units)
 
     data_scale, data_zp = relay.var('dense_data_scale_0', shape=(), dtype='float32'), relay.var('dense_data_zero_pt_0', shape=(), dtype='int32')
@@ -148,7 +150,7 @@ def verify_conv_output(data_shape, weight_shape):
 
     original_mod = tvm.ir.IRModule.from_expr(conv2d)
 
-    (quantized_mod, calibration_map) = quantize_pass.quantize(original_mod)
+    (quantized_mod, calibration_map) = quantize_pass.quantize(original_mod, target='llvm', ctx=tvm.cpu())
 
     global_calibrater = GlobalCalibrater(0.05, 0, 0.05, 0)
     calibrated_mod = global_calibrater.calibrate(quantized_mod, calibration_map)
@@ -164,9 +166,9 @@ def test_conv_output():
     verify_conv_output([1, 1, 3, 3], [4, 1, 3, 3])
 
 if __name__ == "__main__":
-    test_conv2d()
+    #test_conv2d()
     test_dense()
-    test_add()
-    test_mul()
-    test_conv_output()
+    #test_add()
+    #test_mul()
+    #test_conv_output()
     

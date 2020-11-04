@@ -16,9 +16,6 @@ class GlobalCalibrater(Calibrater):
     def calibration_callback(self, var_pairs, input_subgraph_fn_pairs, output_subgraph_fn_pair):
         value_dict = {} # dictionary from scale, zp name to value
         for ((scale_var, zp_var), (data_subgraph_fn, quantized_data_subgraph_fn)) in zip(var_pairs, input_subgraph_fn_pairs):
-            q_data_func = self.bind_set_variables(quantized_data_subgraph_fn)
-            q_data_func = self.bind_variable(q_data_func, scale_var.name_hint, 2.0)
-            q_data_func = self.bind_variable(q_data_func, zp_var.name_hint, 0)
 
             if self.is_weight(data_subgraph_fn):
                 value_dict[scale_var.name_hint] = self.weight_scale_value

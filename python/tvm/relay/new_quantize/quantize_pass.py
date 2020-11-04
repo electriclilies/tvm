@@ -81,16 +81,16 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
 
         # helper to construct the relay scale variable for this layer
         def scale(self, name):
-            var = relay.var(str(name) + "_scale_" + str(self.scales_count), dtype=relay.scalar_type('float32'))
+            #var = relay.var(str(name) + "_scale_" + str(self.scales_count), dtype=relay.scalar_type('float32'))
+            var = relay.var(str(name) + "_scale_" + str(self.scales_count), shape=(), dtype='float32')
 
             self.scales_count = self.scales_count + 1
             return var
 
         # helper to construct the relay zero_point variable for this layer
         def zero_point(self, name):
-            var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), dtype=relay.scalar_type('int32'))
+            var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), shape=(), dtype='int32')
 
-            
             self.zp_count = self.zp_count + 1
             return var
 
@@ -102,12 +102,11 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
             
             subgraph_mod = tvm.ir.IRModule()
             subgraph_mod['main'] = func
-
+            print("building subgraph")
             with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
                 lib = relay.build(subgraph_mod, target=self.target)
-            
-            # TODO: do I return lib or the graph_runtime.GraphModule? if so need target, ctx
-            # should I set params here
+            print("done")
+
             module = graph_runtime.GraphModule(lib["default"](self.ctx))
             
             if self.params:
@@ -181,14 +180,14 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
                 data_key = (data_scale, data_zp)
                 weight_key = (weight_scale, weight_zp)
-
+                
                 pre_data_mod = self.subgraph_to_mod(pre_data)
                 quantized_data_mod = self.subgraph_to_mod(quantized_data)
                 pre_weight_mod = self.subgraph_to_mod(pre_weight)
                 quantized_weight_mod = self.subgraph_to_mod(quantized_weight)
                 call_mod = self.subgraph_to_mod(call)
                 dequantized_call_mod = self.subgraph_to_mod(dequantized_call)
-
+                
                 self.calibration_map[(data_key, weight_key)] = (((pre_data_mod, quantized_data_mod), (pre_weight_mod, quantized_weight_mod)), (call_mod, dequantized_call_mod))
                 
                 #TODO: fuse bias_add with conv2d during quantization
@@ -219,6 +218,7 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, call.attrs['units']]
 
                 qnn_call = relay.qnn.op.dense(*args)
+                #dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
                 dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
 
                 # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
@@ -230,24 +230,30 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 pre_weight_mod = self.subgraph_to_mod(pre_weight)
                 quantized_weight_mod = self.subgraph_to_mod(quantized_weight)
                 call_mod = self.subgraph_to_mod(call)
+                print("dq_call: ", dequantized_call)
+                print("qnn_call: ", qnn_call)
+                self.subgraph_to_mod(qnn_call)
+                print("converting worked")
+                self.subgraph_to_mod(data_scale * weight_scale)
+                print("converting multiply worked")
                 dequantized_call_mod = self.subgraph_to_mod(dequantized_call)
-
+                print("done")
                 self.calibration_map[(data_key, weight_key)] = (((pre_data_mod, quantized_data_mod), (pre_weight_mod, quantized_weight_mod)), (call_mod, dequantized_call_mod))
 
                 return dequantized_call
 
             if call.op == relay.op.get('add'):
-
+                
                 pre_lhs, pre_rhs = call.args[0], call.args[1]
                 lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
-
+                
                 # Don't quantize the add if it is in a skipped layer
                 if self.skip_layers and self.skip_layers_ptr != 0:
                     last_layer = self.compute_layer_count - 1
                     last_skipped = self.skip_layers[self.skip_layers_ptr - 1]
                     if (last_layer == last_skipped):
                         return super().visit_call(call)
-
+                
                  # Create quantization parameters for arguments to this addition
                 lhs_scale = self.scale('add_lhs') 
                 lhs_zp = self.zero_point('add_lhs')
@@ -341,13 +347,14 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
     preoptimized_mod = prerequisite_optimize(mod, params)
     inputs = preoptimized_mod['main'].params
     quantize_pass = QuantizeMutator(inputs, target, ctx, params, skip_layers)
-
+    print("visiting")
     q_fn = quantize_pass.visit(preoptimized_mod['main'])
+    print("done visiting")
     q_fn = relay.Function(list(q_fn.params) + list(relay.analysis.free_vars(q_fn)), q_fn.body)
     
     quantized_mod = tvm.ir.IRModule()
     quantized_mod['main'] = q_fn
-
+    
     # we return a mod for consistency with other passes
     return (quantized_mod, quantize_pass.calibration_map)
 

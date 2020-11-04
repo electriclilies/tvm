@@ -111,7 +111,7 @@ ds_test = ds_test.batch(batch_size)
 ds_test = ds_test.cache()
 ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
 
-mnist_train_manager = TFDatasetManager(ds_test, batch_size, 128)
+mnist_train_manager = TFDatasetManager(ds_test, batch_size, 20)
 
 # Import onnx model, quantize and calibrate
 onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/mnist_model.onnx')

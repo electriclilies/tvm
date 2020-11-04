@@ -23,6 +23,8 @@ from tvm.relay.op.nn.utils import get_pad_tuple2d
 from ... import op as reg
 from ...op import OpPattern
 from . import _make
+from ... import op as reg
+from ...op import OpPattern
 
 
 def requantize(
@@ -498,5 +500,7 @@ def subtract(
         output_scale,
         output_zero_point,
     )
+
 # register fuse pattern for qnn ops
 reg.register_pattern("qnn.quantize", OpPattern.OPAQUE)
+reg.register_pattern("qnn.dequantize", OpPattern.OPAQUE)

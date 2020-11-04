@@ -89,11 +89,13 @@ class Calibrater:
     # runs the subgraph_fn passing in inputs as the inputs to the module
     def evaluate_subgraph(self, subgraph_mod, inputs):
         # TODO: Throw a readable error if user has not set a lot of vars in var_map
-        subgraph_mod.set_input(**self.var_map) # TODO: make sure this is OK if var map contains things not in the inputs
+        if self.var_map:
+            print(self.var_map)
+            subgraph_mod.set_input(**self.var_map) # TODO: make sure this is OK if var map contains things not in the inputs
         subgraph_mod.set_input(**inputs) # TODO: assert that this doesnt create any weird behavior
-        module.run()
+        subgraph_mod.run()
         # subgraph only has one output # TODO: double check this is true
-        return module.get_output(0).asnumpy()
+        return subgraph_mod.get_output(0).asnumpy()
 
     # TODO: move mod, calibration_map, params to inputs here
     def calibrate(self, quantized_mod, calibration_map, params=None):

@@ -102,10 +102,9 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
             
             subgraph_mod = tvm.ir.IRModule()
             subgraph_mod['main'] = func
-            print("building subgraph")
+
             with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
                 lib = relay.build(subgraph_mod, target=self.target)
-            print("done")
 
             module = graph_runtime.GraphModule(lib["default"](self.ctx))
             
@@ -230,14 +229,8 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 pre_weight_mod = self.subgraph_to_mod(pre_weight)
                 quantized_weight_mod = self.subgraph_to_mod(quantized_weight)
                 call_mod = self.subgraph_to_mod(call)
-                print("dq_call: ", dequantized_call)
-                print("qnn_call: ", qnn_call)
-                self.subgraph_to_mod(qnn_call)
-                print("converting worked")
-                self.subgraph_to_mod(data_scale * weight_scale)
-                print("converting multiply worked")
                 dequantized_call_mod = self.subgraph_to_mod(dequantized_call)
-                print("done")
+
                 self.calibration_map[(data_key, weight_key)] = (((pre_data_mod, quantized_data_mod), (pre_weight_mod, quantized_weight_mod)), (call_mod, dequantized_call_mod))
 
                 return dequantized_call
@@ -347,9 +340,8 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
     preoptimized_mod = prerequisite_optimize(mod, params)
     inputs = preoptimized_mod['main'].params
     quantize_pass = QuantizeMutator(inputs, target, ctx, params, skip_layers)
-    print("visiting")
+
     q_fn = quantize_pass.visit(preoptimized_mod['main'])
-    print("done visiting")
     q_fn = relay.Function(list(q_fn.params) + list(relay.analysis.free_vars(q_fn)), q_fn.body)
     
     quantized_mod = tvm.ir.IRModule()

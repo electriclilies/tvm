@@ -29,9 +29,9 @@ def check_quantization(op, expected_op):
     original_mod = tvm.ir.IRModule()
     original_func = relay.Function((list(relay.analysis.free_vars(op))), op)
     original_mod['main'] = original_func
-    print("quantizing")
+
     (quantized_mod, calibration_map) = quantize_pass.quantize(original_mod, target='llvm', ctx=tvm.cpu())
-    print("done quantizing")
+
     expected_func = relay.Function((list(relay.analysis.free_vars(expected_op))), expected_op)
     tvm.ir.assert_structural_equal(quantized_mod['main'].body, expected_func.body, map_free_vars=True)
 
@@ -166,9 +166,9 @@ def test_conv_output():
     verify_conv_output([1, 1, 3, 3], [4, 1, 3, 3])
 
 if __name__ == "__main__":
-    #test_conv2d()
+    test_conv2d()
     test_dense()
-    #test_add()
-    #test_mul()
-    #test_conv_output()
+    test_add()
+    test_mul()
+    test_conv_output()
     

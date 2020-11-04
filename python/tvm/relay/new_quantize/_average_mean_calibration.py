@@ -82,8 +82,8 @@ class AverageMeanCalibrater(Calibrater):
             threshold = np.mean([np.abs(avg_min), np.abs(avg_max)])
             # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins, and 128 are positive
             scale = threshold / 128
-            value_dict[scale_var.name_hint] = scale
-            value_dict[zp_var.name_hint] = 0
+            value_dict[scale_var.name_hint] = np.array(scale).astype('float32')
+            value_dict[zp_var.name_hint] = np.array(0).astype('int32')
         return value_dict
 
 # TFDS loading from https://www.tensorflow.org/datasets/keras_example
@@ -111,7 +111,8 @@ ds_test = ds_test.batch(batch_size)
 ds_test = ds_test.cache()
 ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
 
-mnist_train_manager = TFDatasetManager(ds_test, batch_size, 20)
+num_batches = 2000
+mnist_train_manager = TFDatasetManager(ds_test, batch_size, num_batches)
 
 # Import onnx model, quantize and calibrate
 onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/mnist_model.onnx')
@@ -121,9 +122,6 @@ quantized_mod, calibration_map = quantize_pass.quantize(mod, params=params, targ
 
 average_mean_calibrater = AverageMeanCalibrater(mnist_train_manager)
 calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
-
-print("Calibrated Mod: ")
-print(calibrated_mod)
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(calibrated_mod, target='llvm')

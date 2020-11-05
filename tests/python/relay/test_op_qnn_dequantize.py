@@ -16,7 +16,7 @@
 # under the License.
 
 import tvm
-from tvm import te
+from tvm import tes
 import numpy as np
 from tvm import relay
 from tvm.contrib import graph_runtime

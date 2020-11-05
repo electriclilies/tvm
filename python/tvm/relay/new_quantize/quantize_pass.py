@@ -236,7 +236,6 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 return dequantized_call
 
             if call.op == relay.op.get('add'):
-                
                 pre_lhs, pre_rhs = call.args[0], call.args[1]
                 lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
                 
@@ -271,7 +270,7 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 requantized_rhs = relay.qnn.op.quantize(dequantized_rhs, add_scale, relay.const(0, dtype='int32'))
         
                 add = relay.op.add(requantized_lhs, requantized_rhs)
-                dequantized_call = relay.qnn.op.dequantize(add, lhs_scale + rhs_scale, relay.const(0, dtype='int32'))
+                dequantized_call = relay.qnn.op.dequantize(add, add_scale, relay.const(0, dtype='int32'))
 
                 # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
                 lhs_key = (lhs_scale, lhs_zp)
@@ -289,7 +288,6 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 return dequantized_call
 
             if call.op == relay.op.get('multiply'):
-
                 pre_lhs, pre_rhs = call.args[0], call.args[1]
                 lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
 
@@ -307,8 +305,8 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 rhs_zp = self.zero_point('mul_rhs')
 
                 # Quantize inputs and construct args for multiply
-                quantized_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
-                quantized_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
+                quantized_lhs = tvm.relay.cast(relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp), 'int32')
+                quantized_rhs = tvm.relay.cast(relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp), 'int32')
 
                 # Use normal relay multiply instead of qnn multiply to avoid requantize in qnn.mul
                 # Subtract zero points to center on zero so that we can multiply lhs, rhs directly

@@ -108,10 +108,19 @@ def test_add():
 
     lhs_scale, lhs_zp = relay.var('lhs_scale', shape=(), dtype='float32'), relay.var('lhs_zp', shape=(), dtype='int32')
     rhs_scale, rhs_zp = relay.var('rhs_scale', shape=(), dtype='float32'), relay.var('rhs_zp', shape=(), dtype='int32')
+    add_scale = relay.op.add(lhs_scale, rhs_scale)
+
     q_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
     q_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
-    q_add = relay.qnn.op.add(q_lhs, q_rhs, lhs_scale, lhs_zp, rhs_scale, rhs_zp, lhs_scale + rhs_scale, relay.const(0, dtype='int32'))
-    deq_add = relay.qnn.op.dequantize(q_add, lhs_scale + rhs_scale, relay.const(0, dtype='int32'))
+
+    deq_lhs = relay.qnn.op.dequantize(q_lhs, lhs_scale, relay.const(0, dtype='int32'))
+    deq_rhs = relay.qnn.op.dequantize(q_rhs, rhs_scale, relay.const(0, dtype='int32'))
+    
+    req_lhs = relay.qnn.op.quantize(deq_lhs, add_scale, relay.const(0, dtype='int32'))
+    req_rhs = relay.qnn.op.quantize(deq_rhs, add_scale, relay.const(0, dtype='int32'))
+
+    q_add = relay.op.add(req_lhs, req_rhs)
+    deq_add = relay.qnn.op.dequantize(q_add, add_scale, relay.const(0, dtype='int32'))
 
     check_quantization(add, deq_add)
 
@@ -123,9 +132,14 @@ def test_mul():
 
     lhs_scale, lhs_zp = relay.var('lhs_scale', shape=(), dtype='float32'), relay.var('lhs_zp', shape=(), dtype='int32')
     rhs_scale, rhs_zp = relay.var('rhs_scale', shape=(), dtype='float32'), relay.var('rhs_zp', shape=(), dtype='int32')
-    q_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
-    q_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
-    q_mul = relay.qnn.op.mul(q_lhs, q_rhs, lhs_scale, lhs_zp, rhs_scale, rhs_zp, lhs_scale * rhs_scale, relay.const(0, dtype='int32'))
+
+    q_lhs = tvm.relay.cast(relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp), 'int32')
+    q_rhs = tvm.relay.cast(relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp), 'int32')
+
+    zeroed_q_lhs = relay.op.subtract(q_lhs, lhs_zp)
+    zeroed_q_rhs = relay.op.subtract(q_rhs, rhs_zp)
+
+    q_mul = relay.op.multiply(zeroed_q_lhs, zeroed_q_rhs)
     deq_mul = relay.qnn.op.dequantize(q_mul, lhs_scale * rhs_scale, relay.const(0, dtype='int32'))
 
     check_quantization(mul, deq_mul)
@@ -170,5 +184,5 @@ if __name__ == "__main__":
     test_dense()
     test_add()
     test_mul()
-    test_conv_output()
+    #test_conv_output()
     

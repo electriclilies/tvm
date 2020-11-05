@@ -90,7 +90,6 @@ class Calibrater:
     def evaluate_subgraph(self, subgraph_mod, inputs):
         # TODO: Throw a readable error if user has not set a lot of vars in var_map
         if self.var_map:
-            print(self.var_map)
             subgraph_mod.set_input(**self.var_map) # TODO: make sure this is OK if var map contains things not in the inputs
         subgraph_mod.set_input(**inputs) # TODO: assert that this doesnt create any weird behavior
         subgraph_mod.run()

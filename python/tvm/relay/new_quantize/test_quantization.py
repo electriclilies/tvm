@@ -36,7 +36,7 @@ def check_quantization(op, expected_op):
     tvm.ir.assert_structural_equal(quantized_mod['main'].body, expected_func.body, map_free_vars=True)
 
 # Checks that the calibration_map is constructed correctly
-# Note: normally the user should not use calibration_map directly. Please write a calibration_callback instead
+# Note: normally the user should not use calibration_map directly. Please extend the Calibrater class instead.
 def check_calibration_map(calibration_map, inputs):
     for (variable_pairs), (input_subgraph_pairs, output_subgraph_pair) in calibration_map.items():
         output_subgraph_fn = output_subgraph_pair[0]

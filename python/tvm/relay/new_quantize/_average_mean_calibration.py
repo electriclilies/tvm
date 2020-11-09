@@ -12,7 +12,6 @@ import numpy as np
 
 batch_size = 5
 
-# This really just emulates a list-- either add functionality or remove
 class DatasetManager():
     def __init__(self):
         raise NotImplementedError
@@ -21,6 +20,9 @@ class DatasetManager():
         raise NotImplementedError
 
     def num_batches(self):
+        raise NotImplementedError
+
+    def is_empty(self):
         raise NotImplementedError
 
     def reset(self):
@@ -112,27 +114,56 @@ ds_test = ds_test.cache()
 ds_test = ds_test.prefetch(tf.data.experimental.AUTOTUNE)
 
 num_batches = 2000
-mnist_train_manager = TFDatasetManager(ds_test, batch_size, num_batches)
+mnist_train_manager = TFDatasetManager(ds_train, batch_size, 12000)
+mnist_test_manager = TFDatasetManager(ds_test, batch_size, 2000)
 
 # Import onnx model, quantize and calibrate
 onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/mnist_model.onnx')
 input_dict = {'flatten_input': [batch_size, 28, 28, 1]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
+print("Unquantized mod: ")
+print(mod.astext(False))
+print(" ____________________________ ")
+
 quantized_mod, calibration_map = quantize_pass.quantize(mod, params=params, target='llvm', ctx=tvm.cpu(), skip_layers=[1])
+print("Quantized mod: ")
+print(quantized_mod.astext(False))
 
 average_mean_calibrater = AverageMeanCalibrater(mnist_train_manager)
 calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-    lib = relay.build(calibrated_mod, target='llvm')
+    q_lib = relay.build(calibrated_mod, target='llvm')
+    lib = relay.build(mod, target='llvm')
 
 from tvm.contrib import graph_runtime
+q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))
 gmod = graph_runtime.GraphModule(lib["default"](tvm.cpu()))
+q_correct = 0
+correct = 0
+total = 0
+
 while not mnist_train_manager.is_empty():
     image, label = mnist_train_manager.get_next_batch()
+    q_gmod.set_input(**{'flatten_input': image})
+    q_gmod.run()
+    q_out = q_gmod.get_output(0).asnumpy()
+
     gmod.set_input(**{'flatten_input': image})
     gmod.run()
     out = gmod.get_output(0).asnumpy()
 
-    print("Predicted labels: ", out)
+    q_predicted_labels = np.argmax(q_out, axis=1)
+    predicted_labels = np.argmax(out, axis=1)
+
+    print("Int8 labels: ", q_predicted_labels)
+    print("Float32 labels: ", predicted_labels)
     print("Actual labels: ", label)
+
+    q_correct += np.sum(q_predicted_labels == label)
+    correct += np.sum(predicted_labels == label)
+    total += batch_size
+
+print("Int8 percent correct: ", (q_correct / total) * 100)
+print("Float32 percent correct: ", (correct / total) * 100)
+print("Difference: ", (((correct / total) * 100) - ((q_correct / total) * 100)))

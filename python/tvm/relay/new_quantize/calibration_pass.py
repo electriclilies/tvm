@@ -52,6 +52,9 @@ class Calibrater:
     def calibration_callback(self, var_pairs, input_subgraph_fn_pairs, output_subgraph_fn_pair):
         raise NotImplementedError
 
+    def constant_calibration_callback(self, var_pairs, input_value_pairs, output_value_pair):
+        raise NotImplementedError
+
     # helper function to determine whether input is a weight
     # this will be kind of repetitive, maybe we can
     def is_weight(self, expr):
@@ -72,6 +75,7 @@ class Calibrater:
         weightvisitor.visit(expr)
 
         return weightvisitor.is_weight
+
     
     # Bind variables that we set in previous callbacks
     def bind_set_variables(self, subgraph_fn):

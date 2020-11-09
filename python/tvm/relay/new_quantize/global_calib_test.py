@@ -27,8 +27,9 @@ script_module = torch.jit.trace(pytorch_model, input_data)
 
 input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
-quantized_mod, calibration_map = quantize_pass.quantize(mod, params, skip_layers=[])
-
+quantized_mod, calibration_map = quantize_pass.quantize(mod, params=params, target='llvm', ctx=tvm.cpu())
+print(quantized_mod.astext(False))
+exit()
 input_np = np.random.randn(1, 3, 224, 224).astype('float32')
 
 global_calibrater = GlobalCalibrater(0.05, 0, 0.005, 0)

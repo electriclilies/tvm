@@ -55,7 +55,7 @@ def prerequisite_optimize(mod, params=None):
 # note that quantized_output may contain an
 
 # TODO: What should default target, ctx be
-def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should skip layers default be?
+def quantize(mod, target, ctx, params=None, skip_layers=[0], per_channel=False): #TODO: what should skip layers default be?
     class QuantizeMutator(ExprMutator):
         def __init__(self, inputs, target, ctx, params, skip_layers=[0]):
             super().__init__()
@@ -82,14 +82,14 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
         # helper to construct the relay scale variable for this layer
         def scale(self, name):
             #var = relay.var(str(name) + "_scale_" + str(self.scales_count), dtype=relay.scalar_type('float32'))
-            var = relay.var(str(name) + "_scale_" + str(self.scales_count), shape=(), dtype='float32')
+            var = relay.var(str(name) + "_scale_" + str(self.scales_count), shape=(relay.Any(),), dtype='float32')
 
             self.scales_count = self.scales_count + 1
             return var
 
         # helper to construct the relay zero_point variable for this layer
         def zero_point(self, name):
-            var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), shape=(), dtype='int32')
+            var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), shape=(relay.Any(),), dtype='int32')
 
             self.zp_count = self.zp_count + 1
             return var
@@ -98,8 +98,10 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
         # Also compiles the function to a mod, so that it is immediately executable, with the provided
         # target, ctx, and params
         def subgraph_to_mod(self, subgraph):
+            return None
+            # If inputs are not in the graph, it is constant, so we can just evaluate it now.
             func = relay.Function(list(set(list(self.inputs) + list(relay.analysis.free_vars(subgraph)))), subgraph)
-            
+        
             subgraph_mod = tvm.ir.IRModule()
             subgraph_mod['main'] = func
 
@@ -107,10 +109,10 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 lib = relay.build(subgraph_mod, target=self.target)
 
             module = graph_runtime.GraphModule(lib["default"](self.ctx))
-            
+        
             if self.params:
                 module.set_input(**self.params)
-            
+        
             return module
 
         def visit_call(self, call):
@@ -214,10 +216,15 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
                 # Quantize data and construct args for qnn.dense
                 quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
                 quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
-                args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, call.attrs['units']]
+
+                units = call.attrs['units']
+                if units == None:
+                    weight_type_info = infer_type(call.args[1])
+                    units = weight_type_info.checked_type.shape[0]
+                
+                args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, units]
 
                 qnn_call = relay.qnn.op.dense(*args)
-                #dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
                 dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
 
                 # For binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, quantized_a), (b, quantized_b)), (binop_output, quantized_binop_output))
@@ -344,7 +351,7 @@ def quantize(mod, target, ctx, params=None, skip_layers=[1]): #TODO: what should
     
     quantized_mod = tvm.ir.IRModule()
     quantized_mod['main'] = q_fn
-    
+    quantized_mod = relay.transform.AnnotateSpans()(quantized_mod)
     # we return a mod for consistency with other passes
     return (quantized_mod, quantize_pass.calibration_map)
 

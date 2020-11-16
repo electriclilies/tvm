@@ -50,16 +50,19 @@ bool DequantizeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
       << "Input type should be one of the quantized types [unit8, int8, int32] but was "
       << input_dtype;
 
-  const auto* dequantize_attrs = attrs.as<DequantizeAttrs>();
-  int axis = dequantize_attrs->axis;
-  axis = (axis == -1) ? data->shape.size() - 1 : axis;
-  ICHECK_LT(axis, static_cast<int>(data->shape.size()))
-      << "axis " << dequantize_attrs->axis << " is out of range";
-  ICHECK_GE(axis, 0) << "axis " << dequantize_attrs->axis << " is out of range";
+  // Assign type to scale and zero point if they're channelwise.
+  if (data->shape.size() != 0) {
+    const auto* dequantize_attrs = attrs.as<DequantizeAttrs>();
+    int axis = dequantize_attrs->axis;
+    axis = (axis == -1) ? data->shape.size() - 1 : axis;
+    ICHECK_LT(axis, static_cast<int>(data->shape.size()))
+        << "axis " << dequantize_attrs->axis << " is out of range";
+    ICHECK_GE(axis, 0) << "axis " << dequantize_attrs->axis << " is out of range";
 
-  // Check and assign types for scale and zero points.
-  AssignType(types[1], DataType::Float(32), data->shape[axis], reporter);  // scale
-  AssignType(types[2], DataType::Int(32), data->shape[axis], reporter);    // zero point
+    // Check and assign types for scale and zero points.
+    AssignType(types[1], DataType::Float(32), data->shape[axis], reporter);  // scale
+    AssignType(types[2], DataType::Int(32), data->shape[axis], reporter);    // zero point
+  }
 
   const Array<tvm::PrimExpr> oshape = data->shape;
   // assign output type, output will always be float 32.

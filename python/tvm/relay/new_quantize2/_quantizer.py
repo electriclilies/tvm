@@ -154,7 +154,7 @@ class Quantizer:
 
         def visit_call(self, call):
             if call.op == relay.op.get('nn.conv2d'):
-
+                
                 pre_data, pre_weight = call.args[0], call.args[1]
                 data, weight = self.visit(pre_data), self.visit(pre_weight)
 
@@ -233,7 +233,7 @@ class Quantizer:
                 return dequantized_call
 
             elif call.op == relay.op.get('nn.dense'):
-                """
+                
                 pre_data, pre_weight = call.args[0], call.args[1]
                 data, weight = self.visit(pre_data), self.visit(pre_weight)
 
@@ -255,10 +255,17 @@ class Quantizer:
                 quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
 
                 units = call.attrs['units']
-                if units == None:
+                #print("trying to see if units is noe")
+                #print(units == None)
+                print("if units")
+                # TODO: THIS CAUSES A SEG FAULT
+                if units:
+                    print("inside")
                     weight_type_info = infer_type(call.args[1])
+                    print(weight_type_info)
                     units = weight_type_info.checked_type.shape[0]
-                
+                    print(units)
+                print("oustide")
                 args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, units]
 
                 qnn_call = relay.qnn.op.dense(*args)
@@ -278,8 +285,6 @@ class Quantizer:
                 self.calibration_dict[(data_key, weight_key)] = (((pre_data_idx, quantized_data_idx), (pre_weight_idx, quantized_weight_idx)), (call_idx, dequantized_call_idx))
 
                 return dequantized_call
-                """
-                return super().visit_call(call)
 
             elif call.op == relay.op.get('add'):
                 

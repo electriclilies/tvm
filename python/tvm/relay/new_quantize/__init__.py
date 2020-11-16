@@ -16,6 +16,7 @@
 # under the License.
 # pylint: disable=wildcard-import, redefined-builtin, invalid-name
 """The namespace containing quantization and calibration passes"""
-from .quantize_pass import *
-from .calibration_pass import *
-from .global_calibration_pass import *
+from ._calibrater import CalibrationMap, Calibrater
+from ._quantizer import Quantizer
+from ._global_calibrater import GlobalCalibrater
+from ._average_mean_calibrater import AverageMeanCalibrater, DatasetManager, TFDatasetManager

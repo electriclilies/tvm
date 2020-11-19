@@ -11,32 +11,28 @@ import tvm.testing
 
 batch_size = 5
 # Import onnx model, quantize and calibrate
-onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize_old/mnist_model.onnx')
+onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/mnist_model.onnx')
 input_dict = {'flatten_input': [batch_size, 28, 28, 1]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
-print("Unquantized mod: ")
-print(mod.astext(False))
-print(" ____________________________ ")
+#print("Unquantized mod: ")
+#print(mod.astext(False))
+#print(" ____________________________ ")
 
 quantized_mod, calibration_map = Quantizer().quantize(mod, params)
-print("Quantized mod: ")
-print(quantized_mod.astext(False))
+#print("Quantized mod: ")
+#print(quantized_mod.astext(False))
 
-print("Try building quantized mod")
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     q_lib = relay.build(quantized_mod, target='llvm')
-print("Built quantized mod successfully")
 
-print("Global Calibrater")
 gc = GlobalCalibrater(0.05, 0)
 calibrated_mod = gc.calibrate(quantized_mod, calibration_map)
-print("Calibrated")
-print("Requantizer")
+
 rq = Requantizer()
+print("Requantizing..")
 requantized_mod = rq.requantize(calibrated_mod)
-print(requantized_mod)
-exit()
-print("Calibrated")
+print(requantized_mod.astext(False))
+
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     q_calibrated_lib = relay.build(calibrated_mod, target='llvm')
 print("Built")

@@ -603,8 +603,11 @@ class PatternGrouper {
     for (auto node : pattern_graph_.topological_order_) {
       if (auto op = node->ref_.as<DominatorPatternNode>()) {
         for (auto fuzzy_op : {op->parent, op->path}) {
-          for (auto match : node_map[fuzzy_op]) {
-            fuzzy_matches.insert(match);
+          if (node_map.count(fuzzy_op)) {
+            for (auto match : node_map[fuzzy_op]) {
+              fuzzy_matches.insert(match);
+            }
+          
           }
         }
       }

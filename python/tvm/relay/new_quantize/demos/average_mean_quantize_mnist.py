@@ -44,7 +44,6 @@ onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize_old/m
 input_dict = {'flatten_input': [batch_size, 28, 28, 1]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 print(mod.astext(False))
-print(mod)
 
 # Quantize
 quantized_mod, calibration_map = Quantizer().quantize(mod, params)

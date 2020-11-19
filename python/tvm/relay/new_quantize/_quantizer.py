@@ -55,11 +55,17 @@ class Quantizer:
         
         """
         quantize_mutator = self.QuantizeMutator(skip_layers)
+
         # SimplifyInference, FoldConstants, FoldScaleAxis
         preoptimized_mod = prerequisite_optimize(mod, params)
         
         q_fn = quantize_mutator.visit(preoptimized_mod['main'])
-        q_fn = relay.Function(list(relay.analysis.free_vars(q_fn.body)), q_fn.body)
+
+        # Make sure that inputs to quantized function appear in correct order
+        original_inputs = list(relay.analysis.free_vars(preoptimized_mod['main'].body))
+        scale_zp_inputs = [var for var in list(relay.analysis.free_vars(q_fn.body)) if var not in original_inputs]
+        q_inputs = original_inputs + scale_zp_inputs
+        q_fn = relay.Function(q_inputs, q_fn.body)
         
         quantized_mod = tvm.ir.IRModule()
         quantized_mod['main'] = q_fn

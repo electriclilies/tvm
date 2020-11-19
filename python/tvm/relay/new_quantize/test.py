@@ -3,7 +3,7 @@ import onnx
 import torch
 from torchvision.models import resnet
 from tvm import relay
-from tvm.relay.new_quantize import Quantizer, GlobalCalibrater
+from tvm.relay.new_quantize import Quantizer, GlobalCalibrater, Requantizer
 from tvm.contrib import graph_runtime
 import numpy as np
 import tvm.testing
@@ -30,6 +30,12 @@ print("Built quantized mod successfully")
 print("Global Calibrater")
 gc = GlobalCalibrater(0.05, 0)
 calibrated_mod = gc.calibrate(quantized_mod, calibration_map)
+print("Calibrated")
+print("Requantizer")
+rq = Requantizer()
+requantized_mod = rq.requantize(calibrated_mod)
+print(requantized_mod)
+exit()
 print("Calibrated")
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     q_calibrated_lib = relay.build(calibrated_mod, target='llvm')

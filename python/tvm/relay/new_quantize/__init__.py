@@ -18,5 +18,6 @@
 """The namespace containing quantization and calibration passes"""
 from ._calibrater import CalibrationMap, Calibrater
 from ._quantizer import Quantizer
+from ._requantizer import Requantizer
 from ._global_calibrater import GlobalCalibrater
 from ._average_mean_calibrater import AverageMeanCalibrater, DatasetManager, TFDatasetManager

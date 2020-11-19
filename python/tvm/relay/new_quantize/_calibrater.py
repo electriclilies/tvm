@@ -57,9 +57,14 @@ class CalibrationMap:
         self.tuple_subgraph_graphmodule = graph_runtime.GraphModule(tuple_subgraph_lib["default"](ctx))
         self.q_tuple_subgraph_graphmodule = graph_runtime.GraphModule(q_tuple_subgraph_lib["default"](ctx))
 
-    def run_tuple_mod(self, input_dict, idx_list):
+    def run_tuple_mod(self, inputs, idx_list):
 
-        self.tuple_subgraph_graphmodule.set_input(**input_dict)
+        # Set the user provided inputs
+        for i, inp in enumerate(inputs):
+            self.tuple_subgraph_graphmodule.set_input(i, inp)
+        
+        # Set the scale and zero points
+        self.tuple_subgraph_graphmodule.set_input(**self.scale_zp_value_map)
         self.tuple_subgraph_graphmodule.run()
 
         value_list = []
@@ -69,10 +74,15 @@ class CalibrationMap:
 
         return value_list
 
-    def run_quantized_tuple_mod(self, input_dict, idx_list):
+    def run_quantized_tuple_mod(self, inputs, current_layer_scale_zps, idx_list):
 
-        self.q_tuple_subgraph_graphmodule.set_input(**input_dict)
+        # Set user provided inputs
+        for i, inp in enumerate(inputs):
+            self.q_tuple_subgraph_graphmodule.set_input(i, inp)
+        
+        # Set the scale and zero points
         self.q_tuple_subgraph_graphmodule.set_input(**self.scale_zp_value_map)
+        self.q_tuple_subgraph_graphmodule.set_input(**current_layer_scale_zps)
         self.q_tuple_subgraph_graphmodule.run()
 
         value_list = []
@@ -101,6 +111,7 @@ class Calibrater:
         self.calibration_map = calibration_map
         
         self.calibration_map.build_tuple_subgraphs(target, ctx)
+        
         for ((variable_pairs), ((input_tuple_idxs, q_input_tuple_idxs), (output_tuple_idx, q_output_tuple_idx))) in self.calibration_map.output_index_map.items():
             # Save current indices so they can be accessed from helper functions
             self.input_tuple_idxs = input_tuple_idxs
@@ -134,16 +145,15 @@ class Calibrater:
         """
         raise NotImplementedError
 
-    def _get_unquantized_layer_inputs(self, input_dict):
+    def _get_unquantized_layer_inputs(self, inputs):
         """Utility function that evaluates the inputs to the current layer and returns the results for given inputs.
         This function should be called from inside _calibration_callback.
 
         Parameters
         ----------
-        input_dict : dictionary
-            Dictionary from the names of the original model's inputs to a numpy array. For example, if the original model
-            took one input called 'input', and a tensor of shape (1, 32, 32, 32), you could pass
-            {'input': np.random(1, 32, 32, 32).astype('float32')}
+        inputs : list
+            List of inputs to pass into the mod. Inputs appear in the same order they appeared in the original,
+            unquantized function.
 
         Returns
         -------
@@ -151,19 +161,22 @@ class Calibrater:
             A tuple of the values of inputs to the unquantized layer. If the layer is a binop, there will be two elements in the tuple,
             if an n-op, there will be n elements in the tuple.
         """
-        return self.calibration_map.run_tuple_mod(input_dict, self.input_tuple_idxs)
+        return self.calibration_map.run_tuple_mod(inputs, self.input_tuple_idxs)
 
-    def _get_quantized_layer_inputs(self, input_dict):
+    def _get_quantized_layer_inputs(self, inputs, current_layer_scale_zps):
         """Utility function that evaluates the quantized inputs to the current quantized layer,
         and returns the results in a tuple. It uses previously set scale and zero points when evaluating the graph.
         This function should be called from inside _calibration_callback.
 
         Parameters
         ----------
-        input_dict : dictionary
-            Dictionary from the names of the original model's inputs to a numpy array. For example, if the original model
-            took one input called 'input', and a tensor of shape (1, 32, 32, 32), you could pass
-            {'input': np.random(1, 32, 32, 32).astype('float32')}
+        inputs : list
+            List of inputs to pass into the mod. Inputs appear in the same order they appeared in the original,
+            unquantized function.
+        
+        current_layer_scale_zps: dictionary
+            Map from names of scales and zero points you are setting in the current layer to their values.
+            This map should be of the same format as the map you return from _calibration_callback.
 
         Returns
         -------
@@ -171,47 +184,42 @@ class Calibrater:
             A tuple of the values of the inputs to the quantized layer. If the layer is a binop, there will be two elements in the tuple,
             if an n-op, there will be n elements in the tuple.
         """
-        return self.calibration_map.run_quantized_tuple_mod(input_dict, self.q_input_tuple_idxs)
+        return self.calibration_map.run_quantized_tuple_mod(inputs, current_layer_scale_zps, self.q_input_tuple_idxs)
 
-    def _get_unquantized_layer_output(self, input_dict):
+    def _get_unquantized_layer_output(self, inputs):
         """Utility function that evaluates the unquantized output of the current layer and returns it.
         This function should be called from inside _calibration_callback.
 
         Parameters
         ----------
-        input_dict : dictionary
-            Dictionary from the names of the original model's inputs to a numpy array. For example, if the original model
-            took one input called 'input', and a tensor of shape (1, 32, 32, 32), you could pass
-            {'input': np.random(1, 32, 32, 32).astype('float32')}
+        input_list : list
+            List of inputs to pass into the mod. Inputs appear in the same order they appeared in the original,
+            unquantized function.
 
         Returns
         -------
         output_value : numpy.ndarray
             The output of this layer.
         """
-        return self.calibration_map.run_tuple_mod(input_dict, self.output_tuple_idx)
+        return self.calibration_map.run_tuple_mod(inputs, self.output_tuple_idx)
 
-    def _get_quantized_layer_output(self, input_dict, value_dict):
+    def _get_quantized_layer_output(self, inputs, current_layer_scale_zps):
         """Utility function that evaluates the quantized output of the current layer.
         This function should be called from inside _calibration_callback.
 
         Parameters
         ----------
-        input_dict : dictionary
-            Dictionary from the names of the original model's inputs to a numpy array. For example, if the original model
-            took one input called 'input', and a tensor of shape (1, 32, 32, 32), you could pass
-            {'input': np.random(1, 32, 32, 32).astype('float32')}
+        inputs : list
+            List of inputs to pass into the mod. Inputs appear in the same order they appeared in the original,
+            unquantized function.
         
-        scale_zp_value_dict : dictionary
-            Map from the names of the scale and zero point variables in this layer to thier values.
+        current_layer_scale_zps: dictionary
+            Map from names of scales and zero points you are setting in the current layer to their values.
+            This map should be of the same format as the map you return from _calibration_callback.
 
         Returns
         -------
         output_value : numpy.ndarray
             The output of the quantized layer.
         """
-        combined_dict = {}
-        combined_dict.update(input_dict)
-        combined_dict.update(value_dict)
-
-        return self.calibration_map.run_tuple_mod(combined_dict, self.q_output_tuple_idxs)
+        return self.calibration_map.run_tuple_mod(inputs, current_layer_scale_zps, self.q_output_tuple_idxs)

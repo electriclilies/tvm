@@ -14,7 +14,7 @@ class RandomDatasetManager(DatasetManager):
         self.idx = 0
         self.data_shape = data_shape
         self.dtype = dtype
-        self.num_batches = num_batches
+        self.n_batches = num_batches
     
     def get_next_batch(self):
         if self.is_empty():
@@ -23,10 +23,10 @@ class RandomDatasetManager(DatasetManager):
         return np.random.randn(*self.data_shape).astype(self.dtype), None
 
     def num_batches(self):
-        return self.num_batches
+        return self.n_batches
 
     def is_empty(self):
-        return self.idx >= self.num_batches
+        return self.idx >= self.n_batches
 
     def reset(self):
         self.idx = 0
@@ -42,9 +42,11 @@ input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
 quantized_mod, calibration_map = Quantizer().quantize(mod, params)
 
-random_dataset_manager = RandomDatasetManager(input_shape, 'float32', 2000)
+random_dataset_manager = RandomDatasetManager(input_shape, 'float32', 20)
 average_mean_calibrater = AverageMeanCalibrater(random_dataset_manager)
+print("Calibrating")
 calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
+print("Done calibrating")
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')

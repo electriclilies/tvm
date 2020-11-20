@@ -45,7 +45,7 @@ gmod.run()
 out = gmod.get_output(0).asnumpy()
 print(out)
 print("Unquantized Output:")
-print("Biuld calibrated mod successfully")
+print("Build calibrated mod successfully")
 print("Small MNIST model worked")
 
 
@@ -76,7 +76,10 @@ global_calibrater = GlobalCalibrater(0.05, 0)
 calibrated_mod = global_calibrater.calibrate(quantized_mod, calibration_map)
 print("calibrated")
 print(calibrated_mod)
-
+print("Requantizing")
+requantized_mod = rq.requantize(calibrated_mod)
+print(requantized_mod.astext(False))
+exit()
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
     q_lib = relay.build(calibrated_mod, target='llvm')

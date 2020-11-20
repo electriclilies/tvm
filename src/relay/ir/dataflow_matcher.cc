@@ -607,7 +607,6 @@ class PatternGrouper {
             for (auto match : node_map[fuzzy_op]) {
               fuzzy_matches.insert(match);
             }
-          
           }
         }
       }

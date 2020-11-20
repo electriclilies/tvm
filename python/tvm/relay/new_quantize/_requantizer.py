@@ -16,6 +16,7 @@
 # under the License.
 
 import tvm
+from tvm import relay
 from tvm.relay.dataflow_pattern import DFPatternCallback, wildcard, is_op, dominates, rewrite
 
 # Dequantize(quantize(var)) -> requantize(var) (when dominated)
@@ -23,38 +24,71 @@ from tvm.relay.dataflow_pattern import DFPatternCallback, wildcard, is_op, domin
 # int_8_op(int_8_op(dequantize(wildcard()))) -> dequantize(int_8_op(int_8_op(wildcard()))) 
     # This transformation can be done 2nd (perhaps is not a pattern matcher thing, just a depth search..)
 class Requantizer():
+    # Takes dequantize(is_int8_op*(quantize(data))) -> is_int8_op*(requantize(data))
     class RequantizerCallback(DFPatternCallback):
         def __init__(self):
             super().__init__()
-            self.deq_data = wildcard()
+            self.data = wildcard()
             self.dequantize_scale = wildcard()
             self.dequantize_zp = wildcard()
             
-            self.q_data = wildcard()
             self.quantize_scale = wildcard()
             self.quantize_zp = wildcard()
 
-            self.dequantize = is_op('qnn.dequantize')(self.deq_data, self.dequantize_scale, self.dequantize_zp)
-            self.quantize = is_op('qnn.quantize')(self.q_data, self.quantize_scale, self.quantize_zp)
-            self.is_int_8_op = is_op('nn.max_pool2d') | is_op('nn.max_pool3d') | is_op('nn.relu')
+            self.dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
+            self.quantize = is_op('qnn.quantize')(wildcard(), self.quantize_scale, self.quantize_zp)
+            #self.is_int_8_op = is_op('nn.max_pool2d')| is_op('nn.max_pool3d') | is_op('nn.relu')(wildcard()) | is_op('transpose') | is_op('reshape')
+            self.is_int_8_op = is_op('nn.relu')(wildcard())
             self.pattern = dominates(self.dequantize, self.is_int_8_op, self.quantize)
-        
+
         def callback(self, pre, post, node_map):
-            print("callback")
-            # How do I get scale and zp out of the pattern?
-            deq_data = node_map[self.deq_data][0]
+            # Extract data from the pattern
+            data = node_map[self.data][0]
             dequantize_scale = node_map[self.dequantize_scale][0]
             dequantize_zp = node_map[self.dequantize_zp][0]
-            print("deq scale: ", dequantize_scale)
-            print("deq zp: ", dequantize_zp)
-            quantize = node_map[self.quantize][0]
-            dequantize = node_map[self.dequantize][0]
-            print(self.deq_data)
-            print(quantize)
-            print(dequantize)
 
+            quantize_scale = node_map[self.quantize_scale][0]
+            quantize_zp = node_map[self.quantize_zp][0]
+
+            # Rewrite the subgraph using requantize
+            if not self.is_int_8_op in node_map:
+                res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)
+            else:
+                print("Found case where path is in nodemap, exiting because I don't know what to do with the path yet")
+                is_int_8_op = node_map[self.is_int_8_op][0]
+                exit()
+
+                #res = relay.qnn.op.requantize(is_int_8_op,  # Todo here? Didnt see this happen in 
+            
+            return res
+    # Takes requantize(quantize(data)) -> quantize(data)
+    # TODO: Rename me... 
+    class RequantizerCallback2(DFPatternCallback):
+        def __init__(self):
+            super().__init__()
+            
+            self.data = wildcard()
+            self.output_scale = wildcard()
+            self.output_zp = wildcard()
+
+            self.quantize = is_op("qnn.quantize")
+            self.requantize = is_op("qnn.requantize")
+
+            self.pattern = self.requantize(self.quantize(self.data, wildcard(), wildcard()), wildcard(), wildcard(), self.output_scale, self.output_zp)
+
+        def callback(self, pre, post, node_map):
+            # Extract data from the pattern
+
+            data = node_map[self.data][0]
+            output_scale = node_map[self.output_scale][0]
+            output_zp = node_map[self.output_zp][0]
+
+            # Rewrite subgraph to just one quantize
+            return relay.qnn.op.quantize(data, output_scale, output_zp)
     def requantize(self, mod):
         rewritten_func = rewrite(self.RequantizerCallback(), mod['main'])
+        #print("First rewrite done: \n", rewritten_func.astext(False))
+        #rewritten_func = rewrite(self.RequantizerCallback2(), rewritten_func)
         rewritten_mod = tvm.ir.IRModule()
         rewritten_mod['main'] = rewritten_func
 

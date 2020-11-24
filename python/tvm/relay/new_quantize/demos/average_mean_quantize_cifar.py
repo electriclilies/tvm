@@ -49,8 +49,8 @@ train_images, test_images = train_images / 255.0, test_images / 255.0
 
 # Create dataset manager
 batch_size = 10
-train_dataset_manager = NumpyDatasetManager(train_images, np.ndarray.flatten(train_labels), batch_size, n_batches=10)
-test_dataset_manager = NumpyDatasetManager(test_images, np.ndarray.flatten(test_labels), batch_size, n_batches=10)
+train_dataset_manager = NumpyDatasetManager(train_images, np.ndarray.flatten(train_labels), batch_size, n_batches=100)
+test_dataset_manager = NumpyDatasetManager(test_images, np.ndarray.flatten(test_labels), batch_size, n_batches=100)
 
 # Load onnx model (model obtained from https://www.tensorflow.org/tutorials/images/cnn), exported to onnx
 onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/demos/cifar-model.onnx')
@@ -67,7 +67,6 @@ print("Calibrated mod: \n", calibrated_mod.astext(False))
 # Requantize
 requantized_mod = Requantizer().requantize(calibrated_mod)
 print("Requantized mod: \n", requantized_mod.astext(False))
-exit()
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')

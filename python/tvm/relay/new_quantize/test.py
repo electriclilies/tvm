@@ -18,7 +18,7 @@ mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 #print(mod.astext(False))
 #print(" ____________________________ ")
 
-quantized_mod, calibration_map = Quantizer().quantize(mod, params)
+quantized_mod, calibration_map = Quantizer().quantize(mod, params, skip_layers=[])
 #print("Quantized mod: ")
 #print(quantized_mod.astext(False))
 
@@ -34,7 +34,7 @@ requantized_mod = rq.requantize(calibrated_mod)
 print(requantized_mod.astext(False))
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-    q_calibrated_lib = relay.build(calibrated_mod, target='llvm')
+    q_calibrated_lib = relay.build(requantized_mod, target='llvm')
 print("Built")
 input_np = np.random.randn(batch_size, 28, 28, 1).astype('float32')
 
@@ -48,7 +48,6 @@ print("Unquantized Output:")
 print("Build calibrated mod successfully")
 print("Small MNIST model worked")
 
-
 pytorch_model = resnet.resnet18(pretrained=True)
 input_name = "input"  # the input name can be be arbitrary for PyTorch frontend.
 input_shape = (1, 3, 224, 224)
@@ -60,16 +59,10 @@ input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
 mod = relay.transform.InferType()(mod)
 print("Resnet 18 mod: ", mod)
-quantized_mod, calibration_map = Quantizer().quantize(mod, params)
+quantized_mod, calibration_map = Quantizer().quantize(mod, params, skip_layers=[])
 print("successfully quantized")
 # For testing purposes, manually set scale and zp to bad values
 
-
-with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-    lib = relay.build(mod, target='llvm')
-    q_lib = relay.build(quantized_mod, target='llvm')
-
-print("built quantized mod")
 input_np = np.random.randn(1, 3, 224, 224).astype('float32')
 print("calibrating")
 global_calibrater = GlobalCalibrater(0.05, 0)
@@ -79,9 +72,9 @@ print(calibrated_mod)
 print("Requantizing")
 requantized_mod = rq.requantize(calibrated_mod)
 print(requantized_mod.astext(False))
-exit()
+
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
-    q_lib = relay.build(calibrated_mod, target='llvm')
+    q_lib = relay.build(requantized_mod, target='llvm')
 
 from tvm.contrib import graph_runtime

@@ -19,12 +19,10 @@ import tvm
 from tvm import relay
 from tvm.relay.dataflow_pattern import DFPatternCallback, wildcard, is_op, dominates, rewrite
 
-# Dequantize(quantize(var)) -> requantize(var) (when dominated)
+# Dequantize(quantize(var)) -> requantize(var)
 # dequantize(int8_op(int8_op(quantize(var)))) -> int8_op(int8_op(requantize(var)))
-# int_8_op(int_8_op(dequantize(wildcard()))) -> dequantize(int_8_op(int_8_op(wildcard()))) 
-    # This transformation can be done 2nd (perhaps is not a pattern matcher thing, just a depth search..)
 class Requantizer():
-    # Takes dequantize(is_int8_op*(quantize(data))) -> is_int8_op*(requantize(data))
+    # Takes dequantize(is_int8_op*(quantize(data))) -> requantize(is_int8_op*(data))
     class RequantizerCallback(DFPatternCallback):
         def __init__(self):
             super().__init__()
@@ -35,11 +33,19 @@ class Requantizer():
             self.quantize_scale = wildcard()
             self.quantize_zp = wildcard()
 
+            # Pattern allowing quantize(is_int_8_op*(dequantize(data))) -- (with 1 or more is_int_8_ops)
             self.dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
-            self.quantize = is_op('qnn.quantize')(wildcard(), self.quantize_scale, self.quantize_zp)
-            #self.is_int_8_op = is_op('nn.max_pool2d')| is_op('nn.max_pool3d') | is_op('nn.relu')(wildcard()) | is_op('transpose') | is_op('reshape')
-            self.is_int_8_op = is_op('nn.relu')(wildcard())
-            self.pattern = dominates(self.dequantize, self.is_int_8_op, self.quantize)
+            # TODO: whitelist squeeze and pad
+            self.is_int_8_op = is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool3d')(wildcard()) | is_op('nn.relu')(wildcard()) | is_op('transpose')(wildcard()) | is_op('reshape')(wildcard()) | is_op('nn.pad')(wildcard()) | is_op('squeeze')(wildcard())
+            #self.is_int_8_op = is_op('nn.relu')(wildcard())
+            self.dominator = dominates(self.dequantize, self.is_int_8_op, self.is_int_8_op)
+            self.quantize = is_op('qnn.quantize')(self.dominator, self.quantize_scale, self.quantize_zp)
+            
+            # Construct the null path -- quantize(dequantize(data)) -- (no is_int_8_op inbetween)
+            # We have to do the null path outside the dominator pattern because of pattern matcher limitations
+            self.no_path_dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
+            self.no_path_quantize = is_op('qnn.quantize')(self.no_path_dequantize, self.quantize_scale, self.quantize_zp)
+            self.pattern = self.quantize | self.no_path_quantize
 
         def callback(self, pre, post, node_map):
             # Extract data from the pattern
@@ -50,20 +56,77 @@ class Requantizer():
             quantize_scale = node_map[self.quantize_scale][0]
             quantize_zp = node_map[self.quantize_zp][0]
 
-            # Rewrite the subgraph using requantize
-            if not self.is_int_8_op in node_map:
+            # Case where there are no ops in between the dequantize and quantize
+            if self.no_path_quantize in node_map:
                 res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)
             else:
-                print("Found case where path is in nodemap, exiting because I don't know what to do with the path yet")
-                is_int_8_op = node_map[self.is_int_8_op][0]
-                exit()
+                # There are ops in between the dequantize and quantize
+                # Takes dequantize(is_int8_op*(quantize(data))) -> requantize(is_int8_op*(data))
+                transformed_data = data
+                for i in range(len(node_map[self.is_int_8_op]) - 1, -1, -1):
+                    call = node_map[self.is_int_8_op][i]
+                    # Transform relu into max(zeropoint)
+                    if call.op == relay.op.get('nn.relu'):
+                        # TODO: Accuracy seemed to go up when using max instead of relu... why??
+                        if dequantize_zp.data.asnumpy() == relay.const(0, dtype='int32').data.asnumpy():
+                            transformed_data = relay.op.nn.relu(transformed_data)
+                        else:
+                            transformed_data = relay.op.maximum(transformed_data, relay.cast(dequantize_zp, 'int8'))
+                # How do I copy named args (ie attrs) (call.attrs)
+                    elif call.op == relay.op.get('nn.max_pool2d'):
+                        transformed_data = relay.op.nn.max_pool2d(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('nn.max_pool3d'):
+                        transformed_data = relay.op.nn.max_pool3d(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('transpose'):
+                        transformed_data = relay.op.transpose(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('reshape'):
+                        transformed_data = relay.op.reshape(transformed_data, call.attrs['newshape'])
+                        # THIS DOESN'T WORK..
+                        #transformed_data = relay.op.reshape(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('nn.pad'):
+                        transformed_data = relay.op.nn.pad(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('squeeze'):
+                        transformed_data = relay.op.squeeze(transformed_data, **call.attrs)
+                    else:
+                        # TODO: turn into internal error message
+                        print("Uh oh, you must have missed converting an op that is in is_int_8_op")
+                        exit()
 
-                #res = relay.qnn.op.requantize(is_int_8_op,  # Todo here? Didnt see this happen in 
-            
+                res = relay.qnn.op.requantize(transformed_data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)            
             return res
-    # Takes requantize(quantize(data)) -> quantize(data)
+
+    class RequantizeChainCallback(DFPatternCallback):
+        # Takes a chain of requantizes and turns them into one requantize
+        def __init__(self):
+            super().__init__()
+            self.data = wildcard()
+            self.rq_parent_scale = wildcard()
+            self.rq_parent_zp = wildcard()
+
+            self.rq_child_scale = wildcard()
+            self.rq_child_zp = wildcard()
+
+            self.rq_parent = is_op('qnn.requantize')(self.data, self.rq_parent_scale, self.rq_parent_zp, wildcard(), wildcard())
+            self.rq_child = is_op('qnn.requantize')(wildcard(), wildcard(), wildcard(), self.rq_child_scale, self.rq_child_zp)
+
+            self.pattern = dominates(self.rq_parent, self.rq_child, self.rq_child)
+
+        def callback(self, pre, post, node_map):
+            data = node_map[self.data][0]
+            rq_parent_scale = node_map[self.rq_parent_scale][0]
+            rq_parent_zp = node_map[self.rq_parent_zp][0]
+
+            len_child_scales = len(node_map[self.rq_child_scale])
+            rq_child_scale = node_map[self.rq_child_scale][len_child_scales-1]
+
+            len_child_zps = len(node_map[self.rq_child_zp])
+            rq_child_zp = node_map[self.rq_child_zp][len_child_zps-1]
+
+            return relay.qnn.op.requantize(data, rq_parent_scale, rq_parent_zp, rq_child_scale, rq_child_zp)
+
+    # Takes requantize(quantize(data, scale, zp), rscale, rzp) -> quantize(data, rscale, rzp)
     # TODO: Rename me... 
-    class RequantizerCallback2(DFPatternCallback):
+    class ConsolidateRequantizeandQuantize(DFPatternCallback):
         def __init__(self):
             super().__init__()
             
@@ -85,10 +148,17 @@ class Requantizer():
 
             # Rewrite subgraph to just one quantize
             return relay.qnn.op.quantize(data, output_scale, output_zp)
+    
+    # Is it worth moving dequantizes as far down as possible so most things are in int8? Would be p easy to add.
     def requantize(self, mod):
+        print("Calibrated mod: \n", mod.astext(False))
         rewritten_func = rewrite(self.RequantizerCallback(), mod['main'])
-        #print("First rewrite done: \n", rewritten_func.astext(False))
-        #rewritten_func = rewrite(self.RequantizerCallback2(), rewritten_func)
+        print("First rewrite done: \n", rewritten_func.astext(False))
+        rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
+        print("Second rewrite done: \n", rewritten_func.astext(False))
+        rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
+        print("Third rewrite done: \n", rewritten_func.astext(False))
+        #rewritten_func = rewrite(self.RequantizerCallback(), rewritten_func)
         rewritten_mod = tvm.ir.IRModule()
         rewritten_mod['main'] = rewritten_func
 

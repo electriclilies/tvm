@@ -129,7 +129,8 @@ class Calibrater:
         calibrated_mod['main'] = calibrated_func
 
         optimize = tvm.transform.Sequential(
-            [relay.transform.FoldConstant()])
+            [relay.transform.FoldConstant(), # Get rid of scale multiplication and addition
+             relay.transform.EliminateCommonSubexpr()]) # Get rid of duplicate quantizes
         with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]): # TODO: enable AlterOpLayout when it's fixed
             calibrated_mod = optimize(calibrated_mod)
         

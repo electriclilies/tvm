@@ -4,7 +4,7 @@ from tvm import relay
 import torch
 
 from torchvision.models import resnet
-from tvm.relay.new_quantize import Quantizer, DatasetManager, AverageMeanCalibrater
+from tvm.relay.new_quantize import Quantizer, DatasetManager, AverageMeanCalibrater, Requantizer
 
 import numpy as np
 # TODO: importing resnet from torchvision.models causes protobuf error if before importing stuff from new_quantize????
@@ -15,12 +15,13 @@ class RandomDatasetManager(DatasetManager):
         self.data_shape = data_shape
         self.dtype = dtype
         self.n_batches = num_batches
+        print(data_shape)
     
     def get_next_batch(self):
         if self.is_empty():
             raise IndexError
         self.idx += 1
-        return np.random.randn(*self.data_shape).astype(self.dtype), None
+        return [np.random.randn(*self.data_shape).astype(self.dtype)], [None]
 
     def num_batches(self):
         return self.n_batches
@@ -42,15 +43,17 @@ input_shapes = [(input_name, (1, 3, 224, 224))]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
 quantized_mod, calibration_map = Quantizer().quantize(mod, params)
 
-random_dataset_manager = RandomDatasetManager(input_shape, 'float32', 20)
+random_dataset_manager = RandomDatasetManager(input_shape, 'float32', 3)
 average_mean_calibrater = AverageMeanCalibrater(random_dataset_manager)
 print("Calibrating")
 calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
 print("Done calibrating")
+requantized_mod = Requantizer().requantize(calibrated_mod)
 
+exit()
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
-    q_lib = relay.build(calibrated_mod, target='llvm')
+    q_lib = relay.build(requantized_mod, target='llvm')
 
 from tvm.contrib import graph_runtime
 input_np = np.random.randn(1, 3, 224, 224).astype('float32')

@@ -58,7 +58,6 @@ class CalibrationMap:
         self.q_tuple_subgraph_graphmodule = graph_runtime.GraphModule(q_tuple_subgraph_lib["default"](ctx))
 
     def run_tuple_mod(self, inputs, idx_list):
-
         # Set the user provided inputs
         for i, inp in enumerate(inputs):
             self.tuple_subgraph_graphmodule.set_input(i, inp)

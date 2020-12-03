@@ -37,28 +37,33 @@ class Requantizer():
             self.quantize_zp = wildcard()
 
             # Ops that are permitted inbetween quantize and dequantize if we are rewriting to requantize
-            self.is_int_8_op_func = lambda x: (is_op('nn.max_pool2d')(x) | is_op('nn.max_pool2d')(x) | is_op('nn.max_pool3d')(x) | is_op('nn.relu')(x) | is_op('transpose')(x) | is_op('reshape')(x) | is_op('nn.pad')(x) | is_op('squeeze')(x))
             self.is_int_8_op = is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool3d')(wildcard()) | is_op('nn.relu')(wildcard()) | is_op('transpose')(wildcard()) | is_op('reshape')(wildcard()) | is_op('nn.pad')(wildcard()) | is_op('squeeze')(wildcard())
 
-            #self.is_int_8_op = self.is_int_8_op_func(wildcard())
-
-            # Pattern allowing quantize(is_int_8_op*(dequantize(data))) -- (with 1 or more is_int_8_ops)
+            # Main pattern -- quantize(is_int_8_op*(dequantize(data))) -- (with 1 or more is_int_8_ops)
             self.dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
 
             self.dominator = dominates(self.dequantize, self.is_int_8_op, self.is_int_8_op)
             self.quantize = is_op('qnn.quantize')(self.dominator, self.quantize_scale, self.quantize_zp)
-
-            # For resnets, dominator pattern above does not work, so we add this pattern (which allows a max of 5 nodes inbetween the quantize and dequantize)
-            self.resnet_dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp).optional(self.is_int_8_op_func)#.optional(self.is_int_8_op_func).optional(self.is_int_8_op_func).optional(self.is_int_8_op_func).optional(self.is_int_8_op_func)
-            self.resnet_quantize = is_op('qnn.quantize')(self.resnet_dequantize, self.quantize_scale, self.quantize_zp)
 
             # Pattern with the null path -- quantize(dequantize(data)) -- (no is_int_8_op inbetween)
             # We have to do the null path outside the dominator pattern because of pattern matcher limitations
             self.no_path_dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
             self.no_path_quantize = is_op('qnn.quantize')(self.no_path_dequantize, self.quantize_scale, self.quantize_zp)
 
-            self.pattern = self.resnet_quantize
-            #self.pattern = self.quantize | self.resnet_quantize | self.no_path_quantize
+            self.is_int_8_ops = [is_op('nn.max_pool2d'),
+                                is_op("nn.max_pool3d"),
+                                is_op("nn.relu"),
+                                is_op("transpose"),
+                                is_op("reshape"),
+                                is_op("nn.pad"),
+                                is_op("squeeze")]
+            self.resnet_dequantize = is_op("qnn.dequantize")(self.data, self.dequantize_scale, self.dequantize_zp)
+            self.path = self.resnet_dequantize
+            for op in self.is_int_8_ops:
+                self.path = self.path.optional(op)
+            self.resnet_quantize = is_op("qnn.quantize")(self.path, self.quantize_scale, self.quantize_zp)
+
+            self.pattern = self.quantize | self.no_path_quantize | self.resnet_quantize
 
 
         def callback(self, pre, post, node_map):
@@ -75,9 +80,6 @@ class Requantizer():
                 res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)
             # Ops inbetween quantize and dequantize are dominated
             elif self.quantize in node_map:
-                for key, value in node_map.items():
-                    print(key)
-                print(node_map[self.is_int_8_op_func])
 
                 # There are ops in between the dequantize and quantize
                 # Takes dequantize(is_int8_op*(quantize(data))) -> requantize(is_int8_op*(data))
@@ -111,24 +113,57 @@ class Requantizer():
                     else:
                         # TODO: turn into internal error message
                         assert False, "Uh oh, you must have missed converting an op that is in is_int_8_op"
-
                 res = relay.qnn.op.requantize(transformed_data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)
-            # Ops inbetween quantize and dequantize are not dominated (this pattern usually seen in resnets, etc)
-            else:
-                # THIS IS WHERE THE FUNNY BUSINESS IS HAPPENING!
-                print("found one!!")
-                for key, value in node_map.items():
-                    print("KEY: ")
-                    print(key)
-                
-                print("keys printed")
-                print(node_map[self.is_int_8_op_func])
-                print("successfully passed function into node_map")
-                exit()
-                return pre
 
+            elif self.resnet_quantize in node_map:
+                print("Found a resnet quantize")
+                print(node_map[self.resnet_quantize][0])
+                exit()
             return res
 
+# For resnets, dominator pattern above does not work, so we add this pattern (which allows a max of 5 nodes inbetween the quantize and dequantize)
+    class RequantizerResnetCallback(DFPatternCallback):
+        def __init__(self):
+            super().__init__()
+            print("initializing")
+            self.data = wildcard()
+            self.dequantize_scale = wildcard()
+            self.dequantize_zp = wildcard()
+            
+            self.quantize_scale = wildcard()
+            self.quantize_zp = wildcard()
+
+            """
+            self.is_int_8_op_list = [is_op("nn.max_pool2d"),
+                                     is_op("nn.max_pool3d"),
+                                     is_op("nn.relu"),
+                                     is_op("transpose"),
+                                     is_op("reshape"),
+                                     is_op("nn.pad"),
+                                     is_op("squeeze")]
+            """
+            """
+            self.path = self.resnet_dequantize
+
+            #for op in self.is_int_8_op_list:
+            #self.path = self.path.optional(is_op("nn.relu"))
+            self.path = is_op("nn.relu")(self.path)
+            self.resnet_quantize = is_op('qnn.quantize')(self.path, self.quantize_scale, self.quantize_zp)
+            """
+            #self.is_int_8_op_list = [is_op("nn.relu")]
+
+            self.resnet_dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
+            self.relu = is_op('nn.relu')(self.resnet_dequantize)
+            self.resnet_quantize = is_op('qnn.quantize')(self.relu, self.quantize_scale, self.quantize_zp)
+
+            self.pattern = self.resnet_quantize
+
+        def callback(self, pre, post, node_map):
+            print("CALLBACK")
+            exit()
+            #print(node_map[self.relu][0])
+            #print(len(node_map[self.path]))
+            return post
 
     class RequantizeChainCallback(DFPatternCallback):
         # Takes a chain of requantizes and turns them into one requantize
@@ -188,14 +223,15 @@ class Requantizer():
     # Is it worth moving dequantizes as far down as possible so most things are in int8? Would be p easy to add.
     def requantize(self, mod):
         print("Calibrated mod: \n", mod.astext(False))
-        #mod = self._split_resnet_dequantize(mod)
         rewritten_func = rewrite(self.RequantizerCallback(), mod['main'])
         print("First rewrite done: \n", rewritten_func.astext(False))
+        rewritten_func = rewrite(self.RequantizerResnetCallback(), rewritten_func)
+        print("Second rewrite done: \n", rewritten_func)
+        exit()
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
         print("Second rewrite done: \n", rewritten_func.astext(False))
         rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
         print("Third rewrite done: \n", rewritten_func.astext(False))
-        #rewritten_func = rewrite(self.RequantizerCallback(), rewritten_func)
         rewritten_mod = tvm.ir.IRModule()
         rewritten_mod['main'] = rewritten_func
 

@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import onnx
 import numpy as np
 
+import deckhand
+
 class NumpyDatasetManager(DatasetManager):
     # Assumes numpy_data is in form [num_inputs, c, h, w] and labels is [num_inputs]
     def __init__(self, numpy_data, numpy_labels, batch_size=1, n_batches=None):
@@ -71,6 +73,9 @@ print("Requantized mod: \n", requantized_mod.astext(False))
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
     q_lib = relay.build(requantized_mod, target='llvm')
+
+
+model = deckhand.TVMModel("tvm_quantized_cifar", requantized_mod, params)
 
 from tvm.contrib import graph_runtime
 q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))

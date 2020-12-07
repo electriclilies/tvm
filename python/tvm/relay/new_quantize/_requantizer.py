@@ -225,7 +225,7 @@ class Requantizer():
         print("Calibrated mod: \n", mod.astext(False))
         rewritten_func = rewrite(self.RequantizerCallback(), mod['main'])
         print("First rewrite done: \n", rewritten_func.astext(False))
-        rewritten_func = rewrite(self.RequantizerResnetCallback(), rewritten_func)
+        rewritten_func = rewrite(self.RequantizerResnetCallback(), rewritten_func, allow_overlapping_groups=True)
         print("Second rewrite done: \n", rewritten_func)
         exit()
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)

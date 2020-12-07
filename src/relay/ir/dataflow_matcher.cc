@@ -476,6 +476,8 @@ TVM_REGISTER_GLOBAL("relay.dataflow_pattern.match").set_body_typed(MatchPattern)
 class PatternGrouper {
  public:
   /*! \brief Internal Group class for storing analysis */
+  PatternGrouper(bool allow_overlapping_groups = false) : allow_overlapping_groups_(allow_overlapping_groups) {}
+
   struct Group {
     Expr root_node;
     int gid;
@@ -644,11 +646,12 @@ class PatternGrouper {
     // used to determine Group overlap in other passes
     auto extractor = MatchExtractor(inputs);
     auto body = extractor.Mutate(expr);
-
+    
     // Verify the pattern still holds
     ICHECK(DFPatternMatcher(body).Match(pattern_, body));
     group.function = Function(params, body, NullValue<Type>(), Array<TypeVar>());
     group.name = extractor.GetName();
+    if (!allow_overlapping_groups_) {
     // Check to make sure we aren't overlapping with another group or creating an invalid fusion
     // The MatchExtractor will create a new graph by replacing nodes that match the inputs of the
     // pattern with the input FunctionVar* Variables. The resulting memoization map will only
@@ -681,6 +684,7 @@ class PatternGrouper {
           }
         }
       }
+    }
     }
     // Assign Group Ids
     group.gid = ++gid_;
@@ -730,6 +734,7 @@ class PatternGrouper {
   IndexedGraph<DFPattern> pattern_graph_;
   int gid_ = 0;
   int graph_number_ = 0;
+  bool allow_overlapping_groups_ = false;
 };
 
 // Rewrite
@@ -757,7 +762,7 @@ TVM_REGISTER_GLOBAL("relay.dataflow_pattern.DFPatternCallback")
  */
 class PatternRewriter : protected MixedModeMutator {
  public:
-  PatternRewriter(IRModule mod) : mod_(mod) {}
+  PatternRewriter(IRModule mod, bool allow_overlapping_groups) : mod_(mod), allow_overlapping_groups_(allow_overlapping_groups) {}
   /*! \brief Rewrite can take a number of callbacks and will repeatedly rewrite the graph with the
    * callbacks until it stops changing */
   Expr Rewrite(const Array<DFPatternCallback>& callbacks, const Expr& pre) {
@@ -775,7 +780,7 @@ class PatternRewriter : protected MixedModeMutator {
         if (callback_->require_type) {
           post = InferTypeWithModule(post, mod_);
         }
-        auto grouper = PatternGrouper();
+        auto grouper = PatternGrouper(allow_overlapping_groups_);
         groups_ = grouper.GroupMatches(callback_->pattern, post);
         gid_assignments_ = grouper.GetGIDAssignments();
         memo_.clear();
@@ -814,10 +819,12 @@ class PatternRewriter : protected MixedModeMutator {
   DFPatternCallback callback_;
   std::unordered_map<int, PatternGrouper::Group> groups_;
   std::unordered_map<Expr, int, ObjectPtrHash, ObjectPtrEqual> gid_assignments_;
+  bool allow_overlapping_groups_ = false;
 };
 
-Expr RewritePatterns(Array<DFPatternCallback> callbacks, Expr expr, IRModule mod) {
-  return PatternRewriter(mod).Rewrite(callbacks, expr);
+Expr RewritePatterns(Array<DFPatternCallback> callbacks, Expr expr, IRModule mod, int allow_overlapping_groups) {
+  std::cout << allow_overlapping_groups << std::endl;
+  return PatternRewriter(mod, allow_overlapping_groups).Rewrite(callbacks, expr);
 }
 
 TVM_REGISTER_GLOBAL("relay.dataflow_pattern.rewrite").set_body_typed(RewritePatterns);

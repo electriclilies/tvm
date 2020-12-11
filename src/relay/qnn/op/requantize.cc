@@ -265,6 +265,12 @@ bool RequantizeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
     return false;
   }
 
+  // Check the scale and zero point types
+  for (size_t i = 3; i < 5; ++i) {
+    if (types[i].as<IncompleteTypeNode>()) {
+      return false;
+    }
+  }
   const auto in_dtype = data->dtype;
   ICHECK(in_dtype == DataType::Int(8) || in_dtype == DataType::UInt(8) ||
          in_dtype == DataType::Int(32))

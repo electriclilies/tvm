@@ -37,7 +37,9 @@ class Requantizer():
             self.quantize_zp = wildcard()
 
             # Ops that are permitted inbetween quantize and dequantize if we are rewriting to requantize
-            self.is_int_8_op = is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool3d')(wildcard()) | is_op('nn.relu')(wildcard()) | is_op('transpose')(wildcard()) | is_op('reshape')(wildcard()) | is_op('nn.pad')(wildcard()) | is_op('squeeze')(wildcard())
+            self.is_int_8_op = is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool3d')(wildcard()) | \
+                               is_op('nn.relu')(wildcard()) | is_op('transpose')(wildcard()) | is_op('reshape')(wildcard()) | is_op('nn.pad')(wildcard()) | \
+                               is_op('squeeze')(wildcard()) | is_op('nn.global_avg_pool2d') | is_op('nn.batch_flatten')
 
             # Main pattern -- quantize(is_int_8_op*(dequantize(data))) -- (with 1 or more is_int_8_ops)
             self.dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
@@ -50,20 +52,7 @@ class Requantizer():
             self.no_path_dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
             self.no_path_quantize = is_op('qnn.quantize')(self.no_path_dequantize, self.quantize_scale, self.quantize_zp)
 
-            self.is_int_8_ops = [is_op('nn.max_pool2d'),
-                                is_op("nn.max_pool3d"),
-                                is_op("nn.relu"),
-                                is_op("transpose"),
-                                is_op("reshape"),
-                                is_op("nn.pad"),
-                                is_op("squeeze")]
-            self.resnet_dequantize = is_op("qnn.dequantize")(self.data, self.dequantize_scale, self.dequantize_zp)
-            self.path = self.resnet_dequantize
-            for op in self.is_int_8_ops:
-                self.path = self.path.optional(op)
-            self.resnet_quantize = is_op("qnn.quantize")(self.path, self.quantize_scale, self.quantize_zp)
-
-            self.pattern = self.quantize | self.no_path_quantize | self.resnet_quantize
+            self.pattern = self.quantize | self.no_path_quantize
 
 
         def callback(self, pre, post, node_map):
@@ -88,12 +77,10 @@ class Requantizer():
                     call = node_map[self.is_int_8_op][i]
                     # Transform relu into max(zeropoint)
                     if call.op == relay.op.get('nn.relu'):
-                        # TODO: Accuracy seemed to go up when using max instead of relu... why??
                         if dequantize_zp.data.asnumpy() == relay.const(0, dtype='int32').data.asnumpy():
                             transformed_data = relay.op.nn.relu(transformed_data)
                         else:
                             transformed_data = relay.op.maximum(transformed_data, relay.cast(dequantize_zp, 'int8'))
-                # How do I copy named args (ie attrs) (call.attrs)
                     elif call.op == relay.op.get('nn.max_pool2d'):
                         transformed_data = relay.op.nn.max_pool2d(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('nn.max_pool3d'):
@@ -102,68 +89,24 @@ class Requantizer():
                         transformed_data = relay.op.transpose(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('reshape'):
                         # For some reason reverse is set as an attr (for topi?), but is not an argument to reshape
+                        # TODO: Change me to work correctly
                         assert call.attrs['reverse'] == 0
-                        attrs = call.attrs.copy()
-                        attrs.pop('reverse')
-                        transformed_data = relay.op.reshape(transformed_data, **attrs)
+                        #attrs = call.attrs.copy()
+                        call.attrs.pop('reverse')
+                        transformed_data = relay.op.reshape(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('nn.pad'):
                         transformed_data = relay.op.nn.pad(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('squeeze'):
                         transformed_data = relay.op.squeeze(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('nn.global_avg_2d'):
+                        transformed_data = relay.op.nn.global_avg_pool2d(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('nn.batch_flatten'):
+                        transformed_data = relay.op.nn.batch_flatten(transformed_data, **call.attrs)
                     else:
                         # TODO: turn into internal error message
                         assert False, "Uh oh, you must have missed converting an op that is in is_int_8_op"
                 res = relay.qnn.op.requantize(transformed_data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)
-
-            elif self.resnet_quantize in node_map:
-                print("Found a resnet quantize")
-                print(node_map[self.resnet_quantize][0])
-                exit()
             return res
-
-# For resnets, dominator pattern above does not work, so we add this pattern (which allows a max of 5 nodes inbetween the quantize and dequantize)
-    class RequantizerResnetCallback(DFPatternCallback):
-        def __init__(self):
-            super().__init__()
-            print("initializing")
-            self.data = wildcard()
-            self.dequantize_scale = wildcard()
-            self.dequantize_zp = wildcard()
-            
-            self.quantize_scale = wildcard()
-            self.quantize_zp = wildcard()
-
-            """
-            self.is_int_8_op_list = [is_op("nn.max_pool2d"),
-                                     is_op("nn.max_pool3d"),
-                                     is_op("nn.relu"),
-                                     is_op("transpose"),
-                                     is_op("reshape"),
-                                     is_op("nn.pad"),
-                                     is_op("squeeze")]
-            """
-            """
-            self.path = self.resnet_dequantize
-
-            #for op in self.is_int_8_op_list:
-            #self.path = self.path.optional(is_op("nn.relu"))
-            self.path = is_op("nn.relu")(self.path)
-            self.resnet_quantize = is_op('qnn.quantize')(self.path, self.quantize_scale, self.quantize_zp)
-            """
-            #self.is_int_8_op_list = [is_op("nn.relu")]
-
-            self.resnet_dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
-            self.relu = is_op('nn.relu')(self.resnet_dequantize)
-            self.resnet_quantize = is_op('qnn.quantize')(self.relu, self.quantize_scale, self.quantize_zp)
-
-            self.pattern = self.resnet_quantize
-
-        def callback(self, pre, post, node_map):
-            print("CALLBACK")
-            exit()
-            #print(node_map[self.relu][0])
-            #print(len(node_map[self.path]))
-            return post
 
     class RequantizeChainCallback(DFPatternCallback):
         # Takes a chain of requantizes and turns them into one requantize
@@ -223,11 +166,11 @@ class Requantizer():
     # Is it worth moving dequantizes as far down as possible so most things are in int8? Would be p easy to add.
     def requantize(self, mod):
         print("Calibrated mod: \n", mod.astext(False))
-        rewritten_func = rewrite(self.RequantizerCallback(), mod['main'])
+        rewritten_func = rewrite(self.RequantizerCallback(), mod['main'], allow_overlapping_groups=True)
         print("First rewrite done: \n", rewritten_func.astext(False))
-        rewritten_func = rewrite(self.RequantizerResnetCallback(), rewritten_func, allow_overlapping_groups=True)
-        print("Second rewrite done: \n", rewritten_func)
-        exit()
+        #rewritten_func = rewrite(self.RequantizerResnetCallback(), rewritten_func, allow_overlapping_groups=True)
+        #print("Second rewrite done: \n", rewritten_func)
+        #exit()
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
         print("Second rewrite done: \n", rewritten_func.astext(False))
         rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)

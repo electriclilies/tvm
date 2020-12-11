@@ -1,5 +1,6 @@
 
 import tvm
+import tvm.relay.testing
 from tvm import relay
 import torch
 
@@ -32,15 +33,17 @@ class RandomDatasetManager(DatasetManager):
     def reset(self):
         self.idx = 0
 
+
 pytorch_model = resnet.resnet18(pretrained=True)
 input_name = "input"  # the input name can be be arbitrary for PyTorch frontend.
-input_shape = (1, 3, 224, 224)
+input_shape = (3, 3, 224, 224)
 named_input_shape = [(input_name, input_shape)]
 input_data = torch.randn(input_shape)
 script_module = torch.jit.trace(pytorch_model, input_data)
 
-input_shapes = [(input_name, (1, 3, 224, 224))]
+input_shapes = [(input_name, input_shape)]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
+
 quantized_mod, calibration_map = Quantizer().quantize(mod, params)
 
 random_dataset_manager = RandomDatasetManager(input_shape, 'float32', 3)
@@ -50,17 +53,17 @@ calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_ma
 print("Done calibrating")
 requantized_mod = Requantizer().requantize(calibrated_mod)
 
-exit()
+
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
     q_lib = relay.build(requantized_mod, target='llvm')
 
 from tvm.contrib import graph_runtime
-input_np = np.random.randn(1, 3, 224, 224).astype('float32')
+input_np = np.random.randn(*input_shape).astype('float32')
 
 gmod = graph_runtime.GraphModule(lib["default"](tvm.cpu()))
 gmod.set_input(**params)
-gmod.set_input('input', input_np)
+gmod.set_input(input_name, input_np)
 gmod.run()
 out = gmod.get_output(0).asnumpy()
 print("Unquantized Output:")
@@ -69,7 +72,7 @@ print(out)
 
 print(" ___________ ")
 q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))
-q_gmod.set_input('input', input_np)
+q_gmod.set_input(input_name, input_np)
 q_gmod.set_input(**params)
 q_gmod.run()
 q_out = q_gmod.get_output(0).asnumpy()

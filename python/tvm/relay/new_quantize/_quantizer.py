@@ -26,7 +26,7 @@ from collections import OrderedDict
 
 class Quantizer:
 
-    def quantize(self, mod, params, skip_layers=[0]):
+    def quantize(self, mod, params, skip_layers=[0], skip_ops=None):
         """Inserts quantize and dequantize around every layer in the graph
 
         Parameters
@@ -133,6 +133,7 @@ class Quantizer:
                 
                 pre_data, pre_weight = call.args[0], call.args[1]
                 data, weight = self.visit(pre_data), self.visit(pre_weight)
+                out_dtype = infer_type(call).checked_type.dtype
 
                 # Check if we are skipping quantization on this layer after recursive call
                 self.compute_layer_count = self.compute_layer_count + 1 # Conv2d is compute layer
@@ -189,7 +190,7 @@ class Quantizer:
 
                 # Construct quantized qnn.conv2d and dequantize
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
-                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
                 # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
                 data_key = (data_scale, data_zp)
@@ -212,6 +213,7 @@ class Quantizer:
                 
                 pre_data, pre_weight = call.args[0], call.args[1]
                 data, weight = self.visit(pre_data), self.visit(pre_weight)
+                out_dtype = infer_type(call).checked_type.dtype
 
                 # Check if we are skipping quantization on this layer after recursive call
                 self.compute_layer_count = self.compute_layer_count + 1 # dense is a compute layer
@@ -238,7 +240,7 @@ class Quantizer:
                 args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, units]
 
                 qnn_call = relay.qnn.op.dense(*args)
-                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'))
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
                 # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
                 data_key = (data_scale, data_zp)
@@ -254,12 +256,11 @@ class Quantizer:
                 self.output_index_map[(data_key, weight_key)] = (((pre_data_idx, pre_weight_idx), (quantized_data_idx, quantized_weight_idx)), (call_idx, dequantized_call_idx))
 
                 return dequantized_call
-
             elif call.op == relay.op.get('add'):
                 
                 pre_lhs, pre_rhs = call.args[0], call.args[1]
                 lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
-                
+                out_dtype = infer_type(call).checked_type.dtype
                 # Don't quantize the add if it is in a skipped layer
                 if self.skip_layers and self.skip_layers_ptr != 0:
                     last_layer = self.compute_layer_count - 1
@@ -282,8 +283,8 @@ class Quantizer:
                 quantized_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
                 quantized_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
 
-                dequantized_lhs = relay.qnn.op.dequantize(quantized_lhs, lhs_scale, relay.const(0, dtype='int32'))
-                dequantized_rhs = relay.qnn.op.dequantize(quantized_rhs, rhs_scale, relay.const(0, dtype='int32'))
+                dequantized_lhs = relay.qnn.op.dequantize(quantized_lhs, lhs_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
+                dequantized_rhs = relay.qnn.op.dequantize(quantized_rhs, rhs_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
                 add_scale = relay.op.add(lhs_scale, rhs_scale)
 
@@ -291,7 +292,7 @@ class Quantizer:
                 requantized_rhs = relay.qnn.op.quantize(dequantized_rhs, add_scale, relay.const(0, dtype='int32'))
         
                 add = relay.op.add(requantized_lhs, requantized_rhs)
-                dequantized_call = relay.qnn.op.dequantize(add, add_scale, relay.const(0, dtype='int32'))
+                dequantized_call = relay.qnn.op.dequantize(add, add_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
                 # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
                 lhs_key = (lhs_scale, lhs_zp)
@@ -312,7 +313,8 @@ class Quantizer:
 
                 pre_lhs, pre_rhs = call.args[0], call.args[1]
                 lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
-
+                out_dtype = infer_type(call).checked_type.dtype
+                
                 # Don't quantize multiply if it is in a skipped layer
                 if self.skip_layers and self.skip_layers_ptr != 0:
                     last_layer = self.compute_layer_count - 1
@@ -336,7 +338,7 @@ class Quantizer:
                 zeroed_quantized_rhs = relay.op.subtract(quantized_rhs, rhs_zp)
                 
                 multiply = relay.op.multiply(zeroed_quantized_lhs, zeroed_quantized_rhs)
-                dequantized_call = relay.qnn.op.dequantize(multiply, lhs_scale * rhs_scale, relay.const(0, dtype='int32'))
+                dequantized_call = relay.qnn.op.dequantize(multiply, lhs_scale * rhs_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
                 # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
                 lhs_key = (lhs_scale, lhs_zp)
@@ -352,6 +354,7 @@ class Quantizer:
                 self.output_index_map[(lhs_key, rhs_key)] = (((pre_lhs_idx, pre_rhs_idx), (quantized_lhs_idx, quantized_rhs_idx)), (call_idx, dequantized_call_idx))
 
                 return dequantized_call
+            
             else:
                 return super().visit_call(call)
 
@@ -360,7 +363,8 @@ def prerequisite_optimize(mod, params=None):
     "SimplifyInference", "FoldScaleAxis", "FoldConstant", and
     "CanonicalizeOps" optimization before quantization. """
     optimize = tvm.transform.Sequential(
-        [relay.transform.SimplifyInference(),
+        [relay.transform.DynamicToStatic(),
+         relay.transform.SimplifyInference(),
          relay.transform.FoldConstant(),
          relay.transform.FoldScaleAxis(),
          relay.transform.CanonicalizeOps(), #TODO: should this be in prereq optimize?

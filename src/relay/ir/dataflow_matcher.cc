@@ -823,7 +823,6 @@ class PatternRewriter : protected MixedModeMutator {
 };
 
 Expr RewritePatterns(Array<DFPatternCallback> callbacks, Expr expr, IRModule mod, int allow_overlapping_groups) {
-  std::cout << allow_overlapping_groups << std::endl;
   return PatternRewriter(mod, allow_overlapping_groups).Rewrite(callbacks, expr);
 }
 

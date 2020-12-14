@@ -16,7 +16,6 @@ class RandomDatasetManager(DatasetManager):
         self.data_shape = data_shape
         self.dtype = dtype
         self.n_batches = num_batches
-        print(data_shape)
     
     def get_next_batch(self):
         if self.is_empty():

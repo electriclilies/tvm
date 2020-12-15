@@ -91,6 +91,7 @@ class CalibrationMap:
 
         return value_list
 
+
 class Calibrater:
     def __init__(self):
         self.calibration_map = None
@@ -103,6 +104,9 @@ class Calibrater:
         self.q_input_tuple_idxs = None
         self.output_tuple_idxs = None
         self.q_output_tuple_idxs = None
+        
+        self.layer_op = None
+        self.layer_attrs = None
 
     def calibrate(self, quantized_mod, calibration_map, target='llvm', ctx=tvm.cpu()):
         """Iterates over every layer in the graph, and sets scale and zero point variables for those layers."""
@@ -111,12 +115,15 @@ class Calibrater:
         
         self.calibration_map.build_tuple_subgraphs(target, ctx)
         
-        for ((variable_pairs), ((input_tuple_idxs, q_input_tuple_idxs), (output_tuple_idx, q_output_tuple_idx))) in self.calibration_map.output_index_map.items():
+        for (variable_pairs, ((input_tuple_idxs, q_input_tuple_idxs), (output_tuple_idx, q_output_tuple_idx), (layer_op, layer_attrs))) in self.calibration_map.output_index_map.items():
             # Save current indices so they can be accessed from helper functions
             self.input_tuple_idxs = input_tuple_idxs
             self.q_input_tuple_idxs = q_input_tuple_idxs
             self.output_tuple_idx = output_tuple_idx
             self.q_input_tuple_idxs = q_output_tuple_idx
+
+            self.layer_op = layer_op
+            self.layer_attrs = layer_attrs
 
             value_dict = self._calibration_callback(variable_pairs)
             # Merge values picked for scale and zp variables to 
@@ -223,3 +230,24 @@ class Calibrater:
             The output of the quantized layer.
         """
         return self.calibration_map.run_tuple_mod(inputs, current_layer_scale_zps, self.q_output_tuple_idxs)
+
+    def _get_layer_op(self):
+        """Utility function that gets the relay op corresponding to this layer.
+
+        Returns
+        -------
+        output_value : tvm.relay.op
+            The relay operation that the current layer is.
+        """
+        return self.calibration_map.layer_op
+
+    def _get_layer_attributes(self):
+        """Utility function that gets the relay op and attributes of this layer.
+        
+        Returns
+        -------
+        output_value : dict
+            A dictionary containing the attributes for this layer.
+        """
+        return self.calibration_map.layer_attrs
+

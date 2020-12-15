@@ -8,7 +8,6 @@ from torchvision.models import resnet
 from tvm.relay.new_quantize import Quantizer, DatasetManager, AverageMeanCalibrater, Requantizer
 
 import numpy as np
-# TODO: importing resnet from torchvision.models causes protobuf error if before importing stuff from new_quantize????
 
 class RandomDatasetManager(DatasetManager):
     def __init__(self, data_shape, dtype, num_batches):

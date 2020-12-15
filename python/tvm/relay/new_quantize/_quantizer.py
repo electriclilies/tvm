@@ -17,6 +17,7 @@
 
 import tvm
 from tvm import relay
+from tvm import te
 from tvm.contrib import graph_runtime
 from tvm.relay import ExprMutator, Call, Var, Constant, TupleGetItem, Function
 from tvm.relay.frontend.common import infer_type
@@ -76,7 +77,6 @@ class Quantizer:
         out_tuple_fn = relay.Function(list(relay.analysis.free_vars(out_tuple)), out_tuple)
         q_out_tuple_fn = relay.Function(list(relay.analysis.free_vars(q_out_tuple)), q_out_tuple)
         
-        # TODO: fix this
         calibration_map = CalibrationMap(quantize_mutator.output_index_map, out_tuple_fn, q_out_tuple_fn)
         return (quantized_mod, calibration_map)
         
@@ -108,12 +108,14 @@ class Quantizer:
 
         # Helper to construct the relay scale variable for this layer
         def scale(self, name):
+            #var = relay.var(str(name) + "_scale_" + str(self.scales_count), shape=(te.size_var("channels"),), dtype='float32')
             var = relay.var(str(name) + "_scale_" + str(self.scales_count), shape=(), dtype='float32')
             self.scales_count = self.scales_count + 1
             return var
 
         # Helper to construct the relay zero_point variable for this layer
         def zero_point(self, name):
+            #var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), shape=(te.size_var("channels"),), dtype='int32')
             var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), shape=(), dtype='int32')
             self.zp_count = self.zp_count + 1
             return var
@@ -203,8 +205,7 @@ class Quantizer:
                 call_idx = self.add_subgraph(call)
                 dequantized_call_idx = self.add_quantized_subgraph(dequantized_call)
                 
-                #self.output_index_map[(data_key, weight_key)] = (((pre_data_idx, quantized_data_idx), (pre_weight_idx, quantized_weight_idx)), (call_idx, dequantized_call_idx))
-                self.output_index_map[(data_key, weight_key)] = (((pre_data_idx, pre_weight_idx), (quantized_data_idx, quantized_weight_idx)), (call_idx, dequantized_call_idx))
+                self.output_index_map[(data_key, weight_key)] = (((pre_data_idx, pre_weight_idx), (quantized_data_idx, quantized_weight_idx)), (call_idx, dequantized_call_idx), (relay.op.get('qnn.conv2d'), new_attr_dict))
                 #TODO: fuse bias_add with conv2d during quantization
 
                 return dequantized_call
@@ -232,14 +233,16 @@ class Quantizer:
                 quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
                 quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
 
+                args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
+
+                new_attr_dict = {}
                 units = call.attrs['units']
                 if units is None:
                     weight_type_info = infer_type(call.args[1])
                     units = weight_type_info.checked_type.shape[0]
+                new_attr_dict['units'] = units
 
-                args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, units]
-
-                qnn_call = relay.qnn.op.dense(*args)
+                qnn_call = relay.qnn.op.dense(*args, **new_attr_dict)
                 dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
                 # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
@@ -253,7 +256,7 @@ class Quantizer:
                 call_idx = self.add_subgraph(call)
                 dequantized_call_idx = self.add_quantized_subgraph(dequantized_call)
 
-                self.output_index_map[(data_key, weight_key)] = (((pre_data_idx, pre_weight_idx), (quantized_data_idx, quantized_weight_idx)), (call_idx, dequantized_call_idx))
+                self.output_index_map[(data_key, weight_key)] = (((pre_data_idx, pre_weight_idx), (quantized_data_idx, quantized_weight_idx)), (call_idx, dequantized_call_idx), (relay.op.get('qnn.dense'), new_attr_dict))
 
                 return dequantized_call
             elif call.op == relay.op.get('add'):
@@ -305,7 +308,7 @@ class Quantizer:
                 call_idx = self.add_subgraph(call)
                 dequantized_call_idx = self.add_quantized_subgraph(dequantized_call)
 
-                self.output_index_map[(lhs_key, rhs_key)] = (((pre_lhs_idx, pre_rhs_idx), (quantized_lhs_idx, quantized_rhs_idx)), (call_idx, dequantized_call_idx))
+                self.output_index_map[(lhs_key, rhs_key)] = (((pre_lhs_idx, pre_rhs_idx), (quantized_lhs_idx, quantized_rhs_idx)), (call_idx, dequantized_call_idx), (relay.op.get('add'), {}))
 
                 return dequantized_call
 
@@ -351,7 +354,7 @@ class Quantizer:
                 call_idx = self.add_subgraph(call)
                 dequantized_call_idx = self.add_quantized_subgraph(dequantized_call)
 
-                self.output_index_map[(lhs_key, rhs_key)] = (((pre_lhs_idx, pre_rhs_idx), (quantized_lhs_idx, quantized_rhs_idx)), (call_idx, dequantized_call_idx))
+                self.output_index_map[(lhs_key, rhs_key)] = (((pre_lhs_idx, pre_rhs_idx), (quantized_lhs_idx, quantized_rhs_idx)), (call_idx, dequantized_call_idx), (relay.op.get("add"), {}))
 
                 return dequantized_call
             

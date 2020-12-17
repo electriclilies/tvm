@@ -127,19 +127,20 @@ class Calibrater:
 
             value_dict = self._calibration_callback(variable_pairs)
             # Merge values picked for scale and zp variables to 
+            #print(self.calibration_map.scale_zp_value_map)
             self.calibration_map.scale_zp_value_map.update(value_dict)
         
         # Create the calibrated module using the scales and zero points we just found
         calibrated_func = relay.build_module.bind_params_by_name(quantized_mod['main'], self.calibration_map.scale_zp_value_map)
         calibrated_mod = tvm.ir.IRModule()
         calibrated_mod['main'] = calibrated_func
-
+        
         optimize = tvm.transform.Sequential(
             [relay.transform.FoldConstant(), # Get rid of scale multiplication and addition
              relay.transform.EliminateCommonSubexpr()]) # Get rid of duplicate quantizes
         with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]): # TODO: enable AlterOpLayout when it's fixed
             calibrated_mod = optimize(calibrated_mod)
-        
+
         return calibrated_mod
 
     def _calibration_callback(self, variable_pairs):
@@ -239,7 +240,7 @@ class Calibrater:
         output_value : tvm.relay.op
             The relay operation that the current layer is.
         """
-        return self.calibration_map.layer_op
+        return self.layer_op
 
     def _get_layer_attributes(self):
         """Utility function that gets the relay op and attributes of this layer.
@@ -249,5 +250,5 @@ class Calibrater:
         output_value : dict
             A dictionary containing the attributes for this layer.
         """
-        return self.calibration_map.layer_attrs
+        return self.layer_attrs
 

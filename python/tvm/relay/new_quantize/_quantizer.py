@@ -147,6 +147,23 @@ class Quantizer:
                 # Find kernel_size, channels (will be passed to qnn.conv2d)
                 new_attr_dict = {}
                 kernel_type_info = infer_type(call.args[1])
+                kernel_layout = call.attrs["kernel_layout"]
+                data_layout = call.attrs["data_layout"]
+                
+                if kernel_layout == "OIHW":
+                    weight_channel_axis = 0
+                elif kernel_layout == "HWIO":
+                    weight_channel_axis = 3
+                else:
+                    raise ValueError("Quantizing kernel layout %s for conv2d is not yet supported. Please use OIHW or HWIO", kernel_layout)
+
+                if data_layout == "NCHW":
+                    data_channel_axis = 1
+                elif data_layout == "NHWC":
+                    data_channel_axis = 3
+                else:
+                    raise ValueError("Quantizing data layout %s for conv2d is not yet supported. Please use NCHW or NHWC", data_layout)
+
                 for attr in call.attrs.keys():
                     attr_value = call.attrs[attr]
                     if isinstance(attr_value, tvm.ir.container.Array):
@@ -154,21 +171,25 @@ class Quantizer:
                     if attr == 'kernel_size':
                         kernel_size = call.attrs[attr]
                         if kernel_size is None:
-                            kernel_size = tuple(kernel_type_info.checked_type.shape[2:4]) # Assumes OIHW layout
+                            if kernel_layout == "OIHW":
+                                kernel_size = tuple(kernel_type_info.checked_type.shape[2:4])
+                            elif kernel_layout == "HWIO":
+                                kernel_size = tuple(kernel_type_info.checked_type.shape[0:2])
+                            else:
+                                raise ValueError("Quantizting kernel layout %s for conv2d is not yet supported. Please use OIHW or HWIO", kernel_layout)
                         else:
                             kernel_size = tuple([k.value for k in call.attrs[attr]])
+                        new_attr_dict[attr] = kernel_size
                     elif attr == 'channels':
                         channels = call.attrs[attr]
                         if channels is None:
-                            channels = kernel_type_info.checked_type.shape[0] #TODO: Change to work with more layouts
-                        channels = channels.value
+                            channels = kernel_type_info.checked_type.shape[weight_channel_axis].value
+                        new_attr_dict[attr] = channels
                     elif attr == 'padding':
-                        padding = call.attrs[attr]
+                        padding = call.attrs[attr] # Don't need to put padding in attr dict because we explicitly construct padding
                     else:
-                        new_attr_dict[str(attr)] = attr_value
+                        new_attr_dict[attr] = attr_value
 
-                #TODO Figure out if this could be better.
-                # Override output dtype.
                 new_attr_dict['out_dtype'] = 'int32'
 
                 # Create quantization variables for arguments to this convolution.
@@ -179,9 +200,9 @@ class Quantizer:
                 
                 # Quantize the data and construct args for qnn.conv2d
                 quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
-                quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
+                quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp, axis=weight_channel_axis)
 
-                args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale, kernel_size, channels]
+                args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
                 
                 if padding is not None:
                     #TODO: Need to make this work with other layouts.
@@ -192,7 +213,7 @@ class Quantizer:
 
                 # Construct quantized qnn.conv2d and dequantize
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
-                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype, axis=data_channel_axis) # TODO: FIX ME
 
                 # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
                 data_key = (data_scale, data_zp)
@@ -211,7 +232,7 @@ class Quantizer:
                 return dequantized_call
 
             elif call.op == relay.op.get('nn.dense'):
-                
+
                 pre_data, pre_weight = call.args[0], call.args[1]
                 data, weight = self.visit(pre_data), self.visit(pre_weight)
                 out_dtype = infer_type(call).checked_type.dtype
@@ -231,7 +252,7 @@ class Quantizer:
                 
                 # Quantize data and construct args for qnn.dense
                 quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
-                quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp)
+                quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp, axis=0) # Axis = 0 for per channel quantization
 
                 args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
 
@@ -240,10 +261,11 @@ class Quantizer:
                 if units is None:
                     weight_type_info = infer_type(call.args[1])
                     units = weight_type_info.checked_type.shape[0]
+                units = units.value
                 new_attr_dict['units'] = units
 
                 qnn_call = relay.qnn.op.dense(*args, **new_attr_dict)
-                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype, axis=1) # Dequantize axis = 1
 
                 # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
                 data_key = (data_scale, data_zp)
@@ -260,7 +282,7 @@ class Quantizer:
 
                 return dequantized_call
             elif call.op == relay.op.get('add'):
-                
+
                 pre_lhs, pre_rhs = call.args[0], call.args[1]
                 lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
                 out_dtype = infer_type(call).checked_type.dtype

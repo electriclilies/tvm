@@ -39,7 +39,9 @@ class Requantizer():
             # Ops that are permitted inbetween quantize and dequantize if we are rewriting to requantize
             self.is_int_8_op = is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool3d')(wildcard()) | \
                                is_op('nn.relu')(wildcard()) | is_op('transpose')(wildcard()) | is_op('reshape')(wildcard()) | is_op('nn.pad')(wildcard()) | \
-                               is_op('squeeze')(wildcard()) | is_op('nn.global_avg_pool2d') | is_op('nn.batch_flatten')
+                               is_op('squeeze')(wildcard()) | is_op('nn.global_avg_pool2d') | is_op('nn.batch_flatten') | is_op('copy') | \
+                               is_op('mean') | is_op('sqrt') #| is_op('multiply') | is_op('subtract') | is_op('add') | is_op('divide') | is_op('power')
+                               # TODO: Revisit dealing with the binops (commented out above)
 
             # Main pattern -- quantize(is_int_8_op*(dequantize(data))) -- (with 1 or more is_int_8_ops)
             self.dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
@@ -53,7 +55,6 @@ class Requantizer():
             self.no_path_quantize = is_op('qnn.quantize')(self.no_path_dequantize, self.quantize_scale, self.quantize_zp)
 
             self.pattern = self.quantize | self.no_path_quantize
-
 
         def callback(self, pre, post, node_map):
             # Extract data from the pattern
@@ -88,12 +89,15 @@ class Requantizer():
                     elif call.op == relay.op.get('transpose'):
                         transformed_data = relay.op.transpose(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('reshape'):
-                        # For some reason reverse is set as an attr (for topi?), but is not an argument to reshape
-                        # TODO: Change me to work correctly
-                        assert call.attrs['reverse'] == 0
-                        #attrs = call.attrs.copy()
-                        call.attrs.pop('reverse')
-                        transformed_data = relay.op.reshape(transformed_data, **call.attrs)
+                        # For some reason reverse is set as an attr, but is not an argument to reshape
+                        new_attr_dict = {}
+                        for key in call.attrs.keys():
+                            if key != 'reverse':
+                                new_attr_dict[key] = call.attrs[key]
+                        if call.attrs['reverse'] == 0:
+                            transformed_data = relay.op.reshape(transformed_data, **new_attr_dict)
+                        else:
+                            transformed_data = relay.op.reverse_reshape(transformed_data, **new_attr_dict)
                     elif call.op == relay.op.get('nn.pad'):
                         transformed_data = relay.op.nn.pad(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('squeeze'):
@@ -102,9 +106,15 @@ class Requantizer():
                         transformed_data = relay.op.nn.global_avg_pool2d(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('nn.batch_flatten'):
                         transformed_data = relay.op.nn.batch_flatten(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('copy'):
+                        transformed_data = relay.copy(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('mean'):
+                        transformed_data = relay.mean(transformed_data, **call.attrs)
+                    elif call.op == relay.op.get('sqrt'):
+                        transformed_data = relay.sqrt(transformed_data, **call.attrs)
                     else:
                         # TODO: turn into internal error message
-                        assert False, "Uh oh, you must have missed converting an op that is in is_int_8_op"
+                        raise ValueError("Uh oh, %s is not copied properly in the requantizer. ", str(call.op))
                 res = relay.qnn.op.requantize(transformed_data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)
             return res
 
@@ -165,16 +175,10 @@ class Requantizer():
     
     # Is it worth moving dequantizes as far down as possible so most things are in int8? Would be p easy to add.
     def requantize(self, mod):
-        print("Calibrated mod: \n", mod.astext(False))
+
         rewritten_func = rewrite(self.RequantizerCallback(), mod['main'], allow_overlapping_groups=True)
-        print("First rewrite done: \n", rewritten_func.astext(False))
-        #rewritten_func = rewrite(self.RequantizerResnetCallback(), rewritten_func, allow_overlapping_groups=True)
-        #print("Second rewrite done: \n", rewritten_func)
-        #exit()
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
-        print("Second rewrite done: \n", rewritten_func.astext(False))
         rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
-        print("Third rewrite done: \n", rewritten_func.astext(False))
         rewritten_mod = tvm.ir.IRModule()
         rewritten_mod['main'] = rewritten_func
 

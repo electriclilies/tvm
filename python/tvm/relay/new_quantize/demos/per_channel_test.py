@@ -53,6 +53,7 @@ class PerChannelTestCalibrater(Calibrater):
         op = self._get_layer_op()
         attrs = self._get_layer_attributes()
         # How will dequantize work? I don't know
+        
         if (op == relay.op.get('qnn.dense')):
             units = attrs['units']
             scales = np.random.randn(units).astype('float32')
@@ -62,7 +63,7 @@ class PerChannelTestCalibrater(Calibrater):
             value_dict[weight_zp.name_hint] = np.array(0).astype('int32')
             #value_dict[weight_scale.name_hint] = np.array(2.0).astype('float32')
             value_dict[weight_scale.name_hint] = scales
-
+        
         elif op == relay.op.get('qnn.conv2d'):
             channels = attrs['channels']
             scales = np.random.randn(channels).astype('float32')
@@ -72,6 +73,7 @@ class PerChannelTestCalibrater(Calibrater):
             value_dict[weight_zp.name_hint] = np.array(0).astype('int32')
             #value_dict[weight_scale.name_hint] = np.array(2.0).astype('float32')
             value_dict[weight_scale.name_hint] = scales
+            print(scales.shape)
         else:
             for (scale_var, zp_var) in variable_pairs:
                 value_dict[scale_var.name_hint] = np.array(2.0).astype('float32')
@@ -108,7 +110,7 @@ requantized_mod = Requantizer().requantize(calibrated_mod)
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
-    q_lib = relay.build(calibrated_mod, target='llvm')
+    q_lib = relay.build(requantized_mod, target='llvm')
 
 from tvm.contrib import graph_runtime
 q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))

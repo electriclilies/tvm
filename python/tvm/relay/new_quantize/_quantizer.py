@@ -27,7 +27,7 @@ from collections import OrderedDict
 
 class Quantizer:
 
-    def quantize(self, mod, params, skip_layers=[0], skip_ops=None):
+    def quantize(self, mod, params, skip_layers=[0], skip_ops=[]):
         """Inserts quantize and dequantize around every layer in the graph
 
         Parameters
@@ -55,7 +55,7 @@ class Quantizer:
             be used by the Calibrater
         
         """
-        quantize_mutator = self.QuantizeMutator(skip_layers)
+        quantize_mutator = self.QuantizeMutator(skip_layers, skip_ops)
 
         # SimplifyInference, FoldConstants, FoldScaleAxis
         preoptimized_mod = prerequisite_optimize(mod, params)
@@ -82,13 +82,15 @@ class Quantizer:
         
 
     class QuantizeMutator(ExprMutator):
-        def __init__(self, skip_layers):
+        def __init__(self, skip_layers, skip_ops):
             super().__init__()
 
             # If we are skipping layers, remove duplicates and sort
             self.skip_layers = list(set(skip_layers))
             self.skip_layers.sort()
             self.skip_layers_ptr = 0
+
+            self.skip_ops = skip_ops
 
             # Number of conv2d and dense we have seen
             self.compute_layer_count = 0
@@ -133,6 +135,11 @@ class Quantizer:
         def visit_call(self, call):
             if call.op == relay.op.get('nn.conv2d'):
                 
+                # Check whether skipping nn.conv
+                if relay.op.get('nn.conv2d') in self.skip_ops:
+                    return super().visit_call(call)
+
+                # Visit call inputs
                 pre_data, pre_weight = call.args[0], call.args[1]
                 data, weight = self.visit(pre_data), self.visit(pre_weight)
                 out_dtype = infer_type(call).checked_type.dtype
@@ -213,9 +220,9 @@ class Quantizer:
 
                 # Construct quantized qnn.conv2d and dequantize
                 qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
-                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype, axis=data_channel_axis) # TODO: FIX ME
+                dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype, axis=data_channel_axis)
 
-                # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
+                # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output), (relay_op, op_attributes))
                 data_key = (data_scale, data_zp)
                 weight_key = (weight_scale, weight_zp)
                 
@@ -227,12 +234,18 @@ class Quantizer:
                 dequantized_call_idx = self.add_quantized_subgraph(dequantized_call)
                 
                 self.output_index_map[(data_key, weight_key)] = (((pre_data_idx, pre_weight_idx), (quantized_data_idx, quantized_weight_idx)), (call_idx, dequantized_call_idx), (relay.op.get('qnn.conv2d'), new_attr_dict))
-                #TODO: fuse bias_add with conv2d during quantization
+                #TODO: fuse bias_add with conv2d during quantization.. not sure how this 
+                # Maybe make dense a fn and then if we find a dense in an add, call the fn
 
                 return dequantized_call
 
             elif call.op == relay.op.get('nn.dense'):
 
+                # Check whether skipping nn.dense
+                if relay.op.get('nn.dense') in self.skip_ops:
+                    return super().visit_call(call)
+
+                # Visit call inputs
                 pre_data, pre_weight = call.args[0], call.args[1]
                 data, weight = self.visit(pre_data), self.visit(pre_weight)
                 out_dtype = infer_type(call).checked_type.dtype
@@ -267,7 +280,7 @@ class Quantizer:
                 qnn_call = relay.qnn.op.dense(*args, **new_attr_dict)
                 dequantized_call = relay.qnn.op.dequantize(qnn_call, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype, axis=1) # Dequantize axis = 1
 
-                # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
+                # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output), (relay_op, op_attributes))
                 data_key = (data_scale, data_zp)
                 weight_key = (weight_scale, weight_zp)
 
@@ -283,9 +296,15 @@ class Quantizer:
                 return dequantized_call
             elif call.op == relay.op.get('add'):
 
+                # Check whether skipping add
+                if relay.op.get('nn.conv2d') in self.skip_ops:
+                    return super().visit_call(call)
+
+                # Visit call inputs
                 pre_lhs, pre_rhs = call.args[0], call.args[1]
                 lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
                 out_dtype = infer_type(call).checked_type.dtype
+                
                 # Don't quantize the add if it is in a skipped layer
                 if self.skip_layers and self.skip_layers_ptr != 0:
                     last_layer = self.compute_layer_count - 1
@@ -319,7 +338,7 @@ class Quantizer:
                 add = relay.op.add(requantized_lhs, requantized_rhs)
                 dequantized_call = relay.qnn.op.dequantize(add, add_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
-                # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
+                # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output), (relay_op, op_attributes))
                 lhs_key = (lhs_scale, lhs_zp)
                 rhs_key = (rhs_scale, rhs_zp)
                 
@@ -336,6 +355,11 @@ class Quantizer:
 
             elif call.op == relay.op.get('multiply'):
 
+                # Check whether skipping multiply
+                if relay.op.get('multiply') in self.skip_ops:
+                    return super().visit_call(call)
+
+                # Visit call inputs
                 pre_lhs, pre_rhs = call.args[0], call.args[1]
                 lhs, rhs = self.visit(pre_lhs), self.visit(pre_rhs)
                 out_dtype = infer_type(call).checked_type.dtype
@@ -365,7 +389,7 @@ class Quantizer:
                 multiply = relay.op.multiply(zeroed_quantized_lhs, zeroed_quantized_rhs)
                 dequantized_call = relay.qnn.op.dequantize(multiply, lhs_scale * rhs_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
-                # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output))
+                # For binop_output = binop(a, b), we map ((scale_a, zero_point_a), (scale_b, zero_point_b)) to (((a, b), (quantized_a, quantized_b)), (binop_output, quantized_binop_output), (relay_op, op_attributes))
                 lhs_key = (lhs_scale, lhs_zp)
                 rhs_key = (rhs_scale, rhs_zp)
 

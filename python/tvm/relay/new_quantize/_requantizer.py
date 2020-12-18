@@ -61,13 +61,14 @@ class Requantizer():
             data = node_map[self.data][0]
             dequantize_scale = node_map[self.dequantize_scale][0]
             dequantize_zp = node_map[self.dequantize_zp][0]
-
+            
             quantize_scale = node_map[self.quantize_scale][0]
             quantize_zp = node_map[self.quantize_zp][0]
 
             # Case where there are no ops in between the dequantize and quantize
             if self.no_path_quantize in node_map:
-                res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)
+                axis = node_map[self.no_path_dequantize][0].attrs.axis
+                res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp, axis=axis)
             # Ops inbetween quantize and dequantize are dominated
             elif self.quantize in node_map:
 
@@ -90,6 +91,7 @@ class Requantizer():
                         transformed_data = relay.op.transpose(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('reshape'):
                         # For some reason reverse is set as an attr, but is not an argument to reshape
+                        # TODO: get rid of me
                         new_attr_dict = {}
                         for key in call.attrs.keys():
                             if key != 'reverse':
@@ -115,7 +117,8 @@ class Requantizer():
                     else:
                         # TODO: turn into internal error message
                         raise ValueError("Uh oh, %s is not copied properly in the requantizer. ", str(call.op))
-                res = relay.qnn.op.requantize(transformed_data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp)
+                axis = node_map[self.dequantize][0].attrs.axis
+                res = relay.qnn.op.requantize(transformed_data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp, axis=axis)
             return res
 
     class RequantizeChainCallback(DFPatternCallback):
@@ -145,7 +148,7 @@ class Requantizer():
             len_child_zps = len(node_map[self.rq_child_zp])
             rq_child_zp = node_map[self.rq_child_zp][len_child_zps-1]
 
-            return relay.qnn.op.requantize(data, rq_parent_scale, rq_parent_zp, rq_child_scale, rq_child_zp)
+            return relay.qnn.op.requantize(data, rq_parent_scale, rq_parent_zp, rq_child_scale, rq_child_zp) # TODO: add axis here
 
 
     # Takes requantize(quantize(data, scale, zp), rscale, rzp) -> quantize(data, rscale, rzp)
@@ -171,7 +174,7 @@ class Requantizer():
             output_zp = node_map[self.output_zp][0]
 
             # Rewrite subgraph to just one quantize
-            return relay.qnn.op.quantize(data, output_scale, output_zp)
+            return relay.qnn.op.quantize(data, output_scale, output_zp) # TODO: Add axis here :) 
     
     # Is it worth moving dequantizes as far down as possible so most things are in int8? Would be p easy to add.
     def requantize(self, mod):

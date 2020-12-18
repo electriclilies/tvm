@@ -40,14 +40,14 @@ mnist_train_manager = TFDatasetManager(ds_train, batch_size, 12000)
 mnist_test_manager = TFDatasetManager(ds_test, batch_size, 2000)
 
 # Import onnx model, quantize and calibrate
-onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize_old/mnist_model.onnx')
+onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/mnist_model.onnx')
 input_dict = {'flatten_input': [batch_size, 28, 28, 1]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
-print(mod.astext(False))
+print(mod.astext())
 
 # Quantize
 quantized_mod, calibration_map = Quantizer().quantize(mod, params)
-print(quantized_mod)
+print(quantized_mod.astext())
 
 # Calibrate
 average_mean_calibrater = AverageMeanCalibrater(mnist_train_manager)

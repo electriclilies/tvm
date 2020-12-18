@@ -126,8 +126,7 @@ class Calibrater:
             self.layer_attrs = layer_attrs
 
             value_dict = self._calibration_callback(variable_pairs)
-            # Merge values picked for scale and zp variables to 
-            #print(self.calibration_map.scale_zp_value_map)
+            # Merge values picked for scale and zp variables in this iteration into scale_zp_value_map
             self.calibration_map.scale_zp_value_map.update(value_dict)
         
         # Create the calibrated module using the scales and zero points we just found

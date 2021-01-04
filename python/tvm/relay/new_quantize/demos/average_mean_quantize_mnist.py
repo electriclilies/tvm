@@ -57,7 +57,6 @@ print(calibrated_mod)
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
     q_lib = relay.build(calibrated_mod, target='llvm')
-
 from tvm.contrib import graph_runtime
 q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))
 gmod = graph_runtime.GraphModule(lib["default"](tvm.cpu()))

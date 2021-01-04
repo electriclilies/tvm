@@ -14,13 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=wildcard-import, redefined-builtin, invalid-name
-"""The namespace containing quantization and calibration passes"""
-from ._calibrater import CalibrationMap, Calibrater
-from ._quantizer import Quantizer
-from ._quantizer_pattern import *
-from ._requantizer import Requantizer
-from ._global_calibrater import GlobalCalibrater
-from ._average_mean_calibrater import AverageMeanCalibrater, PerChannelAverageMeanCalibrater, DatasetManager, TFDatasetManager
+"""DataFlow Pattern Language FFI bindings."""
+import tvm._ffi
 
-from . import _ffi as ffi
+tvm._ffi._init_api("relay.new_quantize", __name__)

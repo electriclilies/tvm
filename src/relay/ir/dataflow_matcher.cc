@@ -29,46 +29,11 @@
 
 #include <stack>
 
+#include "dataflow_matcher.h"
 #include "indexed_graph.h"
 
 namespace tvm {
 namespace relay {
-
-// Pattern Matcher
-
-class DominatorMatcher;
-
-class DFPatternMatcher : public DFPatternFunctor<bool(const DFPattern&, const Expr&)> {
- public:
-  explicit DFPatternMatcher(const Expr& root_expr) : expr_graph_(CreateIndexedGraph(root_expr)) {}
-  bool Match(const DFPattern& pattern, const Expr& expr);
-  Map<DFPattern, Array<Expr>> GetMemo() { return Map<DFPattern, Array<Expr>>(memo_); }
-  const IndexedGraph<Expr> expr_graph_;
-
- protected:
-  bool VisitDFPattern(const DFPattern& pattern, const Expr& expr) override;
-  bool VisitDFPattern_(const AltPatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const AttrPatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const CallPatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const ConstantPatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const DataTypePatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const DominatorPatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const ExprPatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const ShapePatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const TupleGetItemPatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const TuplePatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const TypePatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const VarPatternNode* op, const Expr& expr) override;
-  bool VisitDFPattern_(const WildcardPatternNode* op, const Expr& expr) override;
-
-  void ClearMap(size_t watermark);
-  bool MatchesPath(const DominatorPatternNode* op, const Expr& expr);
-  bool DominatesParent(const DominatorPatternNode* op, const Expr& expr);
-
-  std::unordered_map<DFPattern, Array<Expr>, ObjectPtrHash, ObjectPtrEqual> memo_;
-  std::vector<DFPattern> matched_nodes_;
-  bool memoize_ = true;
-};
 
 bool DFPatternMatcher::Match(const DFPattern& pattern, const Expr& expr) {
   memo_.clear();
@@ -647,8 +612,6 @@ class PatternGrouper {
     auto extractor = MatchExtractor(inputs);
     auto body = extractor.Mutate(expr);
     
-    // Verify the pattern still holds
-    ICHECK(DFPatternMatcher(body).Match(pattern_, body));
     group.function = Function(params, body, NullValue<Type>(), Array<TypeVar>());
     group.name = extractor.GetName();
     if (!allow_overlapping_groups_) {

@@ -3,7 +3,7 @@
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.new_quantize impor Quantizer, PerChannelAverageMeanCalibrater, DatasetManager, Requantizer
+from tvm.relay.new_quantize import Quantizer, AverageMeanCalibrater, DatasetManager, Requantizer, Calibrater
 
 from tensorflow.keras import datasets, layers, models
 import matplotlib.pyplot as plt
@@ -56,57 +56,32 @@ test_dataset_manager = NumpyDatasetManager(test_images, np.ndarray.flatten(test_
 onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/demos/cifar-model.onnx')
 input_dict = {'conv2d_input:0': [batch_size, 32, 32, 3]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
+
 # Quantize
 print("Quantizing...")
-quantized_mod, calibration_map = Quantizer().quantize(mod, params, skip_layers=[0])
-print("Quantized mod: \n", quantized_mod.astext(False))
 
+from tvm.relay.new_quantize import Conv2DBiasAddPattern, partition_outputs, rewrite_partitions
+
+callback = Conv2DBiasAddPattern()
+print("-----Prior-----")
+print(mod["main"])
+f = callback.pattern.partition(mod["main"])
+print("-----Partitioned------")
+print(f)
+print("-----Partitioned with Outputs------")
+f = partition_outputs(f)
+print(f)
+print("-----RewritePartitions------")
+f = rewrite_partitions(callback, f)
+print(f)
 # Calibrate
 print("Calibrating...")
-average_mean_calibrater = PerChannelAverageMeanCalibrater(train_dataset_manager)
-calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
-print("Calibrated mod: \n", calibrated_mod.astext(False))
+
+#class MyAverageMeanCalibrater(Calibrater):
+
+ 
 
 # Requantize
 print("Requantizing...")
-requantized_mod = Requantizer().requantize(calibrated_mod)
-print("Requantized mod: \n", requantized_mod.astext(False))
 
-
-print("Calculating accuracy...")
-with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-    lib = relay.build(mod, target='llvm')
-    q_lib = relay.build(requantized_mod, target='llvm')
-
-
-from tvm.contrib import graph_runtime
-q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))
-gmod = graph_runtime.GraphModule(lib["default"](tvm.cpu()))
-q_correct = 0
-correct = 0
-total = 0
-
-while not test_dataset_manager.is_empty():
-    image_list, label = test_dataset_manager.get_next_batch()
-    q_gmod.set_input(**{'conv2d_input:0': image_list[0]})
-    q_gmod.run()
-    q_out = q_gmod.get_output(0).asnumpy()
-
-    gmod.set_input(**{'conv2d_input:0': image_list[0]})
-    gmod.run()
-    out = gmod.get_output(0).asnumpy()
-
-    q_predicted_labels = np.argmax(q_out, axis=1)
-    predicted_labels = np.argmax(out, axis=1)
-
-    print("Int8 labels: ", q_predicted_labels)
-    print("Float32 labels: ", predicted_labels)
-    print("Actual labels: ", label)
-
-    q_correct += np.sum(q_predicted_labels == label)
-    correct += np.sum(predicted_labels == label)
-    total += batch_size
-
-print("Int8 percent correct: ", (q_correct / total) * 100)
-print("Float32 percent correct: ", (correct / total) * 100)
-print("Difference: ", (((correct / total) * 100) - ((q_correct / total) * 100)))
+# Calculate Accuracy

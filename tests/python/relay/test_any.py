@@ -54,6 +54,7 @@ def check_result(
     for kind in ["debug", "vm"]:
         targets = targets or tvm.testing.enabled_targets()
         for tgt, ctx in targets:
+            print(tgt)
             if disable_targets and tgt in disable_targets:
                 continue
             if kind == "debug" and (only_vm or ctx.device_type != tvm.cpu().device_type):
@@ -71,12 +72,11 @@ def check_result(
                         str(e),
                         str(r),
                     )
-                    return
-
-                if flatten:
-                    r = r.flatten()
-                    e = e.flatten()
-                tvm.testing.assert_allclose(r, e, atol=2e-6)
+                else:
+                    if flatten:
+                        r = r.flatten()
+                        e = e.flatten()
+                    tvm.testing.assert_allclose(r, e, atol=2e-6)
 
 
 def verify_any_broadcast(x_shape, y_shape, x_np_shape, y_np_shape, op, np_op):
@@ -199,6 +199,15 @@ def test_any_concat():
     ref = np.concatenate([x_np - 3.0, y_np * 5.0], axis=0)
     check_result([x_np, y_np], mod, ref)
 
+    num_inputs = 25
+    x = [relay.var("x", shape=(relay.Any(),), dtype="float32") for _ in range(num_inputs)]
+    z = relay.op.concatenate(x, axis=0)
+    mod = tvm.IRModule()
+    mod["main"] = relay.Function(x, z)
+    x_np = [np.random.uniform(size=(1,)).astype("float32") for _ in range(num_inputs)]
+    ref = np.concatenate(x_np, axis=0)
+    check_result(x_np, mod, ref)
+
 
 def verify_any_reshape(x_shape, newshape, x_np_shape, out_shape, variable_newshape=False):
     x = relay.var("x", shape=x_shape, dtype="float32")
@@ -240,9 +249,7 @@ def verify_any_argwhere(x_shape, x_np_shape, dtype="bool"):
     check_result([data], mod, expected, flatten=True)
 
 
-# TODO(zhiics) Enable argwhere gpu test after sort is fixed. Otherwise, we have
-# to use thrust to guarantee the correct results which has been tested locally.
-# @tvm.testing.uses_gpu
+@tvm.testing.uses_gpu
 def test_any_argwhere():
     verify_any_argwhere(any_dims(1), (5,))
     verify_any_argwhere(any_dims(2), (5, 5))
@@ -446,6 +453,7 @@ def verify_any_conv2d(
     dilation,
     static_data_shape,
     ref_out_shape,
+    use_cudnn=False,
 ):
     mod = tvm.IRModule()
     dtype = "float32"
@@ -455,7 +463,12 @@ def verify_any_conv2d(
     mod["main"] = relay.Function([data, kernel], y)
     data_np = np.random.uniform(size=static_data_shape).astype(dtype)
     kernel_np = np.random.uniform(size=kernel_shape).astype(dtype)
-    check_result([data_np, kernel_np], mod, ref_out_shape, assert_shape=True)
+
+    targets = None
+    if use_cudnn and tvm.get_global_func("tvm.contrib.cudnn.conv.output_shape", True):
+        targets = [("cuda -libs=cudnn", tvm.gpu(0))]
+
+    check_result([data_np, kernel_np], mod, ref_out_shape, assert_shape=True, targets=targets)
 
 
 # TODO(@kevinthesun): Support dynamic input height and width.
@@ -478,6 +491,16 @@ def test_any_conv2d():
         (2, 2),
         (2, 64, 224, 224),
         (2, 64, 222, 222),
+    )
+    verify_any_conv2d(
+        (relay.Any(), 64, 224, 224),
+        (64, 64, 3, 3),
+        (1, 1),
+        (1, 1),
+        (1, 1),
+        (1, 64, 224, 224),
+        (1, 64, 224, 224),
+        use_cudnn=True,
     )
 
 
@@ -572,9 +595,7 @@ def verify_any_conv2d_transpose_nchw(
     mod["main"] = relay.Function([data, kernel], y)
     data_np = np.random.uniform(size=static_data_shape).astype(dtype)
     kernel_np = np.random.uniform(size=kernel_shape).astype(dtype)
-    check_result(
-        [data_np, kernel_np], mod, ref_out_shape, assert_shape=True, targets=[("llvm", tvm.cpu())]
-    )
+    check_result([data_np, kernel_np], mod, ref_out_shape, assert_shape=True)
 
 
 # TODO(@kevinthesun): Support dynamic input height and width.
@@ -718,7 +739,13 @@ def test_any_batch_flatten():
 
 
 def verify_any_dense(
-    data_shape, weight_shape, units, static_data_shape, static_weight_shape, ref_out_shape
+    data_shape,
+    weight_shape,
+    units,
+    static_data_shape,
+    static_weight_shape,
+    ref_out_shape,
+    use_cublas=False,
 ):
     mod = tvm.IRModule()
     dtype = "float32"
@@ -728,7 +755,12 @@ def verify_any_dense(
     mod["main"] = relay.Function([data, weight], y)
     data_np = np.random.uniform(size=static_data_shape).astype(dtype)
     weight_np = np.random.uniform(size=static_weight_shape).astype(dtype)
-    check_result([data_np, weight_np], mod, ref_out_shape, assert_shape=True)
+
+    targets = None
+    if use_cublas and tvm.get_global_func("tvm.contrib.cublas.matmul", True):
+        targets = [("cuda -libs=cublas", tvm.gpu(0))]
+
+    check_result([data_np, weight_np], mod, ref_out_shape, assert_shape=True, targets=targets)
 
 
 # TODO(tvm-team) Fix dense schedule
@@ -736,6 +768,12 @@ def verify_any_dense(
 def test_any_dense():
     verify_any_dense(any_dims(2), any_dims(2), None, (4, 16), (8, 16), (4, 8))
     verify_any_dense(any_dims(2), (50, relay.Any()), 50, (4, 40), (50, 40), (4, 50))
+
+
+@tvm.testing.uses_gpu
+def test_any_dense_dynamic_batch():
+    verify_any_dense((relay.Any(), 40), (50, 40), 50, (4, 40), (50, 40), (4, 50))
+    verify_any_dense((relay.Any(), 40), (50, 40), 50, (4, 40), (50, 40), (4, 50), use_cublas=True)
 
 
 @tvm.testing.uses_gpu
@@ -831,8 +869,7 @@ def verify_any_topk(data_shape, kval, np_dshape, dtype, const_k=False):
     check_result(in_vals, mod, ref_out)
 
 
-# TODO(kevinthesun): enable this test when Thrust is available in ci.
-# @tvm.testing.uses_gpu
+@tvm.testing.uses_gpu
 def test_any_topk():
     verify_any_topk(any_dims(1), 5, (10,), "float32")
     verify_any_topk(any_dims(2), 2, (6, 3), "int32")
@@ -1421,6 +1458,21 @@ def test_non_max_suppression():
     np_max_output_size = -1
     np_indices_result = np.array([[4, 0, -1, -1, -1]])
     np_valid_box_count = np.array([[2]]).astype("int32")
+
+    check_result(
+        [np_data, np_valid_count, np_indices, np_max_output_size],
+        mod,
+        [np_indices_result, np_valid_box_count],
+        only_vm=False,
+        disable_targets=["nvptx"],
+    )
+
+    np_data = np.zeros((1, 0, 6)).astype("float32")
+    np_valid_count = np.array([0]).astype("int32")
+    np_indices = np.zeros((1, 0)).astype("int32")
+    np_max_output_size = -1
+    np_indices_result = np.zeros((1, 0))
+    np_valid_box_count = np.array([[0]]).astype("int32")
 
     check_result(
         [np_data, np_valid_count, np_indices, np_max_output_size],

@@ -157,12 +157,12 @@ class RewritePartitions : protected MixedModeMutator {
             // Get the indices of the arguments to this function in the output tuple
             for (auto arg : pre->args) {
               auto itr = std::find(orig_outputs_.begin(), orig_outputs_.end(), arg);
-              ICHECK(itr == orig_outputs_.end()) << "Didn't find the arugment in the output tuple. Indicates a possible problem in PartitionOutputs. "
+              ICHECK(itr == orig_outputs_.end()) << "Didn't find the arugment in the output tuple. Indicates a possible problem in PartitionOutputs. ";
               input_idx.push_back(std::distance(orig_outputs_.begin(), itr));
             }
             // Get the index of the output of this function 
-            auto itr = std::find(orig_outputs_.begin(), orig_outputs_.end(), pre);
-            ICHECK(itr == orig_outputs_.end()) << "Didn't find the output in the output tuple. Indicates a possible problem in PartitionOutputs. ")
+            auto itr = std::find(orig_outputs_.begin(), orig_outputs_.end(), GetRef<Expr>(pre));
+            ICHECK(itr == orig_outputs_.end()) << "Didn't find the output in the output tuple. Indicates a possible problem in PartitionOutputs. ";
             Integer output_idx(std::distance(orig_outputs_.begin(), itr));
 
             // FIND THE SCALE / ZPS

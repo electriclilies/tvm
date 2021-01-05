@@ -72,7 +72,7 @@ print("-----Partitioned with Outputs------")
 f = partition_outputs(f)
 print(f)
 print("-----RewritePartitions------")
-f = rewrite_partitions(callback, f)
+f = rewrite_partitions([callback], f)
 print(f)
 # Calibrate
 print("Calibrating...")

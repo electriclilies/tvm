@@ -163,6 +163,9 @@ def partition_outputs(expr):
     return ffi.partition_outputs(expr)
 def rewrite_partitions(callbacks, expr):
     return ffi.rewrite_partitions([_DFPatternCallback(callback.pattern, callback.callback, callback.require_type) for callback in callbacks], infer_type(expr))
+def lower_partitions(expr):
+    return ffi.lower_partitions(expr)
+
 # Step 1: Partition the Patterns
 #       Departition skipped layers
 # Step 2: Analyze paritioned graph for layer counts

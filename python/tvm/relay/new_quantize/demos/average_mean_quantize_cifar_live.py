@@ -60,7 +60,7 @@ mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 # Quantize
 print("Quantizing...")
 
-from tvm.relay.new_quantize import Conv2DBiasAddPattern, partition_outputs, rewrite_partitions
+from tvm.relay.new_quantize import Conv2DBiasAddPattern, partition_outputs, rewrite_partitions, lower_partitions
 
 callback = Conv2DBiasAddPattern()
 print("-----Prior-----")
@@ -70,18 +70,28 @@ print("-----Partitioned------")
 print(f)
 print("-----Partitioned with Outputs------")
 f = partition_outputs(f)
-print(f)
 print("-----RewritePartitions------")
 f = rewrite_partitions([callback], f)
+print(type(f))
+
+print("Keys: ", f.keys)
+
+print("Values: ", f.values)
+exit()
 print(f)
+
+print("-----Lower paritions--------")
+f = lower_partitions(f)
+print(f)
+print("Done")
 # Calibrate
-print("Calibrating...")
+#print("Calibrating...")
 
 #class MyAverageMeanCalibrater(Calibrater):
 
  
 
 # Requantize
-print("Requantizing...")
+#print("Requantizing...")
 
 # Calculate Accuracy

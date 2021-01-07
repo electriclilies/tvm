@@ -114,13 +114,16 @@ class PartitionOutputs : public MixedModeMutator {
 class RewritePartitions : protected MixedModeMutator {
  public:
   RewritePartitions(const Array<DFPatternCallback>& callbacks) : callbacks_(callbacks) {}
-  Expr Rewrite (const Expr& expr) {
+  Map<Expr, Array<PatternCalibrationInfo>> Rewrite (const Expr& expr) {
     // Preprocessing
     if (auto* func = expr.as<FunctionNode>()) {
       if (auto* tuple = func->body.as<TupleNode>()) {
         orig_outputs_ = tuple->fields;
       } else {
         orig_outputs_.push_back(func->body); 
+      }
+      for (auto param : func->params) {
+        new_params_.push_back(param);
       }
     } else {
       if (auto* tuple = expr.as<TupleNode>()) {
@@ -130,11 +133,42 @@ class RewritePartitions : protected MixedModeMutator {
       }
     }
     Expr new_out = MixedModeMutator::Mutate(expr);
-    // Postprocessin
 
-    return new_out;//{new_out, infos_};
+    // Add new parameters to the function
+    if (auto* new_out_func = new_out.as<FunctionNode>()) {
+      new_out = Function(new_params_, new_out_func->body, Type{}, Array<TypeVar>{}, new_out_func->attrs);
+    }
+    std::cout << infos_ << std::endl;
+    // TVM object system doesn't have pairs, so we'll return new_out and infos_ in a Map
+    Map<Expr, Array<PatternCalibrationInfo>> pair = {{new_out, infos_}};
+    return pair;//{new_out, infos_};
   }
  protected:
+  Array<Var> FindScaleZp(const Expr& input, const Expr& new_body) {
+    Array<Var> ScaleZp;
+    auto x = WildcardPattern(make_object<WildcardPatternNode>());
+    auto scale = WildcardPattern(make_object<WildcardPatternNode>());
+    auto zp = WildcardPattern(make_object<WildcardPatternNode>());
+    DFPattern pattern = IsOp("qnn.quantize")({x, scale, zp});
+    std::cout << pattern << std::endl;
+    runtime::PackedFunc callback([&](TVMArgs args, TVMRetValue* ret) {
+      Expr post = args[1];
+      std::cout << "in find Scale zp, post is" << std::endl << AsText(post, false) << std::endl;
+      Map<DFPattern, Array<Expr>> node_map = args[2];
+      auto push_back_var = [&](const Expr& expr) {
+        auto var_node = expr.as<VarNode>();
+        ICHECK(var_node) << "Found an input scale or zero point that wasn't a variable, bug in quantization callback ?";
+        ScaleZp.push_back(GetRef<Var>(var_node));
+      };
+      if (node_map[x][0] == input) {
+        push_back_var(node_map[scale][0]);
+        push_back_var(node_map[zp][0]);
+      }
+      *ret = post;
+    }); 
+    RewritePatterns({DFPatternCallback(pattern, callback, false)}, new_body);
+    return ScaleZp;
+  }
   Expr Rewrite_(const CallNode* pre, const Expr& post) { 
     // Cast the post as a call node and assert it actually is a call
     auto* post_node = post.as<CallNode>();
@@ -157,35 +191,35 @@ class RewritePartitions : protected MixedModeMutator {
             // Get the indices of the arguments to this function in the output tuple
             for (auto arg : pre->args) {
               auto itr = std::find(orig_outputs_.begin(), orig_outputs_.end(), arg);
-              ICHECK(itr == orig_outputs_.end()) << "Didn't find the arugment in the output tuple. Indicates a possible problem in PartitionOutputs. ";
+              ICHECK(itr != orig_outputs_.end()) << "Didn't find the arugment in the output tuple. Indicates a possible problem in PartitionOutputs. ";
               input_idx.push_back(std::distance(orig_outputs_.begin(), itr));
             }
             // Get the index of the output of this function 
             auto itr = std::find(orig_outputs_.begin(), orig_outputs_.end(), GetRef<Expr>(pre));
-            ICHECK(itr == orig_outputs_.end()) << "Didn't find the output in the output tuple. Indicates a possible problem in PartitionOutputs. ";
+            ICHECK(itr != orig_outputs_.end()) << "Didn't find the output in the output tuple. Indicates a possible problem in PartitionOutputs. ";
             Integer output_idx(std::distance(orig_outputs_.begin(), itr));
 
-            // FIND THE SCALE / ZPS
- 
-
-            /*outputs = [x, w, b, x2, w2, b2]
-            input_idx x -> 0
-            input_idx w -> 1
-            ...*/
             // create a new body based on the callback
             Expr new_body = callback->function(pre->op.as<FunctionNode>()->body, func_node->body, matcher.GetMemo());
+            std::cout << "new body" << new_body << std::endl;
+            // FIND THE SCALE / ZPS
+            Array<Array<Var>> input_scale_zps;
+            for (auto arg : call_args) {
+              input_scale_zps.push_back(FindScaleZp(arg, new_body));
+            }
+
+            infos_.push_back(PatternCalibrationInfo(callback->pattern, input_scale_zps, input_idx, output_idx));
             // find parameters added to the new body that weren't there before
             // find all of the free variables in the new body
             for (const auto& param : FreeVars(new_body)) {
               // check to see if that free variable is in the old parameter list
               if (std::find(params.begin(), params.end(), param) == params.end()) {
                 // if not, add it to the new parameter list
-                std::cout << param << std::endl;
                 params.push_back(param);
                 // Create a new call-level arg for it
-                call_args.push_back(Var(param->name_hint(), param->type_annotation));
                 // Make that new arg an input to the top-level function
-                new_params_.push_back(call_args.back());
+                new_params_.push_back(Var(param->name_hint(), param->type_annotation));
+                call_args.push_back(new_params_.back());
               }
             }
             // Create a new function with new params and body
@@ -200,14 +234,52 @@ class RewritePartitions : protected MixedModeMutator {
   }
   Array<DFPatternCallback> callbacks_;
   Array<PatternCalibrationInfo> infos_;
-  Array<Expr> new_params_;
+  Array<Var> new_params_;
   Array<Expr> orig_outputs_;
+};
+
+class ReplaceArgs : protected MixedModeMutator {
+  public:
+  Expr Rewrite(const Expr& body, std::unordered_map<Expr, Expr, ObjectPtrHash, ObjectPtrEqual> arg_map) {
+    // Leverage the memoizer to replace parameters with arguments automatically
+    memo_ = arg_map;
+    return MixedModeMutator::Mutate(body);
+  }
+};
+
+class LowerPartitions : protected MixedModeMutator {
+  public:
+  
+  Expr Rewrite(const Expr& expr) {
+    Expr new_out = MixedModeMutator::Mutate(expr);
+    return new_out;
+  }
+  Expr Rewrite_(const CallNode*pre, const Expr& post) {
+    auto* post_node = post.as<CallNode>(); // should this be pre or post?
+    ICHECK(post_node != nullptr);
+    if (auto* func_node = post_node->op.as<FunctionNode>()) {
+      // If the function was created by the pattern matcher, remove it
+      if (func_node->attrs.defined() && func_node->attrs->dict.count(attr::kPartitionedFromPattern) != 0) {
+        std::unordered_map<Expr, Expr, ObjectPtrHash, ObjectPtrEqual> arg_map = {};
+        Array<Expr> args = post_node->args;
+        Array<Var> params = func_node->params;
+        
+        for (uint i = 0; i < args.size(); i++) {
+          arg_map.insert({params[i], args[i]});
+        }
+        return ReplaceArgs().Rewrite(func_node->body, arg_map);
+      }
+    }
+    return post;
+  }
 };
 
 TVM_REGISTER_GLOBAL("relay.new_quantize.partition_outputs")
     .set_body_typed([](const Expr& expr) { return PartitionOutputs().GetPartitionOutputs(expr); });
 TVM_REGISTER_GLOBAL("relay.new_quantize.rewrite_partitions")
     .set_body_typed([](const Array<DFPatternCallback>& callbacks, const Expr& expr) { return RewritePartitions(callbacks).Rewrite(expr); });
+TVM_REGISTER_GLOBAL("relay.new_quantize.lower_partitions")
+    .set_body_typed([](const Expr& expr) { return LowerPartitions().Rewrite(expr); });
 }  // namespace quantize
 }  // namespace relay
 }  // namespace tvm

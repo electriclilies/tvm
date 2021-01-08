@@ -72,17 +72,15 @@ print("-----Partitioned with Outputs------")
 f = partition_outputs(f)
 print("-----RewritePartitions------")
 f = rewrite_partitions([callback], f)
-print(type(f))
+print(f['new_out'])
+print(f['infos_'])
 
-print("Keys: ", f.keys)
-
-print("Values: ", f.values)
 exit()
-print(f)
+
+
 
 print("-----Lower paritions--------")
 f = lower_partitions(f)
-print(f)
 print("Done")
 # Calibrate
 #print("Calibrating...")

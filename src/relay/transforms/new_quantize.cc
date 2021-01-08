@@ -81,7 +81,10 @@ class PartitionOutputs : public MixedModeMutator {
     new_outputs.clear();
     if (auto func = expr.as<FunctionNode>()) {
       new_outputs.push_back(func->body);
+    } else if (auto tuple = expr.as<TupleNode>()) {
+      new_outputs = tuple->fields; // Do I need to copy this explicitly?
     } else {
+      // TODO: check if tuple, if so, unpack and append all new outputs to this tuple
       new_outputs.push_back(expr);
     }
     VisitExpr(expr);
@@ -114,7 +117,7 @@ class PartitionOutputs : public MixedModeMutator {
 class RewritePartitions : protected MixedModeMutator {
  public:
   RewritePartitions(const Array<DFPatternCallback>& callbacks) : callbacks_(callbacks) {}
-  Map<Expr, Array<PatternCalibrationInfo>> Rewrite (const Expr& expr) {
+  Map<String, ObjectRef> Rewrite (const Expr& expr) {
     // Preprocessing
     if (auto* func = expr.as<FunctionNode>()) {
       if (auto* tuple = func->body.as<TupleNode>()) {
@@ -140,8 +143,8 @@ class RewritePartitions : protected MixedModeMutator {
     }
     std::cout << infos_ << std::endl;
     // TVM object system doesn't have pairs, so we'll return new_out and infos_ in a Map
-    Map<Expr, Array<PatternCalibrationInfo>> pair = {{new_out, infos_}};
-    return pair;//{new_out, infos_};
+    Map<String, ObjectRef> out_pair = {{"new_out", new_out}, {"infos_", infos_}};
+    return out_pair;//{new_out, infos_};
   }
  protected:
   Array<Var> FindScaleZp(const Expr& input, const Expr& new_body) {

@@ -21,7 +21,6 @@ from tvm import relay
 from tvm.relay.dataflow_pattern import is_op, wildcard, DFPatternCallback, _DFPatternCallback
 from tvm.relay.frontend.common import infer_type
 from tvm.relay.op.nn.utils import get_pad_tuple2d
-
 from . import _ffi as ffi
 
 # Target patterns
@@ -31,41 +30,57 @@ from . import _ffi as ffi
 # dense
 # add
 # multiply
+# Default calibration method
+class DefaultCalibrater():
+
+    def calibrate_pattern(self, calibration_info):
+        raise NotImplementedError
+
+# TODO: where should I live?
+class GlobalCalibrater(DefaultCalibrater):
+    def __init__(self, scale_value, zp_value):
+        self.scale_value = scale_value
+        self.zp_value = zp_value
+    def calibrate_pattern(self, calibration_info):
+        raise NotImplementedError
 
 class QuantizerPattern(DFPatternCallback):
     # Counts the number of times we've added a scale and zp for variable naming
     scales_count = 0
     zp_count = 0
 
-    def __init__(self):
+    def __init__(self, calibrator : DefaultCalibrater = None):
         super().__init__()
+        self.calibrator = calibrator
+
+    def calibrate_pattern(self, *args):
+        self.calibrator.calibrate_pattern(*args)
 
     def callback(self, pre, post, node_map):
         raise NotImplementedError
 
-    # Helper to construct the relay scale variable for this layer
+    # Helper to construct the relay scale variable in a pattern
     def scale(self, name):
         #var = relay.var(str(name) + "_scale_" + str(self.scales_count), shape=(te.size_var("channels"),), dtype='float32')
         var = relay.var(str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=(), dtype='float32')
         QuantizerPattern.scales_count += 1
         return var
 
-    # Helper to construct the relay zero_point variable for this layer
+    # Helper to construct the relay zero_point variable in a pattern
     def zero_point(self, name):
         #var = relay.var(str(name) + "_zero_pt_" + str(self.zp_count), shape=(te.size_var("channels"),), dtype='int32')
         var = relay.var(str(name) + "_zero_pt_" + str(QuantizerPattern.zp_count), shape=(), dtype='int32')
         QuantizerPattern.zp_count += 1
         return var
 
+#TODO : Move into a different file
 class Conv2DBiasAddPattern(QuantizerPattern):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, calibrator : DefaultCalibrater = None):
+        super().__init__(calibrator)
         self.input = wildcard()
         self.conv_weight = wildcard()
         self.bias_weight = wildcard() 
-        #def add(x):
-        #    return is_op('add')(x, self.bias_weight) | is_op('nn.bias_add')(x, self.bias_weight)
-        
+
         self.conv2d = is_op('nn.conv2d')(self.input, self.conv_weight)
         
         self.pattern = is_op('nn.bias_add')(self.conv2d, self.bias_weight)
@@ -134,14 +149,17 @@ class Conv2DBiasAddPattern(QuantizerPattern):
         data_zp = self.zero_point('conv2d_data')
         weight_scale = self.scale('conv2d_weight')
         weight_zp = self.zero_point('conv2d_weight')
-        bias_scale = self.scale('conv2d_bias')
-        bias_zp = self.zero_point('conv2d_bias')
 
         # Quantize the data and construct args for qnn.conv2d
 
         quantized_data = relay.qnn.op.quantize(data, data_scale, data_zp)
         quantized_weight = relay.qnn.op.quantize(weight, weight_scale, weight_zp, axis=weight_channel_axis)
-        quantized_bias = relay.qnn.op.quantize(bias, bias_scale, bias_zp)
+        
+        # Quantize bias the same way conv is quantized
+        conv_scale = data_scale * weight_scale
+        # Conv zp is zero since QNN deals with input zps for us
+        conv_zp = relay.const(0, dtype='int32')
+        quantized_bias = relay.qnn.op.quantize(bias, conv_scale, conv_zp)
         args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
 
 
@@ -155,16 +173,9 @@ class Conv2DBiasAddPattern(QuantizerPattern):
         # Construct quantized qnn.conv2d and dequantize
         qnn_call = relay.qnn.op.conv2d(*args, **new_attr_dict)
         bias_add = relay.op.nn.bias_add(qnn_call, quantized_bias)
-        dequantized_call = relay.qnn.op.dequantize(bias_add, data_scale * weight_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype, axis=data_channel_axis) # TODO: What to do with bias_add scale (probably just add it? )
+        dequantized_call = relay.qnn.op.dequantize(bias_add, conv_scale, conv_zp, out_dtype=out_dtype, axis=data_channel_axis)
 
         return dequantized_call
-
-def partition_outputs(expr):
-    return ffi.partition_outputs(expr)
-def rewrite_partitions(callbacks, expr):
-    return ffi.rewrite_partitions([_DFPatternCallback(callback.pattern, callback.callback, callback.require_type) for callback in callbacks], infer_type(expr))
-def lower_partitions(expr):
-    return ffi.lower_partitions(expr)
 
 # Step 1: Partition the Patterns
 #       Departition skipped layers
@@ -172,4 +183,9 @@ def lower_partitions(expr):
 # Step 3: Rewrite paritioned functions
 # Step 4: lower partitioned functions back into graph
 
-
+def partition_outputs(expr):
+    return ffi.partition_outputs(expr)
+def rewrite_partitions(callbacks, expr):
+    return ffi.rewrite_partitions([_DFPatternCallback(callback.pattern, callback.callback, callback.require_type) for callback in callbacks], infer_type(expr))
+def lower_partitions(expr):
+    return ffi.lower_partitions(expr)

@@ -84,7 +84,6 @@ class PartitionOutputs : public MixedModeMutator {
     } else if (auto tuple = expr.as<TupleNode>()) {
       new_outputs = tuple->fields; // Do I need to copy this explicitly?
     } else {
-      // TODO: check if tuple, if so, unpack and append all new outputs to this tuple
       new_outputs.push_back(expr);
     }
     VisitExpr(expr);
@@ -156,19 +155,24 @@ class RewritePartitions : protected MixedModeMutator {
     std::cout << pattern << std::endl;
     runtime::PackedFunc callback([&](TVMArgs args, TVMRetValue* ret) {
       Expr post = args[1];
-      std::cout << "in find Scale zp, post is" << std::endl << AsText(post, false) << std::endl;
+      //std::cout << "in find Scale zp, post is" << std::endl << AsText(post, false) << std::endl;
       Map<DFPattern, Array<Expr>> node_map = args[2];
+  
       auto push_back_var = [&](const Expr& expr) {
+        std::cout << "Pushing back: " << expr << std::endl;
         auto var_node = expr.as<VarNode>();
         ICHECK(var_node) << "Found an input scale or zero point that wasn't a variable, bug in quantization callback ?";
         ScaleZp.push_back(GetRef<Var>(var_node));
       };
-      if (node_map[x][0] == input) {
+      std::cout << "quantized node map item: " << node_map[x][0] << std::endl;
+      if (node_map[x][0] == input) { // TODO: this is WRONG!
+        std::cout << "Pushing back scale and zp" << std::endl;
         push_back_var(node_map[scale][0]);
         push_back_var(node_map[zp][0]);
       }
+      
       *ret = post;
-    }); 
+    });
     RewritePatterns({DFPatternCallback(pattern, callback, false)}, new_body);
     return ScaleZp;
   }
@@ -189,7 +193,6 @@ class RewritePartitions : protected MixedModeMutator {
             Array<Var> params = func_node->params;
             Array<Expr> call_args = post_node->args;
 
-            //PatternCalibrationInfo info(callback->pattern, );
             Array<Integer> input_idx;
             // Get the indices of the arguments to this function in the output tuple
             for (auto arg : pre->args) {
@@ -207,8 +210,9 @@ class RewritePartitions : protected MixedModeMutator {
             std::cout << "new body" << new_body << std::endl;
             // FIND THE SCALE / ZPS
             Array<Array<Var>> input_scale_zps;
-            for (auto arg : call_args) {
-              input_scale_zps.push_back(FindScaleZp(arg, new_body));
+            for (auto param : params) { // Why is arg a CallPatternNode?
+              std::cout << "arg to pass into FindScaleZp: " << std::endl;
+              input_scale_zps.push_back(FindScaleZp(param, new_body));
             }
 
             infos_.push_back(PatternCalibrationInfo(callback->pattern, input_scale_zps, input_idx, output_idx));

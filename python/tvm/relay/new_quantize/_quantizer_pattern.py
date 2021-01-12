@@ -91,8 +91,6 @@ class Conv2DBiasAddPattern(QuantizerPattern):
         bias = node_map[self.bias_weight][0]
         conv2d = node_map[self.conv2d][0]
 
-        print("Post node: \n", post)
-        print()
         # TODO: put the layout stuff in here
         attrs = conv2d.attrs
         out_dtype = conv2d.checked_type.dtype

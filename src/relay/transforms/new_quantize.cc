@@ -29,6 +29,8 @@
 
 #include "../ir/dataflow_matcher.h"
 
+// IF scale / zp of quantize is an expr, then we don't want to include it as an argument to the function.
+
 namespace tvm {
 namespace relay {
 namespace quantize {
@@ -157,18 +159,20 @@ class RewritePartitions : protected MixedModeMutator {
       Expr post = args[1];
       //std::cout << "in find Scale zp, post is" << std::endl << AsText(post, false) << std::endl;
       Map<DFPattern, Array<Expr>> node_map = args[2];
-  
-      auto push_back_var = [&](const Expr& expr) {
-        std::cout << "Pushing back: " << expr << std::endl;
-        auto var_node = expr.as<VarNode>();
-        ICHECK(var_node) << "Found an input scale or zero point that wasn't a variable, bug in quantization callback ?";
-        ScaleZp.push_back(GetRef<Var>(var_node));
-      };
-      std::cout << "quantized node map item: " << node_map[x][0] << std::endl;
-      if (node_map[x][0] == input) { // TODO: this is WRONG!
-        std::cout << "Pushing back scale and zp" << std::endl;
-        push_back_var(node_map[scale][0]);
-        push_back_var(node_map[zp][0]);
+
+      if (node_map[x][0] == input) {
+        auto scale_var = node_map[scale][0].as<VarNode>();
+        auto zp_var = node_map[zp][0].as<VarNode>();
+
+        CHECK((scale_var && zp_var) || (!scale_var && !zp_var)) << "The scale and zero point passed to a " <<
+        "qnn.quantize must both be expressions composed of other variables, or be variables themselves. " <<
+        "Please change the AST returned from your QuantizerPattern to meet this requirement.";
+
+        // Only add them to the list of scales / zps we will set later if they are not expressions
+        if (scale_var && zp_var) {
+          ScaleZp.push_back(GetRef<Var>(scale_var));
+          ScaleZp.push_back(GetRef<Var>(zp_var));
+        }
       }
       
       *ret = post;
@@ -207,12 +211,16 @@ class RewritePartitions : protected MixedModeMutator {
 
             // create a new body based on the callback
             Expr new_body = callback->function(pre->op.as<FunctionNode>()->body, func_node->body, matcher.GetMemo());
-            std::cout << "new body" << new_body << std::endl;
+            
             // FIND THE SCALE / ZPS
             Array<Array<Var>> input_scale_zps;
-            for (auto param : params) { // Why is arg a CallPatternNode?
-              std::cout << "arg to pass into FindScaleZp: " << std::endl;
-              input_scale_zps.push_back(FindScaleZp(param, new_body));
+            for (auto param : params) {
+              Array<Var> scale_zp = FindScaleZp(param, new_body);
+              // If FindScaleZp returns an empty array, we don't need to provide these as parameters
+              if(scale_zp.size() != 0) {
+                ICHECK(scale_zp.size() == 2) << "scale_zp should have two items in it, the scale variable and the zp variable. This points to an issue with FindScaleZp. ";
+                input_scale_zps.push_back(FindScaleZp(param, new_body));
+              }
             }
 
             infos_.push_back(PatternCalibrationInfo(callback->pattern, input_scale_zps, input_idx, output_idx));

@@ -24,27 +24,29 @@ from tvm.contrib import graph_runtime
 
 class Quantizer():
     def __init__(self, func, patterns: List[QuantizerPattern]): # we said List[ConcretePattern] is that actually a class
+        print("Starting to quantize!")
         self.patterns = patterns
         self.orig_func = func
         
         # Partition the func into sub functions containing the patterns we want to quantize
         for q_pattern in self.patterns:
             partitioned_func = q_pattern.pattern.partition(func)
-        
-        # Add outputs necessary for calibration, and flatten partition funcs
+        print("Partitioned")
+        # Add outputs necessary for calibration
         tuple_subgraph_func = partition_outputs(partitioned_func)
-        
+        print("Added subgraphs")
         # TODO: should we lower for tuple_subgraph_mod? I'm not sure... 
         # Lower the multi-output graph to remove the partitions
         tuple_subgraph_mod = tvm.ir.IRModule()
         tuple_subgraph_mod['main'] = tuple_subgraph_func
         
         self.tuple_subgraph_mod = tuple_subgraph_mod
-        
+        print("created mod")
         # Rewrite the multi-output graph to be quantized, and flatten partition funcs
         outs = rewrite_partitions(self.patterns, tuple_subgraph_func)
+        print("tried to rewrite")
         q_tuple_subgraph_func = outs['new_out']
-
+        print("rewrote")
         # Information about each partition used for calibration
         self.partition_infos = outs['infos_']
         

@@ -57,11 +57,11 @@ input_dict = {'conv2d_input:0': [batch_size, 32, 32, 3]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 
 # Quantize
-print("Quantizing...")
 
 from tvm.relay.new_quantize import Conv2DBiasAddPattern, partition_outputs, rewrite_partitions, lower_partitions
 
 # TODO: fix me!
+
 quantizer = _quantizer2.Quantizer(mod['main'], [Conv2DBiasAddPattern(GlobalCalibrater(2.0, 0))])
 print("Quantizer created")
 calibrater = _calibrater2.Calibrater(quantizer, target='llvm', ctx=tvm.cpu())
@@ -73,18 +73,17 @@ exit()
 
 callback = Conv2DBiasAddPattern()
 print("-----Prior-----")
-#print(mod["main"])
+print(mod["main"])
 f = callback.pattern.partition(mod["main"])
 print("-----Partitioned------")
-#print(f)
+print(f)
 print("-----Partitioned with Outputs------")
 f = partition_outputs(f)
 print("-----RewritePartitions------")
 f = rewrite_partitions([callback], f)
-#print(f['new_out'])
+print(f['new_out'])
 #print(f['infos_'])
 infos = f['infos_']
-
 for i in infos:
     for count in range(len(i.input_scale_zps)):
         print(i.input_scale_zps[count])

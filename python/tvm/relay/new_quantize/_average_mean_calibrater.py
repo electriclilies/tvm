@@ -17,7 +17,7 @@
 
 import tvm
 from tvm import relay
-from tvm.relay.new_quantize import Calibrater
+#from tvm.relay.new_quantize import Calibrater
 
 #import tensorflow.compat.v2 as tf
 #import tensorflow_datasets as tfds
@@ -169,50 +169,3 @@ class PerChannelAverageMeanCalibrater(Calibrater):
             print("Set ", zp_var.name_hint, " to ", 0)
 
         return value_dict
-
-
-
-# TODO: Where to put dataset manager?
-class DatasetManager():
-    def __init__(self):
-        raise NotImplementedError
-
-    def get_next_batch(self):
-        raise NotImplementedError
-
-    def num_batches(self):
-        raise NotImplementedError
-
-    def is_empty(self):
-        raise NotImplementedError
-
-    def reset(self):
-        raise NotImplementedError
-
-class TFDatasetManager(DatasetManager):
-    def __init__(self, tf_dataset, batch_size, n_batches):
-        self.idx = 0
-        self.n_batches = n_batches
-        self.batch_size = batch_size
-        self.tf_dataset = tf_dataset
-        self.tf_iter = iter(self.tf_dataset)
-    
-    # Returns the next batch of data
-    def get_next_batch(self):
-        if self.is_empty():
-            raise IndexError
-        self.idx += 1
-        
-        data, label = next(self.tf_iter)
-        return [data.numpy()], label.numpy()
-    
-    def num_batches(self):
-        return self.n_batches
-
-    def is_empty(self):
-        return self.idx >= self.n_batches
-
-    # TODO: either reset automatically at the end of get batch or have a is_empty util
-    def reset(self):
-        self.tf_iter = iter(self.tf_dataset)
-        self.idx = 0

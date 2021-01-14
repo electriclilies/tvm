@@ -16,12 +16,11 @@
 # under the License.
 # pylint: disable=wildcard-import, redefined-builtin, invalid-name
 """The namespace containing quantization and calibration passes"""
-from ._quantizer_pattern import GlobalCalibrater, Conv2DBiasAddPattern, QuantizerPattern, partition_outputs, rewrite_partitions, lower_partitions
+from ._default_calibraters import DefaultCalibrater, GlobalCalibrater
+from ._quantizer_pattern import Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern, QuantizerPattern, partition_outputs, rewrite_partitions, lower_partitions
 from ._dataset_manager import DatasetManager, TFDatasetManager
-from ._quantizer2 import Quantizer
-from ._calibrater2 import Calibrater
+from ._quantizer import Quantizer
+from ._calibrater import Calibrater
 from ._requantizer import Requantizer
-#from ._global_calibrater import GlobalCalibrater
-#from ._average_mean_calibrater import AverageMeanCalibrater, PerChannelAverageMeanCalibrater, DatasetManager, TFDatasetManager
 
 from . import _ffi as ffi

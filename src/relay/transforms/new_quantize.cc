@@ -40,7 +40,7 @@ class PatternCalibrationInfoNode : public Object { // Change name later
   DFPattern pattern; 
 
   Array<Array<Var>> input_scale_zps;
-  Array<Integer> input_idxs;
+  Array<Integer> input_idxs; // is integer a relay type? probably
   Integer output_idx;
 
   void VisitAttrs(tvm::AttrVisitor* v) {
@@ -85,7 +85,7 @@ class PartitionOutputs : public MixedModeMutator {
       new_outputs.push_back(func->body);
     } else if (auto tuple = expr.as<TupleNode>()) {
       new_outputs = tuple->fields; // Do I need to copy this explicitly?
-    } else {
+    } else { 
       new_outputs.push_back(expr);
     }
     VisitExpr(expr);
@@ -111,7 +111,7 @@ class PartitionOutputs : public MixedModeMutator {
     }
     return post;
   }
-  
+
   Array<Expr> new_outputs;
 };
 

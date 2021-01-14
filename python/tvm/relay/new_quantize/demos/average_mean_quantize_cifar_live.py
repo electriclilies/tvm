@@ -58,16 +58,19 @@ mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 
 # Quantize
 
-from tvm.relay.new_quantize import Conv2DBiasAddPattern, partition_outputs, rewrite_partitions, lower_partitions
+from tvm.relay.new_quantize import Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern, partition_outputs, rewrite_partitions, lower_partitions
 
 # TODO: fix me!
 
-quantizer = _quantizer2.Quantizer(mod['main'], [Conv2DBiasAddPattern(GlobalCalibrater(2.0, 0))])
+c = GlobalCalibrater(2.0, 0)
+quantizer = _quantizer2.Quantizer(mod['main'], [Conv2DBiasAddPattern(c), Conv2DPattern(c), DensePattern(c), AddPattern(c), MultiplyPattern(c)])
 print("Quantizer created")
 calibrater = _calibrater2.Calibrater(quantizer, target='llvm', ctx=tvm.cpu())
 print("Calibrater created")
 calibrater.calibrate()
 print("Everything worked...")
+print(calibrater.calibration_info.scale_zp_value_map) 
+print("Done")
 exit()
 
 
@@ -89,7 +92,6 @@ for i in infos:
         print(i.input_scale_zps[count])
         print(i.input_scale_zps[count][0])
         print(i.input_scale_zps[count][1])
-
 
 """
 print("-----Lower paritions--------")

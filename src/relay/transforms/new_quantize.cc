@@ -142,7 +142,6 @@ class RewritePartitions : protected MixedModeMutator {
     if (auto* new_out_func = new_out.as<FunctionNode>()) {
       new_out = Function(new_params_, new_out_func->body, Type{}, Array<TypeVar>{}, new_out_func->attrs);
     }
-    std::cout << infos_ << std::endl;
     // TVM object system doesn't have pairs, so we'll return new_out and infos_ in a Map
     Map<String, ObjectRef> out_pair = {{"new_out", new_out}, {"infos_", infos_}};
     return out_pair;//{new_out, infos_};
@@ -154,10 +153,9 @@ class RewritePartitions : protected MixedModeMutator {
     auto scale = WildcardPattern(make_object<WildcardPatternNode>());
     auto zp = WildcardPattern(make_object<WildcardPatternNode>());
     DFPattern pattern = IsOp("qnn.quantize")({x, scale, zp});
-    std::cout << pattern << std::endl;
+
     runtime::PackedFunc callback([&](TVMArgs args, TVMRetValue* ret) {
       Expr post = args[1];
-      //std::cout << "in find Scale zp, post is" << std::endl << AsText(post, false) << std::endl;
       Map<DFPattern, Array<Expr>> node_map = args[2];
 
       if (node_map[x][0] == input) {

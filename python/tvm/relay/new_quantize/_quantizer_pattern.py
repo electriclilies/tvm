@@ -36,7 +36,6 @@ class QuantizerPattern(DFPatternCallback):
         self.calibrator = calibrator
 
     def calibrate_pattern(self, *args):
-        print("Quantizer Pattern calibrate_pattern called")
         return self.calibrator.calibrate_pattern(*args)
 
     def callback(self, pre, post, node_map):
@@ -310,7 +309,6 @@ class AddPattern(QuantizerPattern):
         self.pattern = self.add
     
     def callback(self, pre, post, node_map):
-        print("Add callback worked")
         lhs = node_map[self.lhs][0]
         rhs = node_map[self.rhs][0]
 

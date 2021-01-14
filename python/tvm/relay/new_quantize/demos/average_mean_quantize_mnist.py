@@ -1,6 +1,6 @@
 import tvm
 from tvm import relay
-from tvm.relay.new_quantize import Quantizer, TFDatasetManager, AverageMeanCalibrater
+from tvm.relay.new_quantize import Quantizer, Calibrater, TFDatasetManager, AverageMeanCalibrater, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
 import onnx
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -45,14 +45,10 @@ input_dict = {'flatten_input': [batch_size, 28, 28, 1]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 print(mod.astext())
 
-# Quantize
-quantized_mod, calibration_map = Quantizer().quantize(mod, params)
-print(quantized_mod.astext())
-
-# Calibrate
-average_mean_calibrater = AverageMeanCalibrater(mnist_train_manager)
-calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
-print(calibrated_mod)
+c = AverageMeanCalibrater(mnist_train_manager)
+quantizer = Quantizer(mod, params, [Conv2DBiasAddPattern(c), Conv2DPattern(c), AddPattern(c), MultiplyPattern(c)])
+calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu())
+calibrated_mod = calibrater.calibrate()
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
@@ -65,12 +61,13 @@ correct = 0
 total = 0
 
 while not mnist_test_manager.is_empty():
-    image, label = mnist_test_manager.get_next_batch()
-    q_gmod.set_input(**{'flatten_input': image})
+    images, labels = mnist_test_manager.get_next_batch()
+
+    q_gmod.set_input(**{'flatten_input': images[0]})
     q_gmod.run()
     q_out = q_gmod.get_output(0).asnumpy()
 
-    gmod.set_input(**{'flatten_input': image})
+    gmod.set_input(**{'flatten_input': images[0]})
     gmod.run()
     out = gmod.get_output(0).asnumpy()
 
@@ -79,10 +76,10 @@ while not mnist_test_manager.is_empty():
 
     print("Int8 labels: ", q_predicted_labels)
     print("Float32 labels: ", predicted_labels)
-    print("Actual labels: ", label)
+    print("Actual labels: ", labels)
 
-    q_correct += np.sum(q_predicted_labels == label)
-    correct += np.sum(predicted_labels == label)
+    q_correct += np.sum(q_predicted_labels == labels)
+    correct += np.sum(predicted_labels == labels)
     total += batch_size
 
 print("Int8 percent correct: ", (q_correct / total) * 100)

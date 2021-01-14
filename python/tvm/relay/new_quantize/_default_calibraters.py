@@ -38,6 +38,7 @@ class GlobalCalibrater(DefaultCalibrater):
             scale_zp_values[scale_name] = self.scale_value
             zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
             scale_zp_values[zp_name] = self.zp_value
+        
         inputs = [np.random.rand(20, 32, 32, 3)]
 
         # TODO: move this into a testing calibrater
@@ -55,13 +56,13 @@ class AverageMeanCalibrater(DefaultCalibrater):
     def calibrate_pattern(self, calibration_info):
         scale_zp_values = {}
         
-        min_sums = np.zeros(shape=(len(calibration_info.input_scale_zps)))
-        max_sums = np.zeros(shape=(len(calibration_info.input_scale_zps)))
+        min_sums = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
+        max_sums = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
 
         while not self.dataset_manager.is_empty():
             # Get the original input from dataset manger, run unquantized graph with those inputs
             image_list, _ = self.dataset_manager.get_next_batch()
-            unquantized_inputs = calibration_info._get_unquantized_layer_inputs(image_list)
+            unquantized_inputs = calibration_info.get_unquantized_layer_inputs(image_list)
 
             # Iterate through scale and zp variables 
             for i, unquantized_input in enumerate(unquantized_inputs):            
@@ -87,7 +88,7 @@ class AverageMeanCalibrater(DefaultCalibrater):
             zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
             scale_zp_values[zp_name] = np.array(0).astype('int32')
         
-            print("Set ", scale_name.name_hint, " to ", scale_value)
-            print("Set ", zp_name.name_hint, " to ", 0)
+            print("Set ", scale_name, " to ", scale_value)
+            print("Set ", zp_name, " to ", 0)
 
         return scale_zp_values

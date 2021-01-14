@@ -23,14 +23,18 @@ import numpy as np
 from tvm.contrib import graph_runtime
 
 class Quantizer():
-    def __init__(self, func, patterns: List[QuantizerPattern]): # we said List[ConcretePattern] is that actually a class
+    def __init__(self, mod, params, patterns: List[QuantizerPattern]): # we said List[ConcretePattern] is that actually a class
         self.patterns = patterns
-        self.orig_func = func
+        self.original_func = prerequisite_optimize(mod, params)['main']
 
-        # TODO: do I need prerequisite_optimize?
-
+        # num_original outputs is zero if output is not a Tuple, else is length of tuple
+        if (isinstance(self.original_func.body, tvm.relay.expr.Tuple)):
+            self.num_original_outputs = len(self.original_func.body)
+        else:
+            self.num_original_outputs = 0
+        
         # Partition the func into sub functions containing the patterns we want to quantize
-        partitioned_func = func
+        partitioned_func = self.original_func
         for q_pattern in self.patterns:
             partitioned_func = q_pattern.pattern.partition(partitioned_func)
 
@@ -55,6 +59,7 @@ class Quantizer():
         q_tuple_subgraph_mod['main'] = lower_partitions(q_tuple_subgraph_func)
         
         self.q_tuple_subgraph_mod = q_tuple_subgraph_mod
+        
     
 def prerequisite_optimize(mod, params=None):
     """ Prerequisite optimization passes for quantization. Perform
@@ -73,3 +78,5 @@ def prerequisite_optimize(mod, params=None):
 
     with relay.build_config(opt_level=3):
         mod = optimize(mod)
+    
+    return mod

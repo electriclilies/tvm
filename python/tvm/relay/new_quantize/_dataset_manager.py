@@ -46,6 +46,7 @@ class TFDatasetManager(DatasetManager):
         self.idx += 1
         
         data, label = next(self.tf_iter)
+
         return [data.numpy()], label.numpy()
     
     def num_batches(self):

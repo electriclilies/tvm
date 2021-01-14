@@ -18,7 +18,7 @@
 import tvm
 from tvm import relay
 from tvm.contrib import graph_runtime
-from ._quantizer2 import Quantizer
+from tvm.relay.new_quantize import Quantizer
 import numpy as np
 
 class Calibrater():
@@ -42,7 +42,17 @@ class Calibrater():
             self.calibration_info.update_scale_zp_map(scale_zps)
     
         # TODO: Should this return a mod with params bound in it or just a list of the scales/zps
-        return self.calibration_info.scale_zp_value_map
+        calibrated_func = relay.build_module.bind_params_by_name(self.quantizer.q_tuple_subgraph_mod['main'], self.calibration_info.scale_zp_value_map)
+        # I need the final output... how to do this.
+
+        # If num_original_outputs is 0, original output wasn't a tuple
+        if (self.quantizer.num_original_outputs == 0):
+            calibrated_func.body = calibrated_func.body.fields[0]
+        else:
+            calibrated_func.body = relay.Tuple(calibrated_func.body.fields[0:self.quantizer.num_original_outputs])
+
+        calibrated_mod = tvm.ir.IRModule.from_expr(calibrated_func)
+        return calibrated_mod
             
 # Helper class -- rename me?
 class CalibrationInfo():
@@ -80,9 +90,6 @@ class CalibrationInfo():
     def set_current_partition_info(self, partition_info):
         self.partition_info = partition_info
 
-    def get_current_partition_info(self):
-        return self.partition_info
-    
     def update_scale_zp_map(self, new_scale_zps):
         self.scale_zp_value_map.update(new_scale_zps)
 
@@ -200,4 +207,3 @@ class CalibrationInfo():
             The output of the quantized layer.
         """
         return self._run_quantized_tuple_mod(data, current_layer_scale_zps, [self.partition_info.output_idx])
-

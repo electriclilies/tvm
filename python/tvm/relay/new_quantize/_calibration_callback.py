@@ -18,13 +18,12 @@ from tvm.relay.new_quantize import DatasetManager
 
 import numpy as np
 
-# TODO: this should be renamed, so it doesn't have the same name as the other class
-class DefaultCalibrater():
+class CalibrationCallback():
 
-    def calibrate_pattern(self, calibration_info):
+    def calibrate_pattern(self, info):
         raise NotImplementedError
 
-class GlobalCalibrater(DefaultCalibrater):
+class GlobalCalibrationCallback(CalibrationCallback):
     def __init__(self, scale_value, zp_value):
         self.scale_value = np.array(scale_value).astype('float32')
         self.zp_value = np.array(zp_value).astype('int32')
@@ -49,19 +48,17 @@ class GlobalCalibrater(DefaultCalibrater):
 
         return scale_zp_values
 
-class AverageMeanCalibrater(DefaultCalibrater):
-    def __init__(self, dataset_manager):
-        self.dataset_manager = dataset_manager
-    
+class AverageMeanCalibrationCallback(CalibrationCallback):
+
     def calibrate_pattern(self, calibration_info):
         scale_zp_values = {}
         
         min_sums = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
         max_sums = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
 
-        while not self.dataset_manager.is_empty():
+        while not calibration_info.dataset_manager.is_empty():
             # Get the original input from dataset manger, run unquantized graph with those inputs
-            image_list, _ = self.dataset_manager.get_next_batch()
+            image_list, _ = calibration_info.dataset_manager.get_next_batch()
             unquantized_inputs = calibration_info.get_unquantized_layer_inputs(image_list)
 
             # Iterate through scale and zp variables 
@@ -71,10 +68,10 @@ class AverageMeanCalibrater(DefaultCalibrater):
                 min_sums[i] += np.min(unquantized_input)
                 max_sums[i] += np.max(unquantized_input)
         
-        self.dataset_manager.reset()
+        calibration_info.dataset_manager.reset()
 
-        avg_mins = min_sums / self.dataset_manager.num_batches()
-        avg_maxs = max_sums / self.dataset_manager.num_batches()
+        avg_mins = min_sums / calibration_info.dataset_manager.num_batches()
+        avg_maxs = max_sums / calibration_info.dataset_manager.num_batches()
 
         # Threshold for quantization of an input to a layer is mean(abs(avg_max), abs(avg_min))
         thresholds = np.mean([np.abs(avg_mins), np.abs(avg_maxs)], axis=0)

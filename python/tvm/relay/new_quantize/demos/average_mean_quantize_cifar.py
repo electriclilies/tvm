@@ -3,7 +3,7 @@
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.new_quantize impor Quantizer, PerChannelAverageMeanCalibrater, DatasetManager, Requantizer
+from tvm.relay.new_quantize import Quantizer, Calibrater, AverageMeanCalibrationCallback, DatasetManager, Requantizer, AverageMeanPerChannelConv2DBiasAddPattern, AverageMeanPerChannelConv2DPattern, DensePattern, AddPattern, MultiplyPattern, AverageMeanPerChannelConv2DBiasAddPattern, AverageMeanPerChannelConv2DPattern, AverageMeanPerChannelDensePattern
 
 from tensorflow.keras import datasets, layers, models
 import matplotlib.pyplot as plt
@@ -48,35 +48,36 @@ class NumpyDatasetManager(DatasetManager):
 train_images, test_images = train_images / 255.0, test_images / 255.0
 
 # Create dataset manager
-batch_size = 20
-train_dataset_manager = NumpyDatasetManager(train_images, np.ndarray.flatten(train_labels), batch_size, n_batches=500)
+# For "training", it seems like batch size 10 and n batches = 5000 works pretty well
+batch_size = 2
+train_dataset_manager = NumpyDatasetManager(train_images, np.ndarray.flatten(train_labels), batch_size, n_batches=1)
 test_dataset_manager = NumpyDatasetManager(test_images, np.ndarray.flatten(test_labels), batch_size, n_batches=50)
 
 # Load onnx model (model obtained from https://www.tensorflow.org/tutorials/images/cnn), exported to onnx
 onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/demos/cifar-model.onnx')
 input_dict = {'conv2d_input:0': [batch_size, 32, 32, 3]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
-# Quantize
-print("Quantizing...")
-quantized_mod, calibration_map = Quantizer().quantize(mod, params, skip_layers=[0])
-print("Quantized mod: \n", quantized_mod.astext(False))
 
-# Calibrate
-print("Calibrating...")
-average_mean_calibrater = PerChannelAverageMeanCalibrater(train_dataset_manager)
-calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
-print("Calibrated mod: \n", calibrated_mod.astext(False))
+cc = AverageMeanCalibrationCallback()
+#quantizer = Quantizer(mod, params, [AverageMeanPerChannelConv2DBiasAddPattern(cc), AverageMeanPerChannelConv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]) #[Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)])
+quantizer = Quantizer(mod, params, [AverageMeanPerChannelConv2DPattern(cc), AverageMeanPerChannelDensePattern(cc)], skip_last=False)
+calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=train_dataset_manager)
+calibrated_mod = calibrater.calibrate()
+print("Calibrated mod: ")
+print(relay.transform.InferType()(calibrated_mod).astext(False))
 
-# Requantize
+
+# TODO: problem with CONV2D :( (or maybe its just because conv2d is first layer?
+"""
 print("Requantizing...")
 requantized_mod = Requantizer().requantize(calibrated_mod)
 print("Requantized mod: \n", requantized_mod.astext(False))
-
+"""
 
 print("Calculating accuracy...")
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
-    q_lib = relay.build(requantized_mod, target='llvm')
+    q_lib = relay.build(calibrated_mod, target='llvm')
 
 
 from tvm.contrib import graph_runtime
@@ -102,6 +103,7 @@ while not test_dataset_manager.is_empty():
     print("Int8 labels: ", q_predicted_labels)
     print("Float32 labels: ", predicted_labels)
     print("Actual labels: ", label)
+    print()
 
     q_correct += np.sum(q_predicted_labels == label)
     correct += np.sum(predicted_labels == label)

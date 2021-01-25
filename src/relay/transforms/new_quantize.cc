@@ -38,13 +38,15 @@ namespace quantize {
 class PatternCalibrationInfoNode : public Object { // Change name later
  public:
   DFPattern pattern; 
+  Expr expr;
 
   Array<Array<Var>> input_scale_zps;
-  Array<Integer> input_idxs; // is integer a relay type? probably
+  Array<Integer> input_idxs;
   Integer output_idx;
 
   void VisitAttrs(tvm::AttrVisitor* v) {
     v->Visit("pattern", &pattern);
+    v->Visit("expr", &expr);
     v->Visit("input_scale_zps", &input_scale_zps);
     v->Visit("input_idxs", &input_idxs);
     v->Visit("output_idx", &output_idx);
@@ -57,13 +59,14 @@ class PatternCalibrationInfoNode : public Object { // Change name later
 
 class PatternCalibrationInfo : public ObjectRef {
  public:
-  TVM_DLL PatternCalibrationInfo(DFPattern pattern, Array<Array<Var>> input_scale_zps, Array<Integer> input_idxs, Integer output_idx);
+  TVM_DLL PatternCalibrationInfo(DFPattern pattern, Expr expr, Array<Array<Var>> input_scale_zps, Array<Integer> input_idxs, Integer output_idx);
   TVM_DEFINE_OBJECT_REF_METHODS(PatternCalibrationInfo, ObjectRef, PatternCalibrationInfoNode);
 };
 
-PatternCalibrationInfo::PatternCalibrationInfo(DFPattern pattern, Array<Array<Var>> input_scale_zps, Array<Integer> input_idxs, Integer output_idx) {
+PatternCalibrationInfo::PatternCalibrationInfo(DFPattern pattern, Expr expr, Array<Array<Var>> input_scale_zps, Array<Integer> input_idxs, Integer output_idx) {
   ObjectPtr<PatternCalibrationInfoNode> n = make_object<PatternCalibrationInfoNode>();
   n->pattern = std::move(pattern);
+  n->expr = std::move(expr);
   n->input_scale_zps = std::move(input_scale_zps);
   n->input_idxs = std::move(input_idxs);
   n->output_idx = std::move(output_idx);
@@ -73,8 +76,8 @@ PatternCalibrationInfo::PatternCalibrationInfo(DFPattern pattern, Array<Array<Va
 TVM_REGISTER_NODE_TYPE(PatternCalibrationInfoNode);
 
 TVM_REGISTER_GLOBAL("relay.new_quantize.PatternCalibrationInfo")
-    .set_body_typed([](DFPattern pattern, Array<Array<Var>> input_scale_zps, Array<Integer> input_idxs, Integer output_idx) {
-      return PatternCalibrationInfo(pattern, input_scale_zps, input_idxs, output_idx);
+    .set_body_typed([](DFPattern pattern, Expr expr, Array<Array<Var>> input_scale_zps, Array<Integer> input_idxs, Integer output_idx) {
+      return PatternCalibrationInfo(pattern, expr, input_scale_zps, input_idxs, output_idx);
     });
 
 class PartitionOutputs : public MixedModeMutator {
@@ -113,6 +116,36 @@ class PartitionOutputs : public MixedModeMutator {
   }
 
   Array<Expr> new_outputs;
+};
+
+class PartitionsInOrder : protected MixedModeVisitor { 
+ public: 
+  PartitionsInOrder(bool skip_first, bool skip_last) : skip_first_(skip_first), skip_last_(skip_last) {}
+  Array<Expr> partitions;
+  bool skip_first_;
+  bool skip_last_;
+  Array<Expr> GetPartitionsInOrder(const Expr& expr) {
+    VisitExpr(expr);
+    Array<Expr> out;
+    if (partitions.size() > 0) {
+      if (skip_first_) {
+        out.push_back(partitions[0]);
+      }
+      if (skip_last_) {
+        out.push_back(partitions.back());
+      }
+    }
+    return out;
+  }
+  void VisitExpr_(const CallNode* op) override {
+    if (auto func_node = op->op.as<FunctionNode>()) {
+      // If it's calling a function, check to see if it has attributes that it's a been partitioned from a Pattern
+      if (func_node->attrs.defined() && func_node->attrs->dict.count(attr::kPartitionedFromPattern) != 0) {
+        // If this is a pattern function, create a matcher on it's body
+        partitions.push_back(op->op);
+      }
+    }
+  }
 };
 
 class RewritePartitions : protected MixedModeMutator {
@@ -221,7 +254,7 @@ class RewritePartitions : protected MixedModeMutator {
               }
             }
 
-            infos_.push_back(PatternCalibrationInfo(callback->pattern, input_scale_zps, input_idx, output_idx));
+            infos_.push_back(PatternCalibrationInfo(callback->pattern, pre->op.as<FunctionNode>()->body, input_scale_zps, input_idx, output_idx));
             // find parameters added to the new body that weren't there before
             // find all of the free variables in the new body
             for (const auto& param : FreeVars(new_body)) {
@@ -261,30 +294,35 @@ class ReplaceArgs : protected MixedModeMutator {
 };
 
 class LowerPartitions : protected MixedModeMutator {
-  public:
-  
+ public:
+  LowerPartitions(const Array<Expr> targets = Array<Expr>()) : targets_(targets) {}
   Expr Rewrite(const Expr& expr) {
     Expr new_out = MixedModeMutator::Mutate(expr);
     return new_out;
   }
-  Expr Rewrite_(const CallNode*pre, const Expr& post) {
-    auto* post_node = post.as<CallNode>(); // should this be pre or post?
-    ICHECK(post_node != nullptr);
-    if (auto* func_node = post_node->op.as<FunctionNode>()) {
-      // If the function was created by the pattern matcher, remove it
-      if (func_node->attrs.defined() && func_node->attrs->dict.count(attr::kPartitionedFromPattern) != 0) {
-        std::unordered_map<Expr, Expr, ObjectPtrHash, ObjectPtrEqual> arg_map = {};
-        Array<Expr> args = post_node->args;
-        Array<Var> params = func_node->params;
-        
-        for (uint i = 0; i < args.size(); i++) {
-          arg_map.insert({params[i], args[i]});
+  Expr Rewrite_(const CallNode* pre, const Expr& post) {
+    // Targets is usually length 0, 1, or 2
+    if (targets_.size() == 0 || std::find(targets_.begin(), targets_.end(), pre->op) != targets_.end()) {
+      auto* post_node = post.as<CallNode>(); // should this be pre or post?
+      ICHECK(post_node != nullptr);
+      if (auto* func_node = post_node->op.as<FunctionNode>()) {
+        // If the function was created by the pattern matcher, remove it
+        if (func_node->attrs.defined() && func_node->attrs->dict.count(attr::kPartitionedFromPattern) != 0) {
+          std::unordered_map<Expr, Expr, ObjectPtrHash, ObjectPtrEqual> arg_map = {};
+          Array<Expr> args = post_node->args;
+          Array<Var> params = func_node->params;
+          
+          for (uint i = 0; i < args.size(); i++) {
+            arg_map.insert({params[i], args[i]});
+          }
+          return ReplaceArgs().Rewrite(func_node->body, arg_map);
         }
-        return ReplaceArgs().Rewrite(func_node->body, arg_map);
       }
     }
     return post;
   }
+ protected:
+  Array<Expr> targets_;
 };
 
 TVM_REGISTER_GLOBAL("relay.new_quantize.partition_outputs")
@@ -293,6 +331,11 @@ TVM_REGISTER_GLOBAL("relay.new_quantize.rewrite_partitions")
     .set_body_typed([](const Array<DFPatternCallback>& callbacks, const Expr& expr) { return RewritePartitions(callbacks).Rewrite(expr); });
 TVM_REGISTER_GLOBAL("relay.new_quantize.lower_partitions")
     .set_body_typed([](const Expr& expr) { return LowerPartitions().Rewrite(expr); });
+TVM_REGISTER_GLOBAL("relay.new_quantize.skip_partitions")
+    .set_body_typed([](const Expr& expr, bool skip_first, bool skip_last) { 
+      auto targets = PartitionsInOrder(skip_first, skip_last).GetPartitionsInOrder(expr);
+      return LowerPartitions(targets).Rewrite(expr);
+    });
 }  // namespace quantize
 }  // namespace relay
 }  // namespace tvm

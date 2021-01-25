@@ -1,6 +1,6 @@
 import tvm
 from tvm import relay
-from tvm.relay.new_quantize import Quantizer, Calibrater, TFDatasetManager, AverageMeanCalibrationCallback, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
+from tvm.relay.new_quantize import Quantizer, DefaultCalibrater, Calibrater, TFDatasetManager, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
 import onnx
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -43,14 +43,11 @@ mnist_test_manager = TFDatasetManager(ds_test, batch_size, 2000)
 onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/mnist_model.onnx')
 input_dict = {'flatten_input': [batch_size, 28, 28, 1]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
-print(mod.astext())
+print(mod.astext(False))
 
-cc = AverageMeanCalibrationCallback(mnist_train_manager)
+# At this point, we've imported an MNIST model from onnx
 
-quantizer = Quantizer(mod, params, [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)])
-calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu())
-calibrated_mod = calibrater.calibrate()
-
+# This is some boiler plate running the calibrated mod, and showing the accuracy
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
     q_lib = relay.build(calibrated_mod, target='llvm')

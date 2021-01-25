@@ -22,10 +22,10 @@ from tvm.relay.new_quantize import Quantizer
 import numpy as np
 
 class Calibrater():
-    def __init__(self, quantizer, target, ctx): # TODO: is there a better way to deal w target/ctx
+    def __init__(self, quantizer, target, ctx, dataset_manager = None): # TODO: is there a better way to deal w target/ctx
         self.quantizer = quantizer
 
-        self.calibration_info = CalibrationInfo(quantizer.tuple_subgraph_mod, quantizer.q_tuple_subgraph_mod, quantizer.partition_infos, target, ctx)
+        self.calibration_info = CalibrationInfo(quantizer.tuple_subgraph_mod, quantizer.q_tuple_subgraph_mod, quantizer.partition_infos, dataset_manager, target, ctx)
 
     def calibrate(self):
         # Create a map of DFPatternCallback to QuantizerPattern
@@ -43,10 +43,9 @@ class Calibrater():
     
         # TODO: Should this return a mod with params bound in it or just a list of the scales/zps
         calibrated_func = relay.build_module.bind_params_by_name(self.quantizer.q_tuple_subgraph_mod['main'], self.calibration_info.scale_zp_value_map)
-        # I need the final output... how to do this.
 
-        # If num_original_outputs is 0, original output wasn't a tuple
-        if (self.quantizer.num_original_outputs == 0):
+        # If num_original_outputs is -1, original output wasn't a tuple
+        if (self.quantizer.num_original_outputs == -1):
             calibrated_func.body = calibrated_func.body.fields[0]
         else:
             calibrated_func.body = relay.Tuple(calibrated_func.body.fields[0:self.quantizer.num_original_outputs])
@@ -56,9 +55,10 @@ class Calibrater():
             
 # Helper class -- rename me?
 class CalibrationInfo():
-    def __init__(self, tuple_subgraph_mod, q_tuple_subgraph_mod, partition_infos, target, ctx):
+    def __init__(self, tuple_subgraph_mod, q_tuple_subgraph_mod, partition_infos, dataset_manager, target, ctx):
         self.tuple_subgraph_mod = tuple_subgraph_mod
         self.q_tuple_subgraph_mod = q_tuple_subgraph_mod
+        self.dataset_manager = dataset_manager
         self.target = target
         self.ctx = ctx
 
@@ -122,7 +122,6 @@ class CalibrationInfo():
         self.q_tuple_subgraph_graphmodule.run()
 
         value_list = []
-
 
         for idx in idx_list:
             value_list.append(self.q_tuple_subgraph_graphmodule.get_output(idx.value).asnumpy())

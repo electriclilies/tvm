@@ -5,7 +5,7 @@ from tvm import relay
 import torch
 
 from torchvision.models import resnet
-from tvm.relay.new_quantize import Quantizer, DatasetManager, AverageMaxCalibrater, Requantizer
+from tvm.relay.new_quantize import Quantizer, Calibrater, DatasetManager, AverageMaxCalibrationCallback, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern, Requantizer
 
 import numpy as np
 
@@ -42,15 +42,12 @@ script_module = torch.jit.trace(pytorch_model, input_data)
 input_shapes = [(input_name, input_shape)]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
 
-cc = AverageMaxCalibrater()
-quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc)])
-
-quantized_mod, calibration_map = Quantizer().quantize(mod, params)
-
+cc = AverageMaxCalibrationCallback()
+quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc)])
 random_dataset_manager = RandomDatasetManager(input_shape, 'float32', 3)
-average_mean_calibrater = AverageMeanCalibrater(random_dataset_manager)
-print("Calibrating")
-calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
+
+calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=random_dataset_manager)
+calibrated_mod = calibrater.calibrate()
 print("Done calibrating")
 requantized_mod = Requantizer().requantize(calibrated_mod)
 

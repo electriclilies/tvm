@@ -115,7 +115,9 @@ class Conv2DPattern(QuantizerPattern):
             elif attr == 'channels':
                 self.channels = attrs[attr]
                 if self.channels is None:
-                    self.channels = kernel_shape[self.weight_channel_axis].value
+                    self.channels = kernel_shape[self.weight_channel_axis]
+                if (isinstance(self.channels, tvm.tir.expr.IntImm)):
+                    self.channels = self.channels.value
                 new_attr_dict[attr] = self.channels
             elif attr == 'padding':
                 self.padding = attrs[attr] # Don't need to put padding in attr dict because we explicitly construct padding

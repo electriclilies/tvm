@@ -5,7 +5,7 @@ from tvm import relay
 import torch
 
 from torchvision.models import resnet
-from tvm.relay.new_quantize import Quantizer, DatasetManager, AverageMeanCalibrater, Requantizer
+from tvm.relay.new_quantize import Quantizer, DatasetManager, AverageMaxCalibrater, Requantizer
 
 import numpy as np
 
@@ -41,6 +41,9 @@ script_module = torch.jit.trace(pytorch_model, input_data)
 
 input_shapes = [(input_name, input_shape)]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
+
+cc = AverageMaxCalibrater()
+quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc)])
 
 quantized_mod, calibration_map = Quantizer().quantize(mod, params)
 

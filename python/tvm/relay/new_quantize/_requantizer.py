@@ -18,6 +18,7 @@
 import tvm
 from tvm import relay
 from tvm.relay.dataflow_pattern import DFPatternCallback, wildcard, is_op, dominates, rewrite
+from tvm.relay.frontend.common import infer_type
 
 # Dequantize(quantize(var)) -> requantize(var)
 # dequantize(int8_op(int8_op(quantize(var)))) -> int8_op(int8_op(requantize(var)))
@@ -40,7 +41,7 @@ class Requantizer():
             self.is_int_8_op = is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool3d')(wildcard()) | \
                                is_op('nn.relu')(wildcard()) | is_op('transpose')(wildcard()) | is_op('reshape')(wildcard()) | is_op('nn.pad')(wildcard()) | \
                                is_op('squeeze')(wildcard()) | is_op('nn.global_avg_pool2d') | is_op('nn.batch_flatten') | is_op('copy') | \
-                               is_op('mean') | is_op('sqrt') #| is_op('multiply') | is_op('subtract') | is_op('add') | is_op('divide') | is_op('power')
+                               is_op('mean') | is_op('sqrt') #| is_op('multiply') | is_op('subtract') | is_op('add') | is_op(' ') | is_op('power')
                                # TODO: Revisit dealing with the binops (commented out above)
 
             # Main pattern -- quantize(is_int_8_op*(dequantize(data))) -- (with 1 or more is_int_8_ops)
@@ -139,6 +140,9 @@ class Requantizer():
 
         def callback(self, pre, post, node_map):
             data = node_map[self.data][0]
+            rq_parent = node_map[self.rq_parent][0]
+            rq_child = node_map[self.rq_child][0]
+
             rq_parent_scale = node_map[self.rq_parent_scale][0]
             rq_parent_zp = node_map[self.rq_parent_zp][0]
 
@@ -148,8 +152,13 @@ class Requantizer():
             len_child_zps = len(node_map[self.rq_child_zp])
             rq_child_zp = node_map[self.rq_child_zp][len_child_zps-1]
 
-            return relay.qnn.op.requantize(data, rq_parent_scale, rq_parent_zp, rq_child_scale, rq_child_zp) # TODO: add axis here
+            parent_axis = rq_parent.attrs['axis']
+            child_axis = rq_child.attrs['axis']
+            
+            print("parent axis: ", parent_axis)
+            print("child axis: ", child_axis)
 
+            return relay.qnn.op.requantize(data, rq_parent_scale, rq_parent_zp, rq_child_scale, rq_child_zp, axis=parent_axis) # TODO: add axis here
 
     # Takes requantize(quantize(data, scale, zp), rscale, rzp) -> quantize(data, rscale, rzp)
     # TODO: Rename me...
@@ -162,28 +171,36 @@ class Requantizer():
             self.output_zp = wildcard()
 
             self.quantize = is_op("qnn.quantize")
-            self.requantize = is_op("qnn.requantize")
+            self.requantize = is_op("qnn.requantize")(self.quantize(self.data, wildcard(), wildcard()), wildcard(), wildcard(), self.output_scale, self.output_zp)
 
-            self.pattern = self.requantize(self.quantize(self.data, wildcard(), wildcard()), wildcard(), wildcard(), self.output_scale, self.output_zp)
+            self.pattern = self.requantize
 
         def callback(self, pre, post, node_map):
             # Extract data from the pattern
 
             data = node_map[self.data][0]
+            requantize = node_map[self.requantize][0]
             output_scale = node_map[self.output_scale][0]
             output_zp = node_map[self.output_zp][0]
 
+            requantize_axis = requantize.attrs['axis']
             # Rewrite subgraph to just one quantize
-            return relay.qnn.op.quantize(data, output_scale, output_zp) # TODO: Add axis here :) 
+            return relay.qnn.op.quantize(data, output_scale, output_zp, axis=requantize_axis) # TODO: Add axis here :) 
     
     # Is it worth moving dequantizes as far down as possible so most things are in int8? Would be p easy to add.
     def requantize(self, mod):
 
         rewritten_func = rewrite(self.RequantizerCallback(), mod['main'], allow_overlapping_groups=True)
+        print("1st rewrite: ", infer_type(rewritten_func))
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
-        rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
+        print("2nd rewrite: ", infer_type(rewritten_func))
+        rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func) # TODO: these work with conv2d and with dense, but not with multiply and add..
+        print("3rd rewrite: ", infer_type(rewritten_func))
+
         rewritten_mod = tvm.ir.IRModule()
         rewritten_mod['main'] = rewritten_func
+
+        # TODO: fold constants here
 
         return rewritten_mod
 

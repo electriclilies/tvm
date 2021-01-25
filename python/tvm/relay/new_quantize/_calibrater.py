@@ -22,7 +22,7 @@ from tvm.relay.new_quantize import Quantizer
 import numpy as np
 
 class Calibrater():
-    def __init__(self, quantizer, target, ctx, dataset_manager = None): # TODO: is there a better way to deal w target/ctx
+    def __init__(self, quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager = None): # TODO: is there a better way to deal w target/ctx
         self.quantizer = quantizer
 
         self.calibration_info = CalibrationInfo(quantizer.tuple_subgraph_mod, quantizer.q_tuple_subgraph_mod, quantizer.partition_infos, dataset_manager, target, ctx)
@@ -43,16 +43,21 @@ class Calibrater():
     
         # TODO: Should this return a mod with params bound in it or just a list of the scales/zps
         calibrated_func = relay.build_module.bind_params_by_name(self.quantizer.q_tuple_subgraph_mod['main'], self.calibration_info.scale_zp_value_map)
-
+        
         # If num_original_outputs is -1, original output wasn't a tuple
         if (self.quantizer.num_original_outputs == -1):
-            calibrated_func.body = calibrated_func.body.fields[0]
+            calibrated_func = relay.Function(calibrated_func.params, calibrated_func.body.fields[0])
+
         else:
+            new_body = relay.Tuple(calibrated_func.body.fields[0:self.quantizer.num_original_outputs])
+            calibrated_func = relay.Function(calibrated_func.params, new_body)
+
             calibrated_func.body = relay.Tuple(calibrated_func.body.fields[0:self.quantizer.num_original_outputs])
 
         calibrated_mod = tvm.ir.IRModule.from_expr(calibrated_func)
+
         return calibrated_mod
-            
+
 # Helper class -- rename me?
 class CalibrationInfo():
     def __init__(self, tuple_subgraph_mod, q_tuple_subgraph_mod, partition_infos, dataset_manager, target, ctx):

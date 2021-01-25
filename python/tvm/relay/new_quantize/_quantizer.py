@@ -17,27 +17,29 @@
 
 import tvm
 from tvm import relay
-from tvm.relay.new_quantize import Conv2DBiasAddPattern, partition_outputs, rewrite_partitions, lower_partitions, QuantizerPattern
+from tvm.relay.new_quantize import Conv2DBiasAddPattern, partition_outputs, skip_partitions, rewrite_partitions, lower_partitions, QuantizerPattern
 from typing import List
 import numpy as np
 from tvm.contrib import graph_runtime
 
 class Quantizer():
-    def __init__(self, mod, params, patterns: List[QuantizerPattern]): # we said List[ConcretePattern] is that actually a class
+    def __init__(self, mod, params, patterns: List[QuantizerPattern], skip_first=True, skip_last=True):
         self.patterns = patterns
         self.original_func = prerequisite_optimize(mod, params)['main']
 
-        # num_original outputs is zero if output is not a Tuple, else is length of tuple
+        # num_original outputs is -1 if output is not a Tuple, else is length of tuple
         if (isinstance(self.original_func.body, tvm.relay.expr.Tuple)):
             self.num_original_outputs = len(self.original_func.body)
         else:
-            self.num_original_outputs = 0
+            self.num_original_outputs = -1
         
         # Partition the func into sub functions containing the patterns we want to quantize
         partitioned_func = self.original_func
         for q_pattern in self.patterns:
             partitioned_func = q_pattern.pattern.partition(partitioned_func)
 
+        # Get rid of first and last par
+        partitioned_func = skip_partitions(partitioned_func, skip_first, skip_last)
         # Add outputs necessary for calibration
         tuple_subgraph_func = partition_outputs(partitioned_func)
 
@@ -59,6 +61,10 @@ class Quantizer():
         q_tuple_subgraph_mod['main'] = lower_partitions(q_tuple_subgraph_func)
         
         self.q_tuple_subgraph_mod = q_tuple_subgraph_mod
+
+        # TODO: remove me
+        print(self.q_tuple_subgraph_mod)
+        print(relay.transform.InferType()(self.q_tuple_subgraph_mod))
         
     
 def prerequisite_optimize(mod, params=None):

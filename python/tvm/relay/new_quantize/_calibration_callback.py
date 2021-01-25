@@ -48,7 +48,7 @@ class GlobalCalibrationCallback(CalibrationCallback):
 
         return scale_zp_values
 
-class AverageMeanCalibrationCallback(CalibrationCallback):
+class AverageMaxCalibrationCallback(CalibrationCallback):
 
     def calibrate_pattern(self, calibration_info):
         scale_zp_values = {}

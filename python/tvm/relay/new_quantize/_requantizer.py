@@ -91,16 +91,7 @@ class Requantizer():
                     elif call.op == relay.op.get('transpose'):
                         transformed_data = relay.op.transpose(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('reshape'):
-                        # For some reason reverse is set as an attr, but is not an argument to reshape
-                        # TODO: get rid of me
-                        new_attr_dict = {}
-                        for key in call.attrs.keys():
-                            if key != 'reverse':
-                                new_attr_dict[key] = call.attrs[key]
-                        if call.attrs['reverse'] == 0:
-                            transformed_data = relay.op.reshape(transformed_data, **new_attr_dict)
-                        else:
-                            transformed_data = relay.op.reverse_reshape(transformed_data, **new_attr_dict)
+                        transformed_data = relay.op.reverse_reshape(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('nn.pad'):
                         transformed_data = relay.op.nn.pad(transformed_data, **call.attrs)
                     elif call.op == relay.op.get('squeeze'):

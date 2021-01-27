@@ -158,8 +158,8 @@ class Requantizer():
                 in_zp = child_in_zps[i]
 
                 # TODO: should we error out here? or just not do the optimization.
-                assert math.isclose(out_scale.data.asnumpy(), in_scale.data.asnumpy(), rel_tol=1e-09, abs_tol=0.0) and \
-                       math.isclose(out_zp.data.asnumpy(), in_zp.data.asnumpy(), rel_tol=1e-09, abs_tol=0.0), \
+                assert math.isclose(out_scale.data.asnumpy(), in_scale.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05) and \
+                       math.isclose(out_zp.data.asnumpy(), in_zp.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05), \
                        "Out scales/zps should match in scales/zps. Indicates an internal issue in the quantizer somewhere"
                 
                 out_scale = child_out_scales[i]
@@ -201,8 +201,8 @@ class Requantizer():
             rq_scale_in = node_map[self.rq_scale_in][0]
             rq_zp_in = node_map[self.rq_zp_in][0]
 
-            assert math.isclose(q_scale.data.asnumpy(), rq_scale_in.data.asnumpy(), rel_tol=1e-09, abs_tol=0.0) and \
-                       math.isclose(q_zp.data.asnumpy(), rq_zp_in.data.asnumpy(), rel_tol=1e-09, abs_tol=0.0), \
+            assert math.isclose(q_scale.data.asnumpy(), rq_scale_in.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05) and \
+                       math.isclose(q_zp.data.asnumpy(), rq_zp_in.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05), \
                        "Scales and zps should match between adjacent quantize and requantizes, indicates a problem earlier in quantization"
 
             output_scale = node_map[self.rq_scale_out][0]

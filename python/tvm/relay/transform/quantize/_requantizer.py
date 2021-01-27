@@ -20,6 +20,8 @@ from tvm import relay
 from tvm.relay.dataflow_pattern import DFPatternCallback, wildcard, is_op, dominates, rewrite
 from tvm.relay.frontend.common import infer_type
 
+import math
+
 # Dequantize(quantize(var)) -> requantize(var)
 # dequantize(int8_op(int8_op(quantize(var)))) -> int8_op(int8_op(requantize(var)))
 class Requantizer():
@@ -30,6 +32,7 @@ class Requantizer():
     class RequantizerCallback(DFPatternCallback):
         def __init__(self):
             super().__init__()
+
             self.data = wildcard()
             self.dequantize_scale = wildcard()
             self.dequantize_zp = wildcard()
@@ -41,9 +44,20 @@ class Requantizer():
             self.is_int_8_op = is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool3d')(wildcard()) | \
                                is_op('nn.relu')(wildcard()) | is_op('transpose')(wildcard()) | is_op('reshape')(wildcard()) | is_op('nn.pad')(wildcard()) | \
                                is_op('squeeze')(wildcard()) | is_op('nn.global_avg_pool2d') | is_op('nn.batch_flatten') | is_op('copy') | \
-                               is_op('mean') | is_op('sqrt') #| is_op('multiply') | is_op('subtract') | is_op('add') | is_op(' ') | is_op('power')
-                               # TODO: Revisit dealing with the binops (commented out above)
+                               is_op('mean') | is_op('sqrt')
 
+            # All ops in is_int_8_op must also be in self.op_map
+            self.op_map = {relay.op.get('nn.max_pool2d'): relay.op.nn.max_pool2d, \
+                           relay.op.get('nn.max_pool3d'): relay.op.nn.max_pool3d, \
+                           relay.op.get('transpose'): relay.op.transpose, \
+                           relay.op.get('reshape'): relay.op.reshape, \
+                           relay.op.get('nn.pad'): relay.op.nn.pad, \
+                           relay.op.get('squeeze'): relay.op.squeeze, \
+                           relay.op.get('nn.global_avg_pool2d'): relay.op.nn.global_avg_pool2d, \
+                           relay.op.get('nn.batch_flatten'): relay.op.nn.batch_flatten, \
+                           relay.op.get('copy'): relay.op.copy, \
+                           relay.op.get('mean'): relay.op.mean, \
+                           relay.op.get('sqrt'): relay.op.sqrt}
             # Main pattern -- quantize(is_int_8_op*(dequantize(data))) -- (with 1 or more is_int_8_ops)
             self.dequantize = is_op('qnn.dequantize')(self.data, self.dequantize_scale, self.dequantize_zp)
 
@@ -84,28 +98,8 @@ class Requantizer():
                             transformed_data = relay.op.nn.relu(transformed_data)
                         else:
                             transformed_data = relay.op.maximum(transformed_data, relay.cast(dequantize_zp, 'int8'))
-                    elif call.op == relay.op.get('nn.max_pool2d'):
-                        transformed_data = relay.op.nn.max_pool2d(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('nn.max_pool3d'):
-                        transformed_data = relay.op.nn.max_pool3d(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('transpose'):
-                        transformed_data = relay.op.transpose(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('reshape'):
-                        transformed_data = relay.op.reverse_reshape(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('nn.pad'):
-                        transformed_data = relay.op.nn.pad(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('squeeze'):
-                        transformed_data = relay.op.squeeze(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('nn.global_avg_2d'):
-                        transformed_data = relay.op.nn.global_avg_pool2d(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('nn.batch_flatten'):
-                        transformed_data = relay.op.nn.batch_flatten(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('copy'):
-                        transformed_data = relay.copy(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('mean'):
-                        transformed_data = relay.mean(transformed_data, **call.attrs)
-                    elif call.op == relay.op.get('sqrt'):
-                        transformed_data = relay.sqrt(transformed_data, **call.attrs)
+                    elif call.op in self.op_map.keys():
+                        transformed_data = self.op_map[call.op](transformed_data, **call.attrs)
                     else:
                         # TODO: turn into internal error message
                         raise ValueError("Uh oh, %s is not copied properly in the requantizer. ", str(call.op))
@@ -118,38 +112,62 @@ class Requantizer():
         def __init__(self):
             super().__init__()
             self.data = wildcard()
-            self.rq_parent_scale = wildcard()
-            self.rq_parent_zp = wildcard()
+            self.rq_parent_scale_in = wildcard()
+            self.rq_parent_zp_in = wildcard()
+            self.rq_parent_scale_out = wildcard()
+            self.rq_parent_zp_out = wildcard()
 
-            self.rq_child_scale = wildcard()
-            self.rq_child_zp = wildcard()
+            self.rq_child_scale_in = wildcard()
+            self.rq_child_zp_in = wildcard()
+            self.rq_child_scale_out = wildcard()
+            self.rq_child_zp_out = wildcard()
 
-            self.rq_parent = is_op('qnn.requantize')(self.data, self.rq_parent_scale, self.rq_parent_zp, wildcard(), wildcard())
-            self.rq_child = is_op('qnn.requantize')(wildcard(), wildcard(), wildcard(), self.rq_child_scale, self.rq_child_zp)
+            self.rq_parent = is_op('qnn.requantize')(self.data, self.rq_parent_scale_in, self.rq_parent_zp_in, self.rq_parent_scale_out, self.rq_parent_zp_out)
+            self.rq_child = is_op('qnn.requantize')(wildcard(), self.rq_child_scale_in, self.rq_child_zp_in, self.rq_child_scale_out, self.rq_child_zp_out)
 
             self.pattern = dominates(self.rq_parent, self.rq_child, self.rq_child)
 
         def callback(self, pre, post, node_map):
             data = node_map[self.data][0]
             rq_parent = node_map[self.rq_parent][0]
-            rq_child = node_map[self.rq_child][0]
 
-            rq_parent_scale = node_map[self.rq_parent_scale][0]
-            rq_parent_zp = node_map[self.rq_parent_zp][0]
+            # We can fold a chain of requantizes together:
+            # requantize(scale_a, zp_a, scale_b, zp_b) -> quantization agnostic ops ->requantize(scale_b, zp_b, scale_c, zp_c)
+            # becomes requantize(scale_a, zp_a, scale_c, zp_c)
+            
+            rq_parent_scale_in = node_map[self.rq_parent_scale_in][0]
+            rq_parent_zp_in = node_map[self.rq_parent_zp_in][0]
 
-            len_child_scales = len(node_map[self.rq_child_scale])
-            rq_child_scale = node_map[self.rq_child_scale][len_child_scales-1]
+            rq_parent_scale_out = node_map[self.rq_parent_scale_out][0]
+            rq_parent_zp_out = node_map[self.rq_parent_zp_out][0]
 
-            len_child_zps = len(node_map[self.rq_child_zp])
-            rq_child_zp = node_map[self.rq_child_zp][len_child_zps-1]
+            child_in_scales = node_map[self.rq_child_scale_in]
+            child_in_zps = node_map[self.rq_child_zp_in]
+            child_out_scales = node_map[self.rq_child_scale_out]
+            child_out_zps = node_map[self.rq_child_zp_out]
+
+            len_children = len(node_map[self.rq_child_scale_out])
+            print("Len children is: ", len_children)
+            # Check to make sure output and input scales and zps match before we apply this transformation
+
+            out_scale = rq_parent_scale_out
+            out_zp = rq_parent_zp_out
+
+            for i in range(0, len_children):
+                in_scale = child_in_scales[i]
+                in_zp = child_in_zps[i]
+
+                # TODO: should we error out here? or just not do the optimization.
+                assert math.isclose(out_scale.data.asnumpy(), in_scale.data.asnumpy(), rel_tol=1e-09, abs_tol=0.0) and \
+                       math.isclose(out_zp.data.asnumpy(), in_zp.data.asnumpy(), rel_tol=1e-09, abs_tol=0.0), \
+                       "Out scales/zps should match in scales/zps. Indicates an internal issue in the quantizer somewhere"
+                
+                out_scale = child_out_scales[i]
+                out_zp = child_out_zps[i]
 
             parent_axis = rq_parent.attrs['axis']
-            child_axis = rq_child.attrs['axis']
-            
-            print("parent axis: ", parent_axis)
-            print("child axis: ", child_axis)
 
-            return relay.qnn.op.requantize(data, rq_parent_scale, rq_parent_zp, rq_child_scale, rq_child_zp, axis=parent_axis) # TODO: add axis here
+            return relay.qnn.op.requantize(data, rq_parent_scale_in, rq_parent_zp_in, out_scale, out_zp, axis=parent_axis) # TODO: add axis here
 
     # Takes requantize(quantize(data, scale, zp), rscale, rzp) -> quantize(data, rscale, rzp)
     # TODO: Rename me...
@@ -158,11 +176,16 @@ class Requantizer():
             super().__init__()
             
             self.data = wildcard()
-            self.output_scale = wildcard()
-            self.output_zp = wildcard()
+            self.q_scale = wildcard()
+            self.q_zp = wildcard()
 
-            self.quantize = is_op("qnn.quantize")
-            self.requantize = is_op("qnn.requantize")(self.quantize(self.data, wildcard(), wildcard()), wildcard(), wildcard(), self.output_scale, self.output_zp)
+            self.rq_scale_out = wildcard()
+            self.rq_zp_out = wildcard()
+            self.rq_scale_in = wildcard()
+            self.rq_zp_in = wildcard()
+
+            self.quantize = is_op("qnn.quantize")(self.data, self.q_scale, self.q_zp)
+            self.requantize = is_op("qnn.requantize")(self.quantize, self.rq_scale_in, self.rq_zp_in, self.rq_scale_out, self.rq_zp_out)
 
             self.pattern = self.requantize
 
@@ -171,8 +194,19 @@ class Requantizer():
 
             data = node_map[self.data][0]
             requantize = node_map[self.requantize][0]
-            output_scale = node_map[self.output_scale][0]
-            output_zp = node_map[self.output_zp][0]
+
+            q_scale = node_map[self.q_scale][0]
+            q_zp = node_map[self.q_zp][0]
+
+            rq_scale_in = node_map[self.rq_scale_in][0]
+            rq_zp_in = node_map[self.rq_zp_in][0]
+
+            assert math.isclose(q_scale.data.asnumpy(), rq_scale_in.data.asnumpy(), rel_tol=1e-09, abs_tol=0.0) and \
+                       math.isclose(q_zp.data.asnumpy(), rq_zp_in.data.asnumpy(), rel_tol=1e-09, abs_tol=0.0), \
+                       "Scales and zps should match between adjacent quantize and requantizes, indicates a problem earlier in quantization"
+
+            output_scale = node_map[self.rq_scale_out][0]
+            output_zp = node_map[self.rq_zp_out][0]
 
             requantize_axis = requantize.attrs['axis']
             # Rewrite subgraph to just one quantize
@@ -182,16 +216,19 @@ class Requantizer():
     def requantize(self, mod):
 
         rewritten_func = rewrite(self.RequantizerCallback(), mod['main'], allow_overlapping_groups=True)
-        print("1st rewrite: ", infer_type(rewritten_func))
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
-        print("2nd rewrite: ", infer_type(rewritten_func))
-        rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func) # TODO: these work with conv2d and with dense, but not with multiply and add..
-        print("3rd rewrite: ", infer_type(rewritten_func))
+        rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
 
         rewritten_mod = tvm.ir.IRModule()
         rewritten_mod['main'] = rewritten_func
 
-        # TODO: fold constants here
+        optimize = tvm.transform.Sequential(
+            [relay.transform.FoldConstant(),
+            relay.transform.EliminateCommonSubexpr()])
+        
+        # Have to fold scale expressions for requantize to work
+        with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]): #TODO: AlterOpLayout was causing problems, is it fixed?
+            rewritten_mod = optimize(rewritten_mod)
 
         return rewritten_mod
 

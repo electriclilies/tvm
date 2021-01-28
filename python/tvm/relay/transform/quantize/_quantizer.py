@@ -17,7 +17,7 @@
 
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Conv2DBiasAddPattern, partition_outputs, skip_partitions, rewrite_partitions, lower_partitions, QuantizerPattern
+from relay.transform.quantize import Conv2DBiasAddPattern, partition_outputs, skip_partitions, rewrite_partitions, lower_partitions, QuantizerPattern
 from typing import List
 import numpy as np
 from tvm.contrib import graph_runtime

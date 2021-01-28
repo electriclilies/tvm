@@ -147,9 +147,8 @@ class Requantizer():
             child_out_zps = node_map[self.rq_child_zp_out]
 
             len_children = len(node_map[self.rq_child_scale_out])
-            print("Len children is: ", len_children)
-            # Check to make sure output and input scales and zps match before we apply this transformation
 
+            # Check to make sure output and input scales and zps match before we apply this transformation
             out_scale = rq_parent_scale_out
             out_zp = rq_parent_zp_out
 
@@ -157,7 +156,6 @@ class Requantizer():
                 in_scale = child_in_scales[i]
                 in_zp = child_in_zps[i]
 
-                # TODO: should we error out here? or just not do the optimization.
                 assert math.isclose(out_scale.data.asnumpy(), in_scale.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05) and \
                        math.isclose(out_zp.data.asnumpy(), in_zp.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05), \
                        "Out scales/zps should match in scales/zps. Indicates an internal issue in the quantizer somewhere"
@@ -190,7 +188,6 @@ class Requantizer():
             self.pattern = self.requantize
 
         def callback(self, pre, post, node_map):
-            # Extract data from the pattern
 
             data = node_map[self.data][0]
             requantize = node_map[self.requantize][0]
@@ -231,5 +228,3 @@ class Requantizer():
             rewritten_mod = optimize(rewritten_mod)
 
         return rewritten_mod
-
-

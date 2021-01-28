@@ -1,13 +1,16 @@
 # Demo based on code from https://www.tensorflow.org/tutorials/images/cnn
-
+import onnx
 import tensorflow as tf
 import tvm
 from tvm import relay
 from tvm.relay.transform.quantize import Quantizer, Calibrater, AverageMaxCalibrationCallback, DatasetManager, Requantizer, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, DensePattern, AddPattern, MultiplyPattern, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern
 
-from tensorflow.keras import datasets, layers, models
-import onnx
+from tensorflow.keras import datasets
+
 import numpy as np
+# tf and onnx use different versions of protobuf?? 
+# Versions that work: pip installed protobuf version 3.12.2
+# Need libprotobuf version 3.0.0 (libprotobuf is also protoc)
 
 class NumpyDatasetManager(DatasetManager):
     # Assumes numpy_data is in form [num_inputs, c, h, w] and labels is [num_inputs]
@@ -53,13 +56,13 @@ train_dataset_manager = NumpyDatasetManager(train_images, np.ndarray.flatten(tra
 test_dataset_manager = NumpyDatasetManager(test_images, np.ndarray.flatten(test_labels), batch_size, n_batches=50)
 
 # Load onnx model (model obtained from https://www.tensorflow.org/tutorials/images/cnn), exported to onnx
-onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/demos/cifar-model.onnx')
+onnx_model = onnx.load('/Users/lorthsmith/Documents/tvm/python/tvm/relay/transform/quantize/demos/cifar-model.onnx')
 input_dict = {'conv2d_input:0': [batch_size, 32, 32, 3]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 
 cc = AverageMaxCalibrationCallback()
 #quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]) #[Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)])
-quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc)], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
+quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc), MultiplyPattern()], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
 calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=train_dataset_manager)
 calibrated_mod = calibrater.calibrate()
 print("Calibrated mod: ")

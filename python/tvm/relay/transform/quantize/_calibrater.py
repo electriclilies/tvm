@@ -22,10 +22,10 @@ from tvm.relay.transform.quantize import Quantizer
 import numpy as np
 
 class Calibrater():
-    def __init__(self, quantizer, target='llvm', ctx=tvm.cpu(), use_vm=False, dataset_manager = None): # TODO: is there a better way to deal w target/ctx
+    def __init__(self, quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager = None): # TODO: is there a better way to deal w target/ctx
         self.quantizer = quantizer
 
-        self.calibration_info = CalibrationInfo(quantizer.tuple_subgraph_func, quantizer.q_tuple_subgraph_func, quantizer.partition_infos, dataset_manager, target, ctx, use_vm)
+        self.calibration_info = CalibrationInfo(quantizer.tuple_subgraph_func, quantizer.q_tuple_subgraph_func, quantizer.partition_infos, dataset_manager, target, ctx)
 
     def calibrate(self):
         # Create a map of DFPatternCallback to QuantizerPattern
@@ -55,27 +55,20 @@ class Calibrater():
 
 class CalibrationInfo():
 
-    def __init__(self, tuple_subgraph_func, q_tuple_subgraph_func, partition_infos, dataset_manager, target, ctx, use_vm):
+    def __init__(self, tuple_subgraph_func, q_tuple_subgraph_func, partition_infos, dataset_manager, target, ctx):
         self.tuple_subgraph_func = tuple_subgraph_func
         self.q_tuple_subgraph_func = q_tuple_subgraph_func
         self.partition_infos = partition_infos
         self.dataset_manager = dataset_manager
         self.target = target
         self.ctx = ctx
-        self.use_vm = use_vm
-
-        self.tuple_subgraph_graphmodule = None
-        self.q_tuple_subgraph_graphmodule = None
-        self.tuple_subgraph_executor = None
-        self.q_tuple_subgraph_executor = None
         
         tuple_subgraph_mod = tvm.ir.IRModule.from_expr(self.tuple_subgraph_func)
         q_tuple_subgraph_mod = tvm.ir.IRModule.from_expr(self.q_tuple_subgraph_func)
 
-        if use_vm:
-            self.init_subgraph_vm(tuple_subgraph_mod, q_tuple_subgraph_mod)
-        else:
-            self.init_subgraph_graphmodules(tuple_subgraph_mod, q_tuple_subgraph_mod)
+        self.tuple_subgraph_graphmodule = None
+        self.q_tuple_subgraph_graphmodule = None
+        self.init_subgraph_graphmodules(tuple_subgraph_mod, q_tuple_subgraph_mod)
 
         self.scale_zp_value_map = {}
         self.initialize_scale_zp_map()
@@ -87,10 +80,6 @@ class CalibrationInfo():
 
         self.tuple_subgraph_graphmodule = graph_runtime.GraphModule(tuple_subgraph_lib["default"](self.ctx))
         self.q_tuple_subgraph_graphmodule = graph_runtime.GraphModule(q_tuple_subgraph_lib["default"](self.ctx))
-
-    def init_subgraph_vm(self, tuple_subgraph_mod, q_tuple_subgraph_mod):
-        self.tuple_subgraph_executor = relay.create_executor("vm", mod=tuple_subgraph_mod, target=self.target, ctx=self.ctx)
-        self.q_tuple_subgraph_executor = relay.create_executor("vm", mod=q_tuple_subgraph_mod, target=self.target, ctx=self.ctx)
 
     # Initializes scales to 1, zps to 0. These scales/zps will never be used to calculate
     # intermediate values in the graph returned to the user.
@@ -114,21 +103,15 @@ class CalibrationInfo():
 
         value_list = []
 
-        if self.use_vm:
-            out_tuple = self.tuple_subgraph_executor.evaluate()(*inputs)
+        # Set the user provided inputs
+        for i, inp in enumerate(inputs):
+            self.tuple_subgraph_graphmodule.set_input(i, inp)
 
-            for idx in idx_list:
-                value_list.append(out_tuple[idx.value].asnumpy())
-        else:
-            # Set the user provided inputs
-            for i, inp in enumerate(inputs):
-                self.tuple_subgraph_graphmodule.set_input(i, inp)
+        # Set the scale and zero points
+        self.tuple_subgraph_graphmodule.run()
 
-            # Set the scale and zero points
-            self.tuple_subgraph_graphmodule.run()
-
-            for idx in idx_list:
-                value_list.append(self.tuple_subgraph_graphmodule.get_output(idx.value).asnumpy())
+        for idx in idx_list:
+            value_list.append(self.tuple_subgraph_graphmodule.get_output(idx.value).asnumpy())
 
         return value_list
 

@@ -66,7 +66,7 @@ quantizer = Quantizer(mod['main'], params, [AverageMaxPerChannelConv2DBiasAddPat
 #quantizer = Quantizer(mod['main'], params, [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
 
 
-calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), use_vm=True, dataset_manager=train_dataset_manager)
+calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=train_dataset_manager)
 calibrated_func = calibrater.calibrate()
 print("Calibrated mod: ")
 

@@ -209,22 +209,20 @@ class Requantizer():
             # Rewrite subgraph to just one quantize
             return relay.qnn.op.quantize(data, output_scale, output_zp, axis=requantize_axis) # TODO: Add axis here :) 
     
-    # Is it worth moving dequantizes as far down as possible so most things are in int8? Would be p easy to add.
-    def requantize(self, mod):
+    def requantize(self, func):
 
-        rewritten_func = rewrite(self.RequantizerCallback(), mod['main'], allow_overlapping_groups=True)
+        rewritten_func = rewrite(self.RequantizerCallback(), func, allow_overlapping_groups=True)
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
         rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
 
-        rewritten_mod = tvm.ir.IRModule()
-        rewritten_mod['main'] = rewritten_func
+        rewritten_mod = tvm.ir.IRModule.from_expr(rewritten_func)
 
         optimize = tvm.transform.Sequential(
             [relay.transform.FoldConstant(),
             relay.transform.EliminateCommonSubexpr()])
         
-        # Have to fold scale expressions for requantize to work
+        # We have to fold scale/zp expressions for requantize to work
         with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]): #TODO: AlterOpLayout was causing problems, is it fixed?
             rewritten_mod = optimize(rewritten_mod)
 
-        return rewritten_mod
+        return rewritten_mod['main']

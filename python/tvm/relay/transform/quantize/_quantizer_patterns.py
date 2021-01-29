@@ -106,7 +106,6 @@ class Conv2DPattern(QuantizerPattern):
                 attr_value = tuple(attr_value)
             if attr == 'kernel_size':
                 kernel_size = attrs[attr]
-                # TODO: rewrite kernel_size... 
                 if kernel_size is None:
                     kernel_size = self.get_kernel_size(kernel_layout, kernel_shape)
                 else:
@@ -182,7 +181,7 @@ class Conv2DBiasAddPattern(Conv2DPattern):
         self.pattern = is_op('nn.bias_add')(self.conv2d, self.bias_weight)
     
     def create_args(self):
-        super().create_args()
+        self.create_args()
         quantized_bias = relay.qnn.op.quantize(self.args[2], self.scale_zps[0], self.scale_zps[1], axis=self.data_channel_axis)
         self.quantized_args.append(quantized_bias)
 

@@ -38,7 +38,8 @@ class GlobalCalibrationCallback(CalibrationCallback):
             zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
             scale_zp_values[zp_name] = self.zp_value
         
-        inputs = [np.random.rand(20, 32, 32, 3)]
+        # TODO: remove
+        inputs = [np.random.rand(2, 32, 32, 3)]
 
         # TODO: move this into a testing calibrater
         print(calibration_info.get_unquantized_layer_inputs(inputs))

@@ -3,7 +3,7 @@ import onnx
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, Calibrater, AverageMaxCalibrationCallback, DatasetManager, Requantizer, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, DensePattern, AddPattern, MultiplyPattern, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern
+from tvm.relay.transform.quantize import Quantizer, Calibrater, AverageMaxCalibrationCallback, GlobalCalibrationCallback, DatasetManager, Requantizer, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern
 
 from tensorflow.keras import datasets
 
@@ -61,20 +61,23 @@ input_dict = {'conv2d_input:0': [batch_size, 32, 32, 3]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 
 cc = AverageMaxCalibrationCallback()
-#quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]) #[Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)])
-quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc), MultiplyPattern()], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
-calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=train_dataset_manager)
-calibrated_mod = calibrater.calibrate()
+quantizer = Quantizer(mod['main'], params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc), MultiplyPattern(cc)], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
+#cc = GlobalCalibrationCallback(2.0, 0)
+#quantizer = Quantizer(mod['main'], params, [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
+
+
+calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), use_vm=True, dataset_manager=train_dataset_manager)
+calibrated_func = calibrater.calibrate()
 print("Calibrated mod: ")
-print(relay.transform.InferType()(calibrated_mod).astext(False))
 
 print("Requantizing...")
-requantized_mod = Requantizer().requantize(calibrated_mod)
-print("Requantized mod: \n", requantized_mod.astext(False))
+requantized_func = Requantizer().requantize(calibrated_func)
+
+requantized_mod = tvm.ir.IRModule.from_expr(requantized_func)
 
 print("Calculating accuracy...")
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-    lib = relay.build(mod, target='llvm')
+    lib = relay.build(mod, params=params, target='llvm')
     q_lib = relay.build(requantized_mod, target='llvm')
 
 

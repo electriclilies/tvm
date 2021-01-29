@@ -22,10 +22,10 @@ from tvm.relay.transform.quantize import Quantizer
 import numpy as np
 
 class Calibrater():
-    def __init__(self, quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager = None): # TODO: is there a better way to deal w target/ctx
+    def __init__(self, quantizer, target='llvm', ctx=tvm.cpu(), use_vm=False, dataset_manager = None): # TODO: is there a better way to deal w target/ctx
         self.quantizer = quantizer
 
-        self.calibration_info = CalibrationInfo(quantizer.tuple_subgraph_mod, quantizer.q_tuple_subgraph_mod, quantizer.partition_infos, dataset_manager, target, ctx)
+        self.calibration_info = CalibrationInfo(quantizer.tuple_subgraph_func, quantizer.q_tuple_subgraph_func, quantizer.partition_infos, dataset_manager, target, ctx, use_vm)
 
     def calibrate(self):
         # Create a map of DFPatternCallback to QuantizerPattern
@@ -41,8 +41,7 @@ class Calibrater():
             scale_zps = quantizer_pattern.calibrate_pattern(self.calibration_info)
             self.calibration_info.update_scale_zp_map(scale_zps)
     
-        # TODO: Should this return a mod with params bound in it or just a list of the scales/zps
-        calibrated_func = relay.build_module.bind_params_by_name(self.quantizer.q_tuple_subgraph_mod['main'], self.calibration_info.scale_zp_value_map)
+        calibrated_func = relay.build_module.bind_params_by_name(self.quantizer.q_tuple_subgraph_func, self.calibration_info.scale_zp_value_map)
         
         # If num_original_outputs is -1, original output wasn't a tuple
         if (self.quantizer.num_original_outputs == -1):
@@ -52,33 +51,46 @@ class Calibrater():
             new_body = relay.Tuple(calibrated_func.body.fields[0:self.quantizer.num_original_outputs])
             calibrated_func = relay.Function(calibrated_func.params, new_body)
 
-            calibrated_func.body = relay.Tuple(calibrated_func.body.fields[0:self.quantizer.num_original_outputs])
+        return calibrated_func
 
-        calibrated_mod = tvm.ir.IRModule.from_expr(calibrated_func)
-
-        return calibrated_mod
-
-# Helper class -- rename me?
 class CalibrationInfo():
-    def __init__(self, tuple_subgraph_mod, q_tuple_subgraph_mod, partition_infos, dataset_manager, target, ctx):
-        self.tuple_subgraph_mod = tuple_subgraph_mod
-        self.q_tuple_subgraph_mod = q_tuple_subgraph_mod
+
+    def __init__(self, tuple_subgraph_func, q_tuple_subgraph_func, partition_infos, dataset_manager, target, ctx, use_vm):
+        self.tuple_subgraph_func = tuple_subgraph_func
+        self.q_tuple_subgraph_func = q_tuple_subgraph_func
+        self.partition_infos = partition_infos
         self.dataset_manager = dataset_manager
         self.target = target
         self.ctx = ctx
+        self.use_vm = use_vm
 
-        # Compiled versions of tuple_subgraph_mod and q_tuple_subgraph_mod, created in build_tuple_subgraphs
+        self.tuple_subgraph_graphmodule = None
+        self.q_tuple_subgraph_graphmodule = None
+        self.tuple_subgraph_executor = None
+        self.q_tuple_subgraph_executor = None
+        
+        tuple_subgraph_mod = tvm.ir.IRModule.from_expr(self.tuple_subgraph_func)
+        q_tuple_subgraph_mod = tvm.ir.IRModule.from_expr(self.q_tuple_subgraph_func)
+
+        if use_vm:
+            self.init_subgraph_vm(tuple_subgraph_mod, q_tuple_subgraph_mod)
+        else:
+            self.init_subgraph_graphmodules(tuple_subgraph_mod, q_tuple_subgraph_mod)
+
+        self.scale_zp_value_map = {}
+        self.initialize_scale_zp_map()
+
+    def init_subgraph_graphmodules(self, tuple_subgraph_mod, q_tuple_subgraph_mod):
         with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]): #TODO: enable AlterOpLayout when fixed
-            tuple_subgraph_lib = relay.build(self.tuple_subgraph_mod, target=self.target)
-            q_tuple_subgraph_lib = relay.build(self.tuple_subgraph_mod, target=self.target)
+            tuple_subgraph_lib = relay.build(tuple_subgraph_mod, target=self.target)
+            q_tuple_subgraph_lib = relay.build(q_tuple_subgraph_mod, target=self.target)
 
         self.tuple_subgraph_graphmodule = graph_runtime.GraphModule(tuple_subgraph_lib["default"](self.ctx))
         self.q_tuple_subgraph_graphmodule = graph_runtime.GraphModule(q_tuple_subgraph_lib["default"](self.ctx))
 
-        self.partition_infos = partition_infos
-
-        self.scale_zp_value_map = {}
-        self.initialize_scale_zp_map()
+    def init_subgraph_vm(self, tuple_subgraph_mod, q_tuple_subgraph_mod):
+        self.tuple_subgraph_executor = relay.create_executor("vm", mod=tuple_subgraph_mod, target=self.target, ctx=self.ctx)
+        self.q_tuple_subgraph_executor = relay.create_executor("vm", mod=q_tuple_subgraph_mod, target=self.target, ctx=self.ctx)
 
     # Initializes scales to 1, zps to 0. These scales/zps will never be used to calculate
     # intermediate values in the graph returned to the user.
@@ -99,18 +111,24 @@ class CalibrationInfo():
         self.scale_zp_value_map.update(new_scale_zps)
 
     def _run_tuple_mod(self, inputs, idx_list):
-        # Set the user provided inputs
-        for i, inp in enumerate(inputs):
-            self.tuple_subgraph_graphmodule.set_input(i, inp)
-        
-        # Set the scale and zero points
-        self.tuple_subgraph_graphmodule.set_input(**self.scale_zp_value_map)
-        self.tuple_subgraph_graphmodule.run()
 
         value_list = []
 
-        for idx in idx_list:
-            value_list.append(self.tuple_subgraph_graphmodule.get_output(idx.value).asnumpy())
+        if self.use_vm:
+            out_tuple = self.tuple_subgraph_executor.evaluate()(*inputs)
+
+            for idx in idx_list:
+                value_list.append(out_tuple[idx.value].asnumpy())
+        else:
+            # Set the user provided inputs
+            for i, inp in enumerate(inputs):
+                self.tuple_subgraph_graphmodule.set_input(i, inp)
+
+            # Set the scale and zero points
+            self.tuple_subgraph_graphmodule.run()
+
+            for idx in idx_list:
+                value_list.append(self.tuple_subgraph_graphmodule.get_output(idx.value).asnumpy())
 
         return value_list
 

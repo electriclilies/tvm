@@ -17,15 +17,15 @@
 
 import tvm
 from tvm import relay
-from relay.transform.quantize import Conv2DBiasAddPattern, partition_outputs, skip_partitions, rewrite_partitions, lower_partitions, QuantizerPattern
+from tvm.relay.transform.quantize import Conv2DBiasAddPattern, partition_outputs, skip_partitions, rewrite_partitions, lower_partitions, QuantizerPattern
 from typing import List
 import numpy as np
 from tvm.contrib import graph_runtime
 
 class Quantizer():
-    def __init__(self, mod, params, patterns: List[QuantizerPattern], skip_first=True, skip_last=True):
+    def __init__(self, func, params, patterns: List[QuantizerPattern], skip_first=True, skip_last=True):
         self.patterns = patterns
-        self.original_func = prerequisite_optimize(mod, params)['main']
+        self.original_func = prerequisite_optimize(func, params)
 
         # num_original outputs is -1 if output is not a Tuple, else is length of tuple
         if (isinstance(self.original_func.body, tvm.relay.expr.Tuple)):
@@ -44,10 +44,7 @@ class Quantizer():
         tuple_subgraph_func = partition_outputs(partitioned_func)
 
         # Lower partitioned funcs and store in a mod
-        tuple_subgraph_mod = tvm.ir.IRModule()
-        tuple_subgraph_mod['main'] = lower_partitions(tuple_subgraph_func)
-        
-        self.tuple_subgraph_mod = tuple_subgraph_mod
+        self.tuple_subgraph_func = lower_partitions(tuple_subgraph_func)
 
         # Rewrite the multi-output graph to be quantized, and lower partitioned funcs
         outs = rewrite_partitions(self.patterns, tuple_subgraph_func)
@@ -57,17 +54,9 @@ class Quantizer():
         self.partition_infos = outs['infos_']
 
         # Lower quantized partitions and store in a mod        
-        q_tuple_subgraph_mod = tvm.ir.IRModule()
-        q_tuple_subgraph_mod['main'] = lower_partitions(q_tuple_subgraph_func)
-        
-        self.q_tuple_subgraph_mod = q_tuple_subgraph_mod
+        self.q_tuple_subgraph_func = lower_partitions(q_tuple_subgraph_func)
 
-        # TODO: remove me
-        print(self.q_tuple_subgraph_mod)
-        print(relay.transform.InferType()(self.q_tuple_subgraph_mod))
-        
-    
-def prerequisite_optimize(mod, params=None):
+def prerequisite_optimize(func, params=None):
     """ Prerequisite optimization passes for quantization. Perform
     "SimplifyInference", "FoldScaleAxis", "FoldConstant", and
     "CanonicalizeOps" optimization before quantization. """
@@ -80,9 +69,10 @@ def prerequisite_optimize(mod, params=None):
          relay.transform.FoldConstant()])
 
     if params is not None:
-        mod['main'] = relay.build_module.bind_params_by_name(mod['main'], params)
+        func = relay.build_module.bind_params_by_name(func, params)
 
+    mod = tvm.ir.IRModule.from_expr(func)
     with relay.build_config(opt_level=3):
         mod = optimize(mod)
-    
-    return mod
+
+    return mod['main']

@@ -16,11 +16,13 @@
 # under the License.
 
 from tvm import relay
-from tvm.relay.transform.quantize import Conv2DPattern, Conv2DBiasAddPattern, DensePattern, PerChannelPattern, CalibrationCallback, QuantizerPattern, DatasetManager
+from tvm.relay.transform.quantize import Conv2DPattern, Conv2DBiasAddPattern, \
+     DensePattern, PerChannelPattern, CalibrationCallback, QuantizerPattern, \
+     DatasetManager
 
 import numpy as np
 
-# See AverageMaxCalibrationCallback in python/tvm/relay/new_quantize/_calibration_callback.py for the version that is not per channel
+# See AverageMaxCalibrationCallback for the version that is not per channel
 class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
     def __init__(self, calibration_callback : CalibrationCallback = None):
         super().__init__(calibration_callback)

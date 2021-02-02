@@ -14,11 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=wildcard-import, redefined-builtin
-"""Automatic quantization utilities."""
-from __future__ import absolute_import as _abs
+"""DataFlow Pattern Language FFI bindings."""
+import tvm._ffi
 
-from .quantize import *
-from ._partition import register_partition_function
-from ._annotate import register_annotate_function
-from .kl_divergence import _find_scale_by_kl
+tvm._ffi._init_api("relay.new_quantize", __name__)

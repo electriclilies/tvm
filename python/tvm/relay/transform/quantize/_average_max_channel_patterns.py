@@ -41,14 +41,6 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
         QuantizerPattern.scales_count += 1
         return var
 
-    def create_scale_zps(self):
-        # Create quantization variables for arguments to this convolution.
-        data_scale = self.scale('conv2d_data') 
-        data_zp = self.zero_point('conv2d_data')
-        weight_scale = self.scale('conv2d_weight', True)
-        weight_zp = self.zero_point('conv2d_weight')
-        self.scale_zps = [data_scale, data_zp, weight_scale, weight_zp]
-
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)
         
@@ -131,14 +123,6 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
         var = relay.var(str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=shape, dtype='float32')
         QuantizerPattern.scales_count += 1
         return var
-
-    def create_scale_zps(self):
-        # Create quantization parameters for arguments to this dense layer.
-        data_scale = self.scale('dense_data') 
-        data_zp = self.zero_point('dense_data')
-        weight_scale = self.scale('dense_weight', True)
-        weight_zp = self.zero_point('dense_weight')
-        self.scale_zps = [data_scale, data_zp, weight_scale, weight_zp]
 
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)

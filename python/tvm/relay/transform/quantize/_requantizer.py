@@ -25,10 +25,6 @@ import math
 # Dequantize(quantize(var)) -> requantize(var)
 # dequantize(int8_op(int8_op(quantize(var)))) -> int8_op(int8_op(requantize(var)))
 class Requantizer():
-    # Ops that are permitted inbetween quantize and dequantize if we are rewriting to requantize
-    is_int_8_op = is_op('nn.max_pool2d')(wildcard()) | is_op('nn.max_pool3d')(wildcard()) | is_op('nn.relu')(wildcard()) | is_op('transpose')(wildcard()) | is_op('reshape')(wildcard()) | is_op('nn.pad')(wildcard()) | is_op('squeeze')(wildcard())
-    # Takes dequantize(is_int8_op*(quantize(data))) -> requantize(is_int8_op*(data))
-
     class RequantizerCallback(DFPatternCallback):
         def __init__(self):
             super().__init__()
@@ -83,13 +79,14 @@ class Requantizer():
             # Case where there are no ops in between the dequantize and quantize
             if self.no_path_quantize in node_map:
                 axis = node_map[self.no_path_dequantize][0].attrs.axis
-                res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp, axis=axis)
+                res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp, axis=axis) # TODO: this axis doesn't work for per channel + bias add
             # Ops inbetween quantize and dequantize are dominated
             elif self.quantize in node_map:
-
+                
                 # There are ops in between the dequantize and quantize
-                # Takes dequantize(is_int8_op*(quantize(data))) -> requantize(is_int8_op*(data))
-                transformed_data = data
+                # Takes dequantize(is_int8_op*(quantize(data))) -> is_int8_op*(requantize(data))
+                axis = node_map[self.dequantize][0].attrs.axis
+                transformed_data = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp, axis=axis)
                 for i in range(len(node_map[self.is_int_8_op]) - 1, -1, -1):
                     call = node_map[self.is_int_8_op][i]
                     # Transform relu into max(zeropoint)
@@ -101,10 +98,8 @@ class Requantizer():
                     elif call.op in self.op_map.keys():
                         transformed_data = self.op_map[call.op](transformed_data, **call.attrs)
                     else:
-                        # TODO: turn into internal error message
                         raise ValueError("Uh oh, %s is not copied properly in the requantizer. ", str(call.op))
-                axis = node_map[self.dequantize][0].attrs.axis
-                res = relay.qnn.op.requantize(transformed_data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp, axis=axis)
+                res = transformed_data
             return res
 
     class RequantizeChainCallback(DFPatternCallback):
@@ -168,7 +163,6 @@ class Requantizer():
             return relay.qnn.op.requantize(data, rq_parent_scale_in, rq_parent_zp_in, out_scale, out_zp, axis=parent_axis) # TODO: add axis here
 
     # Takes requantize(quantize(data, scale, zp), rscale, rzp) -> quantize(data, rscale, rzp)
-    # TODO: Rename me...
     class ConsolidateRequantizeandQuantize(DFPatternCallback):
         def __init__(self):
             super().__init__()
@@ -210,7 +204,6 @@ class Requantizer():
             return relay.qnn.op.quantize(data, output_scale, output_zp, axis=requantize_axis) # TODO: Add axis here :) 
     
     def requantize(self, func):
-
         rewritten_func = rewrite(self.RequantizerCallback(), func, allow_overlapping_groups=True)
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
         rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
@@ -224,5 +217,5 @@ class Requantizer():
         # We have to fold scale/zp expressions for requantize to work
         with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]): #TODO: AlterOpLayout was causing problems, is it fixed?
             rewritten_mod = optimize(rewritten_mod)
-
+        
         return rewritten_mod['main']

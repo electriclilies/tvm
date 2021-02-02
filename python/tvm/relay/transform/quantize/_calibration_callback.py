@@ -33,19 +33,10 @@ class GlobalCalibrationCallback(CalibrationCallback):
         
         # TODO: the naming / structuring of the calibration_info.partition_info.input_scale_zps is confusing, change?
         for i in range(len(calibration_info.partition_info.input_scale_zps)):
-            scale_name = calibration_info.partition_info.input_scale_zps[i][0].name_hint
+            scale_name = calibration_info.input_scale_zps[i][0].name_hint
             scale_zp_values[scale_name] = self.scale_value
-            zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
+            zp_name = calibration_info.input_scale_zps[i][1].name_hint
             scale_zp_values[zp_name] = self.zp_value
-        
-        # TODO: remove
-        inputs = [np.random.rand(2, 32, 32, 3)]
-
-        # TODO: move this into a testing calibrater
-        print(calibration_info.get_unquantized_layer_inputs(inputs))
-        print(calibration_info.get_unquantized_layer_output(inputs))
-        print(calibration_info.get_quantized_layer_inputs(inputs, scale_zp_values))
-        print(calibration_info.get_quantized_layer_output(inputs, scale_zp_values))
 
         return scale_zp_values
 

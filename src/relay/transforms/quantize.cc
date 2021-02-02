@@ -232,7 +232,7 @@ class RewritePartitions : protected MixedModeMutator {
             // Get the indices of the arguments to this function in the output tuple
             for (auto arg : pre->args) {
               auto itr = std::find(orig_outputs_.begin(), orig_outputs_.end(), arg);
-              ICHECK(itr != orig_outputs_.end()) << "Didn't find the arugment in the output tuple. Indicates a possible problem in PartitionOutputs. ";
+              ICHECK(itr != orig_outputs_.end()) << "Didn't find the arguement in the output tuple. Indicates a possible problem in PartitionOutputs. ";
               input_idx.push_back(std::distance(orig_outputs_.begin(), itr));
             }
             // Get the index of the output of this function 
@@ -295,15 +295,15 @@ class ReplaceArgs : protected MixedModeMutator {
 
 class LowerPartitions : protected MixedModeMutator {
  public:
-  LowerPartitions(const Array<Expr> targets = Array<Expr>()) : targets_(targets) {}
+  LowerPartitions(const Array<Expr> targets = Array<Expr>(), const bool skipping_partitions = false) : targets_(targets), skipping_partitions_(skipping_partitions) {}
   Expr Rewrite(const Expr& expr) {
     Expr new_out = MixedModeMutator::Mutate(expr);
     return new_out;
   }
   Expr Rewrite_(const CallNode* pre, const Expr& post) {
     // Targets is usually length 0, 1, or 2
-    if (targets_.size() == 0 || std::find(targets_.begin(), targets_.end(), pre->op) != targets_.end()) {
-      auto* post_node = post.as<CallNode>(); // should this be pre or post?
+    if ((!skipping_partitions_) || (skipping_partitions_ && std::find(targets_.begin(), targets_.end(), pre->op) != targets_.end())) {
+      auto* post_node = post.as<CallNode>();
       ICHECK(post_node != nullptr);
       if (auto* func_node = post_node->op.as<FunctionNode>()) {
         // If the function was created by the pattern matcher, remove it
@@ -323,6 +323,7 @@ class LowerPartitions : protected MixedModeMutator {
   }
  protected:
   Array<Expr> targets_;
+  bool skipping_partitions_;
 };
 
 TVM_REGISTER_GLOBAL("relay.new_quantize.partition_outputs")
@@ -334,7 +335,7 @@ TVM_REGISTER_GLOBAL("relay.new_quantize.lower_partitions")
 TVM_REGISTER_GLOBAL("relay.new_quantize.skip_partitions")
     .set_body_typed([](const Expr& expr, bool skip_first, bool skip_last) { 
       auto targets = PartitionsInOrder(skip_first, skip_last).GetPartitionsInOrder(expr);
-      return LowerPartitions(targets).Rewrite(expr);
+      return LowerPartitions(targets, true).Rewrite(expr);
     });
 }  // namespace quantize
 }  // namespace relay

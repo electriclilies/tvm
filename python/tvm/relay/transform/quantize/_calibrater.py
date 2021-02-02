@@ -62,6 +62,9 @@ class CalibrationInfo():
         self.dataset_manager = dataset_manager
         self.target = target
         self.ctx = ctx
+
+        self.partition_info = None
+        self.input_scale_zps = None
         
         tuple_subgraph_mod = tvm.ir.IRModule.from_expr(self.tuple_subgraph_func)
         q_tuple_subgraph_mod = tvm.ir.IRModule.from_expr(self.q_tuple_subgraph_func)
@@ -95,6 +98,7 @@ class CalibrationInfo():
     # Sets the partition_info for the current iteration
     def set_current_partition_info(self, partition_info):
         self.partition_info = partition_info
+        self.input_scale_zps = self.partition_info.input_scale_zps
 
     def update_scale_zp_map(self, new_scale_zps):
         self.scale_zp_value_map.update(new_scale_zps)

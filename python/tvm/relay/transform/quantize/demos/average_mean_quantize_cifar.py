@@ -59,17 +59,17 @@ test_dataset_manager = NumpyDatasetManager(test_images, np.ndarray.flatten(test_
 onnx_model = onnx.load('/Users/lorthsmith/Documents/tvm/python/tvm/relay/transform/quantize/demos/cifar-model.onnx')
 input_dict = {'conv2d_input:0': [batch_size, 32, 32, 3]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
-
+print("main: ", mod['main'])
 cc = AverageMaxCalibrationCallback()
 quantizer = Quantizer(mod['main'], params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc), MultiplyPattern(cc)], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
+
 #cc = GlobalCalibrationCallback(2.0, 0)
 #quantizer = Quantizer(mod['main'], params, [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
 
 
 calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=train_dataset_manager)
 calibrated_func = calibrater.calibrate()
-print("Calibrated mod: ")
-
+print("Calibrated func: ", calibrated_func)
 print("Requantizing...")
 requantized_func = Requantizer().requantize(calibrated_func)
 

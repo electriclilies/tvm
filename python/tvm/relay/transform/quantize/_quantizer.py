@@ -56,6 +56,14 @@ class Quantizer():
         # Lower quantized partitions and store in a mod        
         self.q_tuple_subgraph_func = lower_partitions(q_tuple_subgraph_func)
 
+        # Create a function containing 
+        quantized_func = self.q_tuple_subgraph_func
+        if self.num_original_outputs == -1:
+            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, quantized_func.body.fields[0])
+        else:
+            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, relay.Tuple(quantized_func.body.fields[self.num_original_outputs]))
+
+
 def prerequisite_optimize(func, params=None):
     """ Prerequisite optimization passes for quantization. Perform
     "SimplifyInference", "FoldScaleAxis", "FoldConstant", and
@@ -64,15 +72,15 @@ def prerequisite_optimize(func, params=None):
         [relay.transform.DynamicToStatic(),
          relay.transform.SimplifyInference(),
          relay.transform.FoldConstant(),
-         relay.transform.FoldScaleAxis(),
-         relay.transform.CanonicalizeOps(), #TODO: should this be in prereq optimize?
-         relay.transform.FoldConstant()])
+         relay.transform.FoldScaleAxis()])#,
+         #relay.transform.CanonicalizeOps(),
+         #relay.transform.FoldConstant()])
 
     if params is not None:
         func = relay.build_module.bind_params_by_name(func, params)
 
     mod = tvm.ir.IRModule.from_expr(func)
-    with relay.build_config(opt_level=3):
+    with relay.build_config(opt_level=3, disabled_pass=['AlterOpLayout']): # AlterOpLayout inserts pads and other ops in weird places
         mod = optimize(mod)
 
     return mod['main']

@@ -18,7 +18,8 @@
 from typing import List
 
 import tvm
-from tvm.relay.transform.quantize import Quantizer, Calibrater, Requantizer, QuantizerPattern
+from tvm.relay.transform.quantize import Quantizer, Calibrater, \
+     Requantizer, QuantizerPattern
 from .. import function_pass
 
 @function_pass(opt_level=5)
@@ -36,6 +37,7 @@ class QuantizePass:
         # Extract params that are in this function
         for param in func.params:
             params[param.name_hint] = self.params[param.name_hint]
+
         quantizer = Quantizer(func, params, self.quantizer_pattern_list)
         calibrater = Calibrater(quantizer, target=self.target, ctx=self.ctx)
         transformed_func = calibrater.calibrate()

@@ -21,10 +21,15 @@ from tvm import relay
 from tvm.relay.dataflow_pattern import DFPatternCallback, wildcard, is_op, dominates, rewrite
 from tvm.relay.frontend.common import infer_type
 
-# Dequantize(quantize(var)) -> requantize(var)
-# dequantize(int8_op(int8_op(quantize(var)))) -> int8_op(int8_op(requantize(var)))
 class Requantizer():
+    """Removes extraneous qnn.quantize and qnn.dequantize and replaces
+    them with qnn.requantize."""
     class RequantizerCallback(DFPatternCallback):
+        """First pass that takes
+        qnn.dequantize -> qnn.quantize to qnn.requantize
+        and
+        qnn.dequantize -> int8_op* -> qnn.quantize to requantize -> int8_op*
+        """
         def __init__(self):
             super().__init__()
 
@@ -78,12 +83,11 @@ class Requantizer():
             # Case where there are no ops in between the dequantize and quantize
             if self.no_path_quantize in node_map:
                 axis = node_map[self.no_path_dequantize][0].attrs.axis
-                res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp, axis=axis) # TODO: this axis doesn't work for per channel + bias add
+                res = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, \
+                                              quantize_zp, axis=axis)
             # Ops inbetween quantize and dequantize are dominated
             elif self.quantize in node_map:
                 
-                # There are ops in between the dequantize and quantize
-                # Takes dequantize(is_int8_op*(quantize(data))) -> is_int8_op*(requantize(data))
                 axis = node_map[self.dequantize][0].attrs.axis
                 transformed_data = relay.qnn.op.requantize(data, dequantize_scale, dequantize_zp, quantize_scale, quantize_zp, axis=axis)
                 for i in range(len(node_map[self.is_int_8_op]) - 1, -1, -1):
@@ -102,6 +106,10 @@ class Requantizer():
             return res
 
     class RequantizeChainCallback(DFPatternCallback):
+        """Folds chains of requantizes into one requantize.
+        requantize(scale_a, zp_a, scale_b, zp_b) -> requantize(scale_b, zp_b, scale_c, zp_c) becomes
+        requantize(scale_a, zp_a, scale_c, zp_c)
+        """
         # Takes a chain of requantizes and turns them into one requantize
         def __init__(self):
             super().__init__()
@@ -116,8 +124,10 @@ class Requantizer():
             self.rq_child_scale_out = wildcard()
             self.rq_child_zp_out = wildcard()
 
-            self.rq_parent = is_op('qnn.requantize')(self.data, self.rq_parent_scale_in, self.rq_parent_zp_in, self.rq_parent_scale_out, self.rq_parent_zp_out)
-            self.rq_child = is_op('qnn.requantize')(wildcard(), self.rq_child_scale_in, self.rq_child_zp_in, self.rq_child_scale_out, self.rq_child_zp_out)
+            self.rq_parent = is_op('qnn.requantize')(self.data, self.rq_parent_scale_in, self.rq_parent_zp_in, \
+                                                    self.rq_parent_scale_out, self.rq_parent_zp_out)
+            self.rq_child = is_op('qnn.requantize')(wildcard(), self.rq_child_scale_in, self.rq_child_zp_in, \
+                                                   self.rq_child_scale_out, self.rq_child_zp_out)
 
             self.pattern = dominates(self.rq_parent, self.rq_child, self.rq_child)
 
@@ -125,10 +135,6 @@ class Requantizer():
             data = node_map[self.data][0]
             rq_parent = node_map[self.rq_parent][0]
 
-            # We can fold a chain of requantizes together:
-            # requantize(scale_a, zp_a, scale_b, zp_b) -> quantization agnostic ops ->requantize(scale_b, zp_b, scale_c, zp_c)
-            # becomes requantize(scale_a, zp_a, scale_c, zp_c)
-            
             rq_parent_scale_in = node_map[self.rq_parent_scale_in][0]
             rq_parent_zp_in = node_map[self.rq_parent_zp_in][0]
 
@@ -150,19 +156,22 @@ class Requantizer():
                 in_scale = child_in_scales[i]
                 in_zp = child_in_zps[i]
 
-                assert math.isclose(out_scale.data.asnumpy(), in_scale.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05) and \
-                       math.isclose(out_zp.data.asnumpy(), in_zp.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05), \
-                       "Out scales/zps should match in scales/zps. Indicates an internal issue in the quantizer somewhere"
+                assert math.isclose(out_scale.data.asnumpy(), in_scale.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05) \
+                       and math.isclose(out_zp.data.asnumpy(), in_zp.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05), \
+                       "Out scales/zps should match in scales/zps. Indicates an internal issue in the quantizer somewhere."
                 
                 out_scale = child_out_scales[i]
                 out_zp = child_out_zps[i]
 
             parent_axis = rq_parent.attrs['axis']
 
-            return relay.qnn.op.requantize(data, rq_parent_scale_in, rq_parent_zp_in, out_scale, out_zp, axis=parent_axis) # TODO: add axis here
+            return relay.qnn.op.requantize(data, rq_parent_scale_in, rq_parent_zp_in, out_scale, out_zp, axis=parent_axis)
 
-    # Takes requantize(quantize(data, scale, zp), rscale, rzp) -> quantize(data, rscale, rzp)
     class ConsolidateRequantizeandQuantize(DFPatternCallback):
+        """Gets rid of unnecessary requantizes directly following a quantize. Takes 
+        quantize(scale_a, zp_a) -> requantize(scale_a, zp_a, scale_b, zp_b) to
+        quantize(scale_b, zp_b)
+        """
         def __init__(self):
             super().__init__()
             
@@ -214,7 +223,8 @@ class Requantizer():
             relay.transform.EliminateCommonSubexpr()])
         
         # We have to fold scale/zp expressions for requantize to work
-        with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]): #TODO: AlterOpLayout was causing problems, is it fixed?
+        # AlterOpLayout adds some extra ops that mess things up
+        with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
             rewritten_mod = optimize(rewritten_mod)
         
         return rewritten_mod['main']

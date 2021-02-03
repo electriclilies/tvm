@@ -46,8 +46,6 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
 
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)
-        
-        # Maybe I need the node map?
         scale_zp_values = {}
         
         data_min_sum = 0
@@ -77,6 +75,7 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
 
         weight_min_avgs = weight_min_sums / calibration_info.dataset_manager.num_batches()
         weight_max_avgs = weight_max_sums / calibration_info.dataset_manager.num_batches()
+
         # Threshold for quantization of an input to a layer is mean(abs(avg_max), abs(avg_min))
         data_threshold = (np.abs(data_min_avg) + np.abs(data_max_avg)) / 2
         weight_thresholds = (np.abs(weight_min_avgs) + np.abs(weight_max_avgs)) / 2
@@ -88,6 +87,7 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
         data_scale_name = calibration_info.partition_info.input_scale_zps[0][0].name_hint
         data_zp_name = calibration_info.partition_info.input_scale_zps[0][1].name_hint
 
+        # Update the map containing scale and zp values
         scale_zp_values[data_scale_name] = np.array(data_scale).astype('float32')
         scale_zp_values[data_zp_name] = np.array(0).astype('int32')
 
@@ -148,7 +148,7 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
 
             data = unquantized_inputs[0]
             weight = unquantized_inputs[1]
-
+            
             data_min_sum += np.min(data)
             data_max_sum += np.max(data)
             
@@ -156,7 +156,7 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
             weight_max_sums += np.max(weight, axis=1)
 
         calibration_info.dataset_manager.reset()
-        
+
         data_min_avg = data_min_sum / calibration_info.dataset_manager.num_batches()
         data_max_avg = data_max_sum / calibration_info.dataset_manager.num_batches()
 
@@ -167,14 +167,15 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
         data_threshold = (np.abs(data_min_avg) + np.abs(data_max_avg)) / 2
         weight_thresholds = (np.abs(weight_min_avgs) + np.abs(weight_max_avgs)) / 2
 
-        # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins, 
+        # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins,
         # and 128 are positive
         data_scale = data_threshold / 128
         weight_scales = weight_thresholds / 128
-        
+
         data_scale_name = calibration_info.partition_info.input_scale_zps[0][0].name_hint
         data_zp_name = calibration_info.partition_info.input_scale_zps[0][1].name_hint
 
+        # Update the map containing scale and zp values
         scale_zp_values[data_scale_name] = np.array(data_scale).astype('float32')
         scale_zp_values[data_zp_name] = np.array(0).astype('int32')
 

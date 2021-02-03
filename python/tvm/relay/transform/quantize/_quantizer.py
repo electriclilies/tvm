@@ -23,10 +23,10 @@ from tvm.relay.transform.quantize import partition_outputs, skip_partitions, \
                                          QuantizerPattern
 
 class Quantizer():
+    """Class that inserts quantize and dequantizes around every pattern passed in.
+        Also constructs important structures for the Calibrater."""
     def __init__(self, func, params, patterns: List[QuantizerPattern], skip_first=True, \
                  skip_last=True):
-        """Class that inserts quantize and dequantizes around every pattern passed in. 
-        Also constructs important structures for the Calibrater."""
         self.patterns = patterns
         self.original_func = prerequisite_optimize(func, params)
 

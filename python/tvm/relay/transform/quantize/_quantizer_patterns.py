@@ -28,41 +28,100 @@ from . import _ffi as ffi
 import numpy as np
 
 class QuantizerPattern(DFPatternCallback):
+    """DFPatternCallback that contains extra information
+    used for quantization and calibration."""
     # Counts the number of times we've added a scale and zp for variable naming
+    # This needs to be a global variable and not initialized in __init__ because
+    # each scale and zero point must be unique, even if they are created by different
+    # instances.
     scales_count = 0
     zp_count = 0
 
     def __init__(self, calibration_callback : CalibrationCallback = None):
-
         super().__init__()
         self.calibration_callback = calibration_callback
 
     def calibrate_pattern(self, calibration_info):
+        """Calculates the scale and zero points for quantizing parts
+        of a generic pattern. By default, we call the calibrate_pattern
+        method of the CalibrationCallback object that is passed into
+        QuantizerPattern during initialization. However, if you want a
+        pattern specific quantization method or a per-channel quantization
+        method, you should overwrite the QuantizerPattern's calibrate_pattern
+        method.
+        
+        Parameters
+        ----------
+        calibration_info : CalibrationInfo
+            The class containing relevant information and utility functions
+            to calibrate one instance of a pattern.
+
+        Returns
+        -------
+        scale_zp_map : Dictionary
+            A map from the names of scales and zero point variables in this
+            pattern to their values.
+        """
         return self.calibration_callback.calibrate_pattern(calibration_info)
 
     def callback(self, pre, post, node_map):
         raise NotImplementedError
 
-    # Helper to construct the relay scale variable in a pattern
     def scale(self, name):
+        """Helper to create the scale variable for qnn.quantize when rewriting our
+        our pattern.
+        
+        Parameters
+        ----------
+        name : str
+            Identifier at the beginning of the variable.
+        
+        Returns
+        -------
+        var : relay.Var
+            Relay variable for scale. If the input name is 'conv2d_data', then
+            the name of the relay variable might be 'conv2d_data_scale_0'."""
         var = relay.var(str(name) + "_scale_" + str(QuantizerPattern.scales_count),\
               shape=(), dtype='float32')
         QuantizerPattern.scales_count += 1
         return var
 
+    def zero_point(self, name):
+        """Helper to create the zero point variable for qnn.quantize when rewriting our
+        our pattern.
+        
+        Parameters
+        ----------
+        name : str
+            Identifier at the beginning of the variable.
+        
+        Returns
+        -------
+        var : relay.Var
+            Relay variable for scale. If the input name is 'conv2d_data', then
+            the name of the relay variable might be 'conv2d_data_zero_pt_0'."""
+        var = relay.var(str(name) + "_zero_pt_" + str(QuantizerPattern.zp_count),\
+              shape=(), dtype='int32')
+        QuantizerPattern.zp_count += 1
+        return var
+
     def create_scale_zps(self, left_name, right_name):
+        """Helper to create scales and zero points for binops.
+        
+        Parameters
+        ----------
+        left_name : str
+            Identifier of the left hand side scale and zero point.
+
+        right_name : str
+            Identifier of the right hand side scale and zero point.
+        """
         data_scale = self.scale(left_name)
         data_zp = self.zero_point(left_name)
         weight_scale = self.scale(right_name)
         weight_zp = self.zero_point(right_name)
         self.scale_zps = [data_scale, data_zp, weight_scale, weight_zp]
 
-    # Helper to construct the relay zero_point variable in a pattern
-    def zero_point(self, name):
-        var = relay.var(str(name) + "_zero_pt_" + str(QuantizerPattern.zp_count),\
-              shape=(), dtype='int32')
-        QuantizerPattern.zp_count += 1
-        return var
 
 class Conv2DPattern(QuantizerPattern):
     def __init__(self, calibration_callback : CalibrationCallback = None):
@@ -136,7 +195,6 @@ class Conv2DPattern(QuantizerPattern):
         self.attrs = new_attr_dict
 
     def quantize_args(self):
-        # Quantize the data and construct args for qnn.conv2d
         quantized_data = relay.qnn.op.quantize(self.args[0], self.scale_zps[0], \
                          self.scale_zps[1], axis=self.data_channel_axis)
         quantized_weight = relay.qnn.op.quantize(self.args[1], self.scale_zps[2], \
@@ -158,6 +216,7 @@ class Conv2DPattern(QuantizerPattern):
         self.quantize_args()
 
         conv_scale = self.scale_zps[0] * self.scale_zps[2] # data_scale * weight_scale
+
         # Conv zp is zero since QNN deals with input zps for us
         conv_zp = relay.const(0, dtype='int32')
         # args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
@@ -266,7 +325,6 @@ class AddPattern(QuantizerPattern):
 
         add = node_map[self.add][0]
 
-        #TODO: Do I need infer type here?
         out_dtype = infer_type(add).checked_type.dtype
 
         # Create quantization parameters for arguments to this addition
@@ -297,7 +355,8 @@ class AddPattern(QuantizerPattern):
                                                 relay.const(0, dtype='int32'))
 
         add = relay.op.add(requantized_lhs, requantized_rhs)
-        dequantized_call = relay.qnn.op.dequantize(add, add_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
+        dequantized_call = relay.qnn.op.dequantize(add, add_scale, relay.const(0, dtype='int32'), \
+                                                   out_dtype=out_dtype)
 
         return dequantized_call
 
@@ -315,7 +374,7 @@ class MultiplyPattern(QuantizerPattern):
         rhs = node_map[self.rhs][0]
 
         multiply = node_map[self.multiply][0]
-        # TODO: do I need infer_type here?
+
         out_dtype = infer_type(multiply).checked_type.dtype
 
         # Create quantization parameters for arguments to this multiplication.
@@ -339,7 +398,13 @@ class MultiplyPattern(QuantizerPattern):
         return dequantized_call
 
 class PerChannelPattern():
+    """A parent class for patterns that will be per-channel quantized.
+    PerChannelPattern should only be inherited by a class that also inherits
+    QuantizerPattern or a subclass of it.
+    """
     def extract_attrs(self, pre, post, node_map):
+        """A function to get the attributes of the quantized version of the current
+        pattern."""
         raise NotImplementedError()
 
     def create_scale_zps(self, left_name, right_name):
@@ -358,7 +423,9 @@ class PerChannelPattern():
 def partition_outputs(expr):
     return ffi.partition_outputs(expr)
 def rewrite_partitions(callbacks, expr):
-    return ffi.rewrite_partitions([_DFPatternCallback(callback.pattern, callback.callback, callback.require_type) for callback in callbacks], infer_type(expr))
+    return ffi.rewrite_partitions([_DFPatternCallback(callback.pattern, callback.callback, \
+                                  callback.require_type) for callback in callbacks], \
+                                  infer_type(expr))
 def lower_partitions(expr):
     return ffi.lower_partitions(expr)
 def lower_partitions(expr):

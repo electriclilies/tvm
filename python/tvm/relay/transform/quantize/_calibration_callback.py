@@ -20,6 +20,23 @@ import numpy as np
 class CalibrationCallback():
     """Abstract class that defines the API calibration methods."""
     def calibrate_pattern(self, calibration_info):
+        """Calculates the scale and zero points for quantizing parts
+        of a generic pattern. If you would like to do per-channel or
+        pattern-specific calibration, please overwrite calibrate_pattern
+        in the relevant QuantizerPattern.
+
+        Parameters
+        ----------
+        calibration_info : CalibrationInfo
+            The class containing relevant information and utility functions
+            to calibrate one instance of a pattern.
+
+        Returns
+        -------
+        scale_zp_map : Dictionary
+            A map from the names of scales and zero point variables in this
+            pattern to their values.
+        """
         raise NotImplementedError
 
 class GlobalCalibrationCallback(CalibrationCallback):
@@ -29,7 +46,9 @@ class GlobalCalibrationCallback(CalibrationCallback):
         self.zp_value = np.array(zp_value).astype('int32')
 
     def calibrate_pattern(self, calibration_info):
-        scale_zp_values = {}        
+        """Returns the scale and zero point value set during initialization to
+        the Calibrater."""
+        scale_zp_values = {}
         for i in range(len(calibration_info.input_scale_zps)):
             scale_name = calibration_info.input_scale_zps[i][0].name_hint
             scale_zp_values[scale_name] = self.scale_value
@@ -39,8 +58,8 @@ class GlobalCalibrationCallback(CalibrationCallback):
         return scale_zp_values
 
 class AverageMaxCalibrationCallback(CalibrationCallback):
-    """Calculates scales and zero points by calculating the average of the maxiumum 
-    absolute value of the value we are quantizing."""
+    """Calculates scales and zero points by calculating the average of the maxiumum
+    absolute value of the data we are quantizing."""
     def calibrate_pattern(self, calibration_info):
         scale_zp_values = {}
         min_sums = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
@@ -51,7 +70,7 @@ class AverageMaxCalibrationCallback(CalibrationCallback):
             image_list, _ = calibration_info.dataset_manager.get_next_batch()
             unquantized_inputs = calibration_info.get_unquantized_layer_inputs(image_list)
 
-            # Iterate through scale and zp variables 
+            # Iterate through scale and zp variables
             for i, unquantized_input in enumerate(unquantized_inputs):
                 # Calculate the average min, max across each batch
                 min_sums[i] += np.min(unquantized_input)
@@ -65,7 +84,7 @@ class AverageMaxCalibrationCallback(CalibrationCallback):
         # Threshold for quantization of an input to a layer is mean(abs(avg_max), abs(avg_min))
         thresholds = np.mean([np.abs(avg_mins), np.abs(avg_maxs)], axis=0)
 
-        # Since this is a symmetric distribution and we are quantizing to int8, 
+        # Since this is a symmetric distribution and we are quantizing to int8,
         # there are 256 bins, and 128 are positive
         scales = thresholds / 128
 

@@ -18,14 +18,12 @@
 """The namespace containing quantization and calibration passes"""
 from ._dataset_manager import DatasetManager, TFDatasetManager
 from ._calibration_callback import CalibrationCallback, GlobalCalibrationCallback, \
-                                   AverageMaxCalibrationCallback
+     AverageMaxCalibrationCallback
 from ._quantizer_patterns import QuantizerPattern, Conv2DBiasAddPattern, Conv2DPattern, \
-                                 DensePattern, AddPattern, MultiplyPattern, PerChannelPattern, \
-                                 partition_outputs, skip_partitions, rewrite_partitions, \
-                                 lower_partitions
+     DensePattern, AddPattern, MultiplyPattern, PerChannelPattern, partition_outputs, \
+     skip_partitions, rewrite_partitions, lower_partitions
 from ._average_max_channel_patterns import AverageMaxPerChannelConv2DBiasAddPattern, \
-                                           AverageMaxPerChannelConv2DPattern, \
-                                           AverageMaxPerChannelDensePattern
+     AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern
 from ._quantizer import Quantizer
 from ._calibrater import Calibrater
 from ._requantizer import Requantizer

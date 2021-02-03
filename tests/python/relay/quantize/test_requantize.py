@@ -27,10 +27,12 @@ def check_requantize(pre_graph, expected_graph):
     print("post_graph before infer type: ", post_graph)
 
     print("expected_graph before infer type: ", expected_graph)
-    infer_type(post_graph)
-    infer_type(expected_graph)
+    post_graph = infer_type(post_graph)
+    expected_graph = infer_type(expected_graph)
     print("post_graph: ", post_graph)
     print("expected_graph: ", expected_graph)
+    assert tvm.ir.structural_equal(post_graph, expected_graph)
+
 
     assert tvm.ir.structural_equal(post_graph, expected_graph)
 def make_scale_zp(scale_name, zp_name):

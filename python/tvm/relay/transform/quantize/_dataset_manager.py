@@ -15,31 +15,64 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import numpy as np
+
 class DatasetManager():
+    """Simple wrapper class to expose datasets in quantization."""
     def __init__(self):
         raise NotImplementedError
 
     def get_next_batch(self):
+        """Returns the next batch of data.
+
+        Returns
+        -------
+        inputs : List
+            The inputs to be provided to the graph.
+            The list is of the form [batched_input_1, batched_input_2]
+
+        labels: List
+            The expected outputs of the graph.
+            The length of labels should be equal to the batch size.
+        """
         raise NotImplementedError
 
     def num_batches(self):
+        """Returns the number of batches the dataset manager
+        has.
+
+        Returns
+        ------
+        num_batches : int
+            The number of batches the dataset manager contains.
+        """
         raise NotImplementedError
 
     def is_empty(self):
+        """Checks whether the dataset manager has gone through
+        all its batches.
+        Returns
+        -------
+        is_empty : bool
+            True if there are batches left, False if there are no more
+            batches.
+        """
         raise NotImplementedError
 
     def reset(self):
+        """Resets the counter in the dataset manager to the beginning.
+        """
         raise NotImplementedError
 
 class TFDatasetManager(DatasetManager):
-    def __init__(self, tf_dataset, batch_size, n_batches):
+    """DatasetManager wrapping a tensorflow dataset."""
+    def __init__(self, tf_dataset, batch_size, total_batches):
         self.idx = 0
-        self.n_batches = n_batches
+        self.total_batches = total_batches
         self.batch_size = batch_size
         self.tf_dataset = tf_dataset
         self.tf_iter = iter(self.tf_dataset)
     
-    # Returns the next batch of data
     def get_next_batch(self):
         if self.is_empty():
             raise IndexError
@@ -50,12 +83,37 @@ class TFDatasetManager(DatasetManager):
         return [data.numpy()], label.numpy()
     
     def num_batches(self):
-        return self.n_batches
+        return self.total_batches
 
     def is_empty(self):
-        return self.idx >= self.n_batches
+        return self.idx >= self.total_batches
 
-    # TODO: either reset automatically at the end of get batch or have a is_empty util
     def reset(self):
         self.tf_iter = iter(self.tf_dataset)
+        self.idx = 0
+
+class RandomDatasetManager(DatasetManager):
+    """DatasetManager that creates a random input of a specific shape.
+    This class is mostly used for testing, and as an example of how to
+    implement a DatasetManager.
+    """
+    def __init__(self, data_shape, dtype, total_batches):
+        self.idx = 0
+        self.data_shape = data_shape
+        self.dtype = dtype
+        self.total_batches = total_batches
+    
+    def get_next_batch(self):
+        if self.is_empty():
+            raise IndexError
+        self.idx += 1
+        return [np.random.randn(*self.data_shape).astype(self.dtype)], [None]
+
+    def num_batches(self):
+        return self.total_batches
+
+    def is_empty(self):
+        return self.idx >= self.total_batches
+
+    def reset(self):
         self.idx = 0

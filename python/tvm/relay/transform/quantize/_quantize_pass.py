@@ -15,16 +15,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from typing import List
+
 import tvm
 from tvm.relay.transform.quantize import Quantizer, Calibrater, Requantizer, QuantizerPattern
 from .. import function_pass
 
-from typing import List
-
 @function_pass(opt_level=5)
 class QuantizePass:
     """Explicit pass wrapper around quantization workflow"""
-    def __init__(self, quantizer_pattern_list : List[QuantizerPattern], params, target='llvm', ctx=tvm.cpu(0)):
+    def __init__(self, quantizer_pattern_list : List[QuantizerPattern], params, \
+                 target='llvm', ctx=tvm.cpu(0)):
         self.quantizer_pattern_list = quantizer_pattern_list
         self.params = params
         self.target = target

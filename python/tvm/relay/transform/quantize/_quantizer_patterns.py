@@ -45,12 +45,13 @@ class QuantizerPattern(DFPatternCallback):
 
     # Helper to construct the relay scale variable in a pattern
     def scale(self, name):
-        var = relay.var(str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=(), dtype='float32')
+        var = relay.var(str(name) + "_scale_" + str(QuantizerPattern.scales_count),\
+              shape=(), dtype='float32')
         QuantizerPattern.scales_count += 1
         return var
 
     def create_scale_zps(self, left_name, right_name):
-        data_scale = self.scale(left_name) 
+        data_scale = self.scale(left_name)
         data_zp = self.zero_point(left_name)
         weight_scale = self.scale(right_name)
         weight_zp = self.zero_point(right_name)
@@ -58,7 +59,8 @@ class QuantizerPattern(DFPatternCallback):
 
     # Helper to construct the relay zero_point variable in a pattern
     def zero_point(self, name):
-        var = relay.var(str(name) + "_zero_pt_" + str(QuantizerPattern.zp_count), shape=(), dtype='int32')
+        var = relay.var(str(name) + "_zero_pt_" + str(QuantizerPattern.zp_count),\
+              shape=(), dtype='int32')
         QuantizerPattern.zp_count += 1
         return var
 
@@ -67,13 +69,9 @@ class Conv2DPattern(QuantizerPattern):
         super().__init__(calibration_callback)
         self.input = wildcard()
         self.conv_weight = wildcard()
-
-        self.inputs=[self.input, self.conv_weight]
-
+        self.inputs = [self.input, self.conv_weight]
         self.conv2d = is_op('nn.conv2d')(self.input, self.conv_weight)
-        
         self.pattern = self.conv2d
-
         self.attrs = None
         self.weight_channel_axis = None
         self.data_channel_axis = None
@@ -85,28 +83,31 @@ class Conv2DPattern(QuantizerPattern):
         elif kernel_layout == "HWIO":
             kernel_size = tuple(kernel_shape[0:2])
         else:
-            raise ValueError("Quantizting kernel layout %s for conv2d is not yet supported. Please use OIHW or HWIO", kernel_layout)
+            raise ValueError("Quantizting kernel layout %s for conv2d is not yet supported.", \
+                             "Please use OIHW or HWIO", kernel_layout)
         return kernel_size
 
     def get_attrs(self, attrs, kernel_shape):
         new_attr_dict = {}
         self.kernel_layout = attrs["kernel_layout"]
         data_layout = attrs["data_layout"]
-        
+
         if self.kernel_layout == "OIHW":
             self.weight_channel_axis = 0
         elif self.kernel_layout == "HWIO":
             self.weight_channel_axis = 3
         else:
-            raise ValueError("Quantizing kernel layout %s for conv2d is not yet supported. Please use OIHW or HWIO", kernel_layout)
+            raise ValueError("Quantizing kernel layout %s for conv2d is not yet supported.", \
+                             "Please use OIHW or HWIO", self.kernel_layout)
 
         if data_layout == "NCHW":
             self.data_channel_axis = 1
         elif data_layout == "NHWC":
             self.data_channel_axis = 3
         else:
-            raise ValueError("Quantizing data layout %s for conv2d is not yet supported. Please use NCHW or NHWC", data_layout)
-        
+            raise ValueError("Quantizing data layout %s for conv2d is not yet supported.", \
+                             "Please use NCHW or NHWC", data_layout)
+
         for attr in attrs.keys():
             attr_value = attrs[attr]
             if isinstance(attr_value, tvm.ir.container.Array):
@@ -122,23 +123,26 @@ class Conv2DPattern(QuantizerPattern):
                 self.channels = attrs[attr]
                 if self.channels is None:
                     self.channels = kernel_shape[self.weight_channel_axis]
-                if (isinstance(self.channels, tvm.tir.expr.IntImm)):
+                if isinstance(self.channels, tvm.tir.expr.IntImm):
                     self.channels = self.channels.value
                 new_attr_dict[attr] = self.channels
             elif attr == 'padding':
-                self.padding = attrs[attr] # Don't need to put padding in attr dict because we explicitly construct padding
+                # We don't need to put padding in attr dict because we explicitly construct padding
+                self.padding = attrs[attr]
             else:
                 new_attr_dict[attr] = attr_value
 
         new_attr_dict['out_dtype'] = 'int32'
         self.attrs = new_attr_dict
-    
+
     def quantize_args(self):
         # Quantize the data and construct args for qnn.conv2d
-        quantized_data = relay.qnn.op.quantize(self.args[0], self.scale_zps[0], self.scale_zps[1], axis=self.data_channel_axis)
-        quantized_weight = relay.qnn.op.quantize(self.args[1], self.scale_zps[2], self.scale_zps[3], axis=self.weight_channel_axis)
+        quantized_data = relay.qnn.op.quantize(self.args[0], self.scale_zps[0], \
+                         self.scale_zps[1], axis=self.data_channel_axis)
+        quantized_weight = relay.qnn.op.quantize(self.args[1], self.scale_zps[2], \
+                           self.scale_zps[3], axis=self.weight_channel_axis)
         self.quantized_args = [quantized_data, quantized_weight]
-        
+
     def create_conv(self, args):
         return relay.qnn.op.conv2d(*args, **self.attrs)
 
@@ -156,7 +160,8 @@ class Conv2DPattern(QuantizerPattern):
         conv_scale = self.scale_zps[0] * self.scale_zps[2] # data_scale * weight_scale
         # Conv zp is zero since QNN deals with input zps for us
         conv_zp = relay.const(0, dtype='int32')
-        args = self.quantized_args[0:2] + [self.scale_zps[i] for i in [1, 3, 0, 2]] #[quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
+        # args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
+        args = self.quantized_args[0:2] + [self.scale_zps[i] for i in [1, 3, 0, 2]]
 
         if self.padding is not None:
 
@@ -170,7 +175,9 @@ class Conv2DPattern(QuantizerPattern):
 
         # Construct quantized qnn.conv2d and dequantize
         qnn_call = self.create_conv(args)
-        dequantized_call = relay.qnn.op.dequantize(qnn_call, conv_scale, conv_zp, out_dtype=self.out_dtype, axis=self.data_channel_axis)
+        dequantized_call = relay.qnn.op.dequantize(qnn_call, conv_scale, conv_zp, \
+                                                   out_dtype=self.out_dtype, \
+                                                   axis=self.data_channel_axis)
 
         return dequantized_call
 
@@ -179,17 +186,19 @@ class Conv2DBiasAddPattern(Conv2DPattern):
         super().__init__(calibration_callback)
         self.bias_weight = wildcard()
         self.inputs.append(self.bias_weight)
-        self.bias_add = is_op('nn.bias_add')(self.conv2d, self.bias_weight) #| is_op('add')(self.conv2d, self.bias_weight)
+        self.bias_add = is_op('nn.bias_add')(self.conv2d, self.bias_weight)
         self.pattern = self.bias_add
 
     def quantize_args(self):
         super().quantize_args()
-        quantized_bias = relay.qnn.op.quantize(self.args[2], self.scale_zps[0], self.scale_zps[1], axis=0, out_dtype='int32')
+        quantized_bias = relay.qnn.op.quantize(self.args[2], self.scale_zps[0], \
+                         self.scale_zps[1], axis=0, out_dtype='int32')
         self.quantized_args.append(quantized_bias)
 
     def create_conv(self, args):
         qnn_call =  relay.qnn.op.conv2d(*args, **self.attrs)
-        bias_add = relay.op.nn.bias_add(qnn_call, self.quantized_args[2], axis=self.data_channel_axis)
+        bias_add = relay.op.nn.bias_add(qnn_call, self.quantized_args[2], \
+                   axis=self.data_channel_axis)
         return bias_add
 
 class DensePattern(QuantizerPattern):
@@ -197,9 +206,8 @@ class DensePattern(QuantizerPattern):
         super().__init__(calibration_callback)
         self.data = wildcard()
         self.weight = wildcard()
-
         self.inputs = [self.data, self.weight]
-        
+
         self.dense = is_op('nn.dense')(self.data, self.weight)
 
         self.pattern = self.dense
@@ -211,11 +219,12 @@ class DensePattern(QuantizerPattern):
             units = weight_shape[0]
         units = units.value
         self.attrs['units'] = units
-        
+
     def quantize_args(self):
         # Quantize data and construct args for qnn.dense
         quantized_data = relay.qnn.op.quantize(self.args[0], self.scale_zps[0], self.scale_zps[1])
-        quantized_weight = relay.qnn.op.quantize(self.args[1], self.scale_zps[2], self.scale_zps[3], axis=0) # Axis = 0 for per channel quantization
+        quantized_weight = relay.qnn.op.quantize(self.args[1], self.scale_zps[2], \
+                           self.scale_zps[3], axis=0) # Axis = 0 for per channel quantization
         self.quantized_args = [quantized_data, quantized_weight]
 
     def create_dense(self, args):
@@ -234,11 +243,12 @@ class DensePattern(QuantizerPattern):
         self.create_scale_zps('dense_data', 'dense_weight')
         self.quantize_args()
 
-        args = self.quantized_args[0:2] + [self.scale_zps[i] for i in [1, 3, 0, 2]] #[quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
-
+        # args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
+        args = self.quantized_args[0:2] + [self.scale_zps[i] for i in [1, 3, 0, 2]]
         qnn_call = self.create_dense(args)
 
-        dequantized_call = relay.qnn.op.dequantize(qnn_call, self.scale_zps[0] * self.scale_zps[2], relay.const(0, dtype='int32'), out_dtype=out_dtype, axis=1) # Dequantize axis = 1
+        dequantized_call = relay.qnn.op.dequantize(qnn_call, self.scale_zps[0] * self.scale_zps[2], \
+                           relay.const(0, dtype='int32'), out_dtype=out_dtype, axis=1)
 
         return dequantized_call
 
@@ -247,10 +257,9 @@ class AddPattern(QuantizerPattern):
         super().__init__(calibration_callback)
         self.lhs = wildcard()
         self.rhs = wildcard()
-
         self.add = is_op('add')(self.lhs, self.rhs)
         self.pattern = self.add
-    
+
     def callback(self, pre, post, node_map):
         lhs = node_map[self.lhs][0]
         rhs = node_map[self.rhs][0]
@@ -266,21 +275,27 @@ class AddPattern(QuantizerPattern):
         # Quantize, dequantize, and requantize inputs to have scale lhs_scale + rhs_scale
         # (Scale represents the lowest possible value representable in the quantized type,
         # so the smallest representable output is lhs_scale + rhs_scale)
-                
+
         # We do this to avoid the requantize op in qnn's add, which causes issues with compilation
         # Requantize will be inserted in a future pass
         lhs_scale, lhs_zp, rhs_scale, rhs_zp = self.scale_zps
         quantized_lhs = relay.qnn.op.quantize(lhs, lhs_scale, lhs_zp)
         quantized_rhs = relay.qnn.op.quantize(rhs, rhs_scale, rhs_zp)
 
-        dequantized_lhs = relay.qnn.op.dequantize(quantized_lhs, lhs_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
-        dequantized_rhs = relay.qnn.op.dequantize(quantized_rhs, rhs_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
+        dequantized_lhs = relay.qnn.op.dequantize(quantized_lhs, lhs_scale, \
+                                                  relay.const(0, dtype='int32'), \
+                                                  out_dtype=out_dtype)
+        dequantized_rhs = relay.qnn.op.dequantize(quantized_rhs, rhs_scale, \
+                                                  relay.const(0, dtype='int32'), \
+                                                  out_dtype=out_dtype)
 
         add_scale = relay.op.add(lhs_scale, rhs_scale)
 
-        requantized_lhs = relay.qnn.op.quantize(dequantized_lhs, add_scale, relay.const(0, dtype='int32'))
-        requantized_rhs = relay.qnn.op.quantize(dequantized_rhs, add_scale, relay.const(0, dtype='int32'))
-        
+        requantized_lhs = relay.qnn.op.quantize(dequantized_lhs, add_scale, \
+                                                relay.const(0, dtype='int32'))
+        requantized_rhs = relay.qnn.op.quantize(dequantized_rhs, add_scale, \
+                                                relay.const(0, dtype='int32'))
+
         add = relay.op.add(requantized_lhs, requantized_rhs)
         dequantized_call = relay.qnn.op.dequantize(add, add_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
 
@@ -294,13 +309,13 @@ class MultiplyPattern(QuantizerPattern):
 
         self.multiply = is_op('multiply')(self.lhs, self.rhs)
         self.pattern = self.multiply
-    
+
     def callback(self, pre, post, node_map):
         lhs = node_map[self.lhs][0]
         rhs = node_map[self.rhs][0]
 
         multiply = node_map[self.multiply][0]
-        # TODO: do I need infer_type here? 
+        # TODO: do I need infer_type here?
         out_dtype = infer_type(multiply).checked_type.dtype
 
         # Create quantization parameters for arguments to this multiplication.
@@ -317,7 +332,9 @@ class MultiplyPattern(QuantizerPattern):
         zeroed_quantized_rhs = relay.op.subtract(quantized_rhs, rhs_zp)
 
         multiply = relay.op.multiply(zeroed_quantized_lhs, zeroed_quantized_rhs)
-        dequantized_call = relay.qnn.op.dequantize(multiply, lhs_scale * rhs_scale, relay.const(0, dtype='int32'), out_dtype=out_dtype)
+        dequantized_call = relay.qnn.op.dequantize(multiply, lhs_scale * rhs_scale, \
+                                                   relay.const(0, dtype='int32'), \
+                                                   out_dtype=out_dtype)
 
         return dequantized_call
 
@@ -334,7 +351,9 @@ class PerChannelPattern():
         self.scale_zps = [data_scale, data_zp, weight_scale, weight_zp]
     
     def attr_callback(self, expr):
-        pattern_ffi.rewrite([_DFPatternCallback(self.pattern, self.extract_attrs, self.require_type)], infer_type(expr), tvm.ir.IRModule(), False)
+        pattern_ffi.rewrite([_DFPatternCallback(self.pattern, self.extract_attrs, \
+                             self.require_type)], infer_type(expr), \
+                             tvm.ir.IRModule(), False)
 
 def partition_outputs(expr):
     return ffi.partition_outputs(expr)

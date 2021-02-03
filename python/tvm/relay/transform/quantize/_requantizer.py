@@ -14,13 +14,12 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import math
 
 import tvm
 from tvm import relay
 from tvm.relay.dataflow_pattern import DFPatternCallback, wildcard, is_op, dominates, rewrite
 from tvm.relay.frontend.common import infer_type
-
-import math
 
 # Dequantize(quantize(var)) -> requantize(var)
 # dequantize(int8_op(int8_op(quantize(var)))) -> int8_op(int8_op(requantize(var)))

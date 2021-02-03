@@ -14,12 +14,11 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import numpy as np
 
 import tvm
 from tvm import relay
-from tvm.contrib import graph_runtime
 from tvm.relay.transform.quantize import Quantizer
-import numpy as np
 
 class Calibrater():
     def __init__(self, quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager = None): # TODO: is there a better way to deal w target/ctx
@@ -54,7 +53,8 @@ class Calibrater():
         return calibrated_func
 
 class CalibrationInfo():
-
+    """Helper class that passes information necessary for picking scales and zero points into 
+    calibration_callback. The state of CalibrationInfo is updated by Calibrater."""
     def __init__(self, tuple_subgraph_func, q_tuple_subgraph_func, partition_infos, dataset_manager, target, ctx):
         self.tuple_subgraph_func = tuple_subgraph_func
         self.q_tuple_subgraph_func = q_tuple_subgraph_func

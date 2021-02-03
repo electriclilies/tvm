@@ -14,25 +14,28 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+from typing import List
 
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Conv2DBiasAddPattern, partition_outputs, skip_partitions, rewrite_partitions, lower_partitions, QuantizerPattern
-from typing import List
-import numpy as np
-from tvm.contrib import graph_runtime
+from tvm.relay.transform.quantize import partition_outputs, skip_partitions, \
+                                         rewrite_partitions, lower_partitions, \
+                                         QuantizerPattern
 
 class Quantizer():
-    def __init__(self, func, params, patterns: List[QuantizerPattern], skip_first=True, skip_last=True):
+    def __init__(self, func, params, patterns: List[QuantizerPattern], skip_first=True, \
+                 skip_last=True):
+        """Class that inserts quantize and dequantizes around every pattern passed in. 
+        Also constructs important structures for the Calibrater."""
         self.patterns = patterns
         self.original_func = prerequisite_optimize(func, params)
 
         # num_original outputs is -1 if output is not a Tuple, else is length of tuple
-        if (isinstance(self.original_func.body, tvm.relay.expr.Tuple)):
+        if isinstance(self.original_func.body, tvm.relay.expr.Tuple):
             self.num_original_outputs = len(self.original_func.body)
         else:
             self.num_original_outputs = -1
-        
+
         # Partition the func into sub functions containing the patterns we want to quantize
         partitioned_func = self.original_func
         for q_pattern in self.patterns:
@@ -53,15 +56,18 @@ class Quantizer():
         # Information about each partition used for calibration
         self.partition_infos = outs['infos_']
 
-        # Lower quantized partitions and store in a mod        
+        # Lower quantized partitions and store in a mod
         self.q_tuple_subgraph_func = lower_partitions(q_tuple_subgraph_func)
 
-        # Create a function containing 
+        # Create a function containing just the quantized original graph
         quantized_func = self.q_tuple_subgraph_func
         if self.num_original_outputs == -1:
-            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, quantized_func.body.fields[0])
+            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, \
+                                                 quantized_func.body.fields[0])
         else:
-            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, relay.Tuple(quantized_func.body.fields[self.num_original_outputs]))
+            tuple_body = relay.Tuple(quantized_func.body.fields[self.num_original_outputs])
+            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, \
+                                                 tuple_body)
 
 
 def prerequisite_optimize(func, params=None):
@@ -80,7 +86,8 @@ def prerequisite_optimize(func, params=None):
         func = relay.build_module.bind_params_by_name(func, params)
 
     mod = tvm.ir.IRModule.from_expr(func)
-    with relay.build_config(opt_level=3, disabled_pass=['AlterOpLayout']): # AlterOpLayout inserts pads and other ops in weird places
+    # AlterOpLayout inserts pads and other ops in weird places, so we disable it
+    with relay.build_config(opt_level=3, disabled_pass=['AlterOpLayout']):
         mod = optimize(mod)
 
     return mod['main']

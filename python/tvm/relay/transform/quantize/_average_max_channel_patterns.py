@@ -15,15 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import numpy as np
+
 from tvm import relay
 from tvm.relay.transform.quantize import Conv2DPattern, Conv2DBiasAddPattern, \
      DensePattern, PerChannelPattern, CalibrationCallback, QuantizerPattern, \
      DatasetManager
 
-import numpy as np
-
-# See AverageMaxCalibrationCallback for the version that is not per channel
 class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
+    """Per channel version of Conv2DPattern, implementing the average max algorithm to
+    calculate scales and zero points."""
     def __init__(self, calibration_callback : CalibrationCallback = None):
         super().__init__(calibration_callback)
 
@@ -98,13 +99,16 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
 
         return scale_zp_values
 
-# TODO: make sure order of imports is correct
 class AverageMaxPerChannelConv2DBiasAddPattern(AverageMaxPerChannelConv2DPattern, Conv2DBiasAddPattern):
+    """Per channel version of Conv2DBiasAddPattern, implementing the average max algorithm to
+    calculate scales and zero points."""
     def __init__(self, calibration_callback : CalibrationCallback = None):
         super().__init__(calibration_callback)
 
 
 class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
+    """Per channel version of DensePattern, implementing the average max algorithm to
+    calculate scales and zero points."""
     def __init__(self, calibration_callback : CalibrationCallback):
         super().__init__(calibration_callback)
 
@@ -129,7 +133,6 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)
         
-        # Maybe I need the node map?
         scale_zp_values = {}
         
         data_min_sum = 0
@@ -164,7 +167,8 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
         data_threshold = (np.abs(data_min_avg) + np.abs(data_max_avg)) / 2
         weight_thresholds = (np.abs(weight_min_avgs) + np.abs(weight_max_avgs)) / 2
 
-        # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins, and 128 are positive
+        # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins, 
+        # and 128 are positive
         data_scale = data_threshold / 128
         weight_scales = weight_thresholds / 128
         

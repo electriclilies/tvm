@@ -3,7 +3,7 @@
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, GlobalCalibrater, DatasetManager, Requantizer
+from tvm.relay.transform.quantize import Quantizer, GlobalCalibrator, DatasetManager, Requantizer
 
 from tensorflow.keras import datasets, layers, models
 import matplotlib.pyplot as plt
@@ -48,8 +48,8 @@ with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     q_lib = relay.build(quantized_mod, target='llvm')
 
 # Calibrate
-global_calibrater = GlobalCalibrater(0.05, 0)
-calibrated_mod = global_calibrater.calibrate(quantized_mod, calibration_map)
+global_calibrator = GlobalCalibrator(0.05, 0)
+calibrated_mod = global_calibrator.calibrate(quantized_mod, calibration_map)
 print("Calibrated mod: \n", calibrated_mod.astext(False))
 
 # Requantize

@@ -41,7 +41,7 @@ from ._average_max_channel_patterns import (
     AverageMaxPerChannelDensePattern,
 )
 from ._quantizer import Quantizer
-from ._calibrater import Calibrater
+from ._calibrator import QuantizationCalibrator
 from ._requantizer import Requantizer
 
 from . import _ffi as ffi

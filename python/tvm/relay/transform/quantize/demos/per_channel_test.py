@@ -3,7 +3,7 @@
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, AverageMeanCalibrater, DatasetManager, Requantizer, Calibrater
+from tvm.relay.transform.quantize import Quantizer, AverageMeanCalibrator, DatasetManager, Requantizer, Calibrator
 
 from tensorflow.keras import datasets, layers, models
 import onnx
@@ -41,7 +41,7 @@ class NumpyDatasetManager(DatasetManager):
     def reset(self):
         self.idx = 0
 
-class PerChannelTestCalibrater(Calibrater):
+class PerChannelTestCalibrator(Calibrator):
 
     def __init__(self, input_shape):
         super().__init__()
@@ -99,8 +99,8 @@ quantized_mod, calibration_map = Quantizer().quantize(mod, params, skip_layers=[
 #print("Quantized mod: \n", quantized_mod.astext(False))
 
 # Calibrate
-average_mean_calibrater = PerChannelTestCalibrater([batch_size, 32, 32, 3])
-calibrated_mod = average_mean_calibrater.calibrate(quantized_mod, calibration_map)
+average_mean_calibrator = PerChannelTestCalibrator([batch_size, 32, 32, 3])
+calibrated_mod = average_mean_calibrator.calibrate(quantized_mod, calibration_map)
 #print("Calibrated mod: \n", calibrated_mod.astext(False))
 
 # Requantize

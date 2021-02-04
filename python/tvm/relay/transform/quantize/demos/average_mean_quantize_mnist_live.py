@@ -1,6 +1,6 @@
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, DefaultCalibrater, Calibrater, TFDatasetManager, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
+from tvm.relay.transform.quantize import Quantizer, DefaultCalibrator, Calibrator, TFDatasetManager, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
 import onnx
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds

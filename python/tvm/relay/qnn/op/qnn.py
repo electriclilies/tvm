@@ -23,9 +23,6 @@ from tvm.relay.op.nn.utils import get_pad_tuple2d
 from ... import op as reg
 from ...op import OpPattern
 from . import _make
-from ... import op as reg
-from ...op import OpPattern
-
 
 def requantize(
     data,

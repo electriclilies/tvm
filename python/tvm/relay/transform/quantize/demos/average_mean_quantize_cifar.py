@@ -3,7 +3,7 @@ import onnx
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, Calibrater, AverageMaxCalibrationCallback, GlobalCalibrationCallback, DatasetManager, Requantizer, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern
+from tvm.relay.transform.quantize import Quantizer, Calibrator, AverageMaxCalibrationCallback, GlobalCalibrationCallback, DatasetManager, Requantizer, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern
 
 from tensorflow.keras import datasets
 
@@ -67,12 +67,12 @@ quantizer = Quantizer(mod['main'], params, [AverageMaxPerChannelConv2DBiasAddPat
 #quantizer = Quantizer(mod['main'], params, [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)], skip_last=False)#, AddPattern(cc), MultiplyPattern(cc)], skip_last=False)
 
 
-calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=train_dataset_manager)
-calibrated_func = calibrater.calibrate()
+calibrator = Calibrator(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=train_dataset_manager)
+calibrated_func = calibrator.calibrate()
 print("Calibrated func: ", calibrated_func)
 print("Requantizing...")
 requantized_func = Requantizer().requantize(calibrated_func)
-
+print("Requantized func: ", requantized_func)
 requantized_mod = tvm.ir.IRModule.from_expr(requantized_func)
 
 print("Calculating accuracy...")

@@ -30,7 +30,7 @@ from tvm.relay.transform.quantize import (
 
 class Quantizer:
     """Class that inserts quantize and dequantizes around patterns. It also constructs
-    important structures used by the Calibrater.
+    important structures used by the QuantizationCalibrator.
 
     Parameters
     ----------

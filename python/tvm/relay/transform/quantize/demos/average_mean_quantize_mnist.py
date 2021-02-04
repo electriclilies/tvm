@@ -1,6 +1,6 @@
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, Calibrater, TFDatasetManager, AverageMeanCalibrationCallback, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
+from tvm.relay.transform.quantize import Quantizer, Calibrator, TFDatasetManager, AverageMeanCalibrationCallback, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
 import onnx
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -48,8 +48,8 @@ print(mod.astext())
 cc = AverageMeanCalibrationCallback(mnist_train_manager)
 
 quantizer = Quantizer(mod, params, [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)])
-calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu())
-calibrated_mod = calibrater.calibrate()
+calibrator = Calibrator(quantizer, target='llvm', ctx=tvm.cpu())
+calibrated_mod = calibrator.calibrate()
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')

@@ -88,8 +88,7 @@ struct DequantizeAttrs : public tvm::AttrsNode<DequantizeAttrs> {
         .set_default(-1);
     TVM_ATTR_FIELD(out_dtype)
         .describe(
-            "The datatype we are dequantizing to. This allows us to quantize int32s. "
-            "Defaults to float32.")
+            "The datatype we are dequantizing to (float32 or int32). Defaults to float32.")
         .set_default(DataType::Float(32));
   }
 };

@@ -24,8 +24,8 @@ from tvm.contrib import graph_runtime
 import tvm.relay.build_module as build_module
 
 
-class Calibrater:
-    """The calibrater picks scales and zero points for all qnn ops in the quantized module.
+class QuantizationCalibrator:
+    """The QuantizationCalibrator picks scales and zero points for all qnn ops in the quantized module.
 
     Parameters
     ----------
@@ -95,7 +95,7 @@ class Calibrater:
 
 class CalibrationInfo:
     """Helper class that contains information necessary for picking scales and zero points into
-    calibrate_pattern. The state of CalibrationInfo is updated by Calibrater.
+    calibrate_pattern. The state of CalibrationInfo is updated by QuantizationCalibrator.
 
     Parameters
     ----------
@@ -196,7 +196,7 @@ class CalibrationInfo:
         self.input_scale_zps = self.partition_info.input_scale_zps
 
     def update_scale_zp_map(self, new_scale_zps):
-        """Updates the Calibrater's scale and zero point map with values returned from
+        """Updates the QuantizationCalibrator's scale and zero point map with values returned from
         calibrate_pattern.
 
         Parameters

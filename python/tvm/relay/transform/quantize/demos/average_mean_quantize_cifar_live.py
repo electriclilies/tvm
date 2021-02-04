@@ -3,7 +3,7 @@
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, Calibrater, GlobalCalibrater, DatasetManager
+from tvm.relay.transform.quantize import Quantizer, Calibrator, GlobalCalibrator, DatasetManager
 from tensorflow.keras import datasets, layers, models
 import matplotlib.pyplot as plt
 import onnx
@@ -61,14 +61,14 @@ mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
 from tvm.relay.transform.quantize import Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern, partition_outputs, rewrite_partitions, lower_partitions
 
 
-c = GlobalCalibrater(2.0, 0)
+c = GlobalCalibrator(2.0, 0)
 quantizer = Quantizer(mod['main'], [Conv2DBiasAddPattern(c), Conv2DPattern(c), DensePattern(c), AddPattern(c), MultiplyPattern(c)])
 print("Quantizer created")
-calibrater = Calibrater(quantizer, target='llvm', ctx=tvm.cpu())
-print("Calibrater created")
-calibrater.calibrate()
+calibrator = Calibrator(quantizer, target='llvm', ctx=tvm.cpu())
+print("Calibrator created")
+calibrator.calibrate()
 print("Everything worked...")
-print(calibrater.calibration_info.scale_zp_value_map) 
+print(calibrator.calibration_info.scale_zp_value_map) 
 print("Done")
 exit()
 
@@ -91,20 +91,3 @@ for i in infos:
         print(i.input_scale_zps[count])
         print(i.input_scale_zps[count][0])
         print(i.input_scale_zps[count][1])
-
-"""
-print("-----Lower paritions--------")
-f = lower_partitions(f)
-print("Done")
-# Calibrate
-#print("Calibrating...")
-
-#class MyAverageMeanCalibrater(Calibrater):
-
- 
-
-# Requantize
-#print("Requantizing...")
-
-# Calculate Accuracy
-"""

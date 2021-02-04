@@ -20,7 +20,7 @@
 from typing import List
 
 import tvm
-from tvm.relay.transform.quantize import Quantizer, Calibrater, Requantizer, QuantizerPattern
+from tvm.relay.transform.quantize import Quantizer, QuantizationCalibrator, Requantizer, QuantizerPattern
 from .. import function_pass
 
 
@@ -76,7 +76,7 @@ class QuantizePass:
         quantizer = Quantizer(
             func, params, self.quantizer_pattern_list, self.skip_first, self.skip_last
         )
-        calibrater = Calibrater(quantizer, target=self.target, ctx=self.ctx)
-        transformed_func = calibrater.calibrate()
+        calibrator = QuantizationCalibrator(quantizer, target=self.target, ctx=self.ctx)
+        transformed_func = calibrator.calibrate()
         transformed_func = Requantizer().requantize(transformed_func)
         return transformed_func

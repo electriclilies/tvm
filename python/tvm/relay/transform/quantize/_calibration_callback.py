@@ -52,7 +52,7 @@ class GlobalCalibrationCallback(CalibrationCallback):
 
     def calibrate_pattern(self, calibration_info):
         """Returns the scale and zero point value set during initialization to
-        the Calibrater."""
+        the QuantizationCalibrator."""
         scale_zp_values = {}
         for i in range(len(calibration_info.input_scale_zps)):
             scale_name = calibration_info.input_scale_zps[i][0].name_hint

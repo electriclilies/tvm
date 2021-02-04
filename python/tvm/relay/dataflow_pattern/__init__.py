@@ -843,7 +843,8 @@ class _DFPatternCallback(Object):
         self.__init_handle_by_constructor__(ffi.DFPatternCallback, pattern, callback, require_type)
 
 
-def rewrite(callbacks, expr: Expr, mod: Optional[_ir.IRModule] = None, allow_overlapping_groups: bool = False) -> Expr:
+def rewrite(callbacks, expr: Expr, mod: Optional[_ir.IRModule] = None,
+            allow_overlapping_groups: bool = False) -> Expr:
     """
     Rewrite expression with the given callbacks.
 

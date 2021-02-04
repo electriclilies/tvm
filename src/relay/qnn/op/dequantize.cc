@@ -74,7 +74,8 @@ bool DequantizeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   return true;
 }
 
-Expr MakeDequantize(Expr data, Expr input_scale, Expr input_zero_point, int axis, DataType out_dtype) {
+Expr MakeDequantize(Expr data, Expr input_scale, Expr input_zero_point, int axis,
+                    DataType out_dtype) {
   // real_value = scale * (quantized_value - zero_point)
   // A more detailed explanation can be found here -
   // https://github.com/google/gemmlowp/blob/master/doc/quantization.md

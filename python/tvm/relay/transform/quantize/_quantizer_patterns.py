@@ -73,7 +73,7 @@ class QuantizerPattern(DFPatternCallback):
     def callback(self, pre, post, node_map):
         raise NotImplementedError
 
-    def scale(self, name):
+    def scale(self, name, is_weight=False):
         """Helper to create the scale variable for qnn.quantize when rewriting our pattern.
 
         Parameters
@@ -81,12 +81,17 @@ class QuantizerPattern(DFPatternCallback):
         name : str
             Identifier at the beginning of the scale variable.
 
+        is_weight : bool
+            Whether this scale is a weight scale or a data scale. If it is a weight scale, we 
+            the returned variable has shape (channels,). Only used for per-channel quantization.
+
         Returns
         -------
         var : relay.Var
             Relay variable for scale. If the input name is 'conv2d_data', then the name of the
             relay variable might be 'conv2d_data_scale_0'.
         """
+
         var = relay.var(
             str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=(), dtype="float32"
         )

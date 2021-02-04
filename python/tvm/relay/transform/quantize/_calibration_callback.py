@@ -15,11 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
+"""Methods for calibrating functions."""
+
 import numpy as np
 
-
 class CalibrationCallback:
-    """Abstract class that defines the API calibration methods."""
+    """Abstract class that that defines the API for calibrating a pattern."""
 
     def calibrate_pattern(self, calibration_info):
         """Calculates the scale and zero points for quantizing parts

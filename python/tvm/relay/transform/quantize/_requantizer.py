@@ -45,7 +45,8 @@ class Requantizer:
             self.quantize_scale = wildcard()
             self.quantize_zp = wildcard()
 
-            # Ops that are permitted inbetween quantize and dequantize if we are rewriting to requantize
+            # Ops that are permitted inbetween quantize and dequantize if we are
+            # rewriting to requantize
             self.is_int_8_op = (
                 is_op("nn.max_pool2d")(wildcard())
                 | is_op("nn.max_pool2d")(wildcard())

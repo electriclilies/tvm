@@ -15,14 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import numpy as np
+"""Wrapper classes to expose datasets during quantization."""
 
+import numpy as np
 
 class DatasetManager:
     """Simple wrapper class to expose datasets in quantization."""
-
-    def __init__(self):
-        raise NotImplementedError
 
     def get_next_batch(self):
         """Returns the next batch of data.

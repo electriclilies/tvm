@@ -15,6 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
+"""Per channel implementation of Conv2DPattern, Conv2DBiasAddPattern, and DensePattern, using the
+average max algorithm to pick scales."""
+
 import numpy as np
 
 from tvm import relay
@@ -25,16 +28,12 @@ from tvm.relay.transform.quantize import (
     PerChannelPattern,
     CalibrationCallback,
     QuantizerPattern,
-    DatasetManager,
 )
 
 
 class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
     """Per channel version of Conv2DPattern, implementing the average max algorithm to
     calculate scales and zero points."""
-
-    def __init__(self, calibration_callback: CalibrationCallback = None):
-        super().__init__(calibration_callback)
 
     def extract_attrs(self, pre, post, node_map):
         conv2d = node_map[self.conv2d][0]
@@ -90,7 +89,8 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
         data_threshold = (np.abs(data_min_avg) + np.abs(data_max_avg)) / 2
         weight_thresholds = (np.abs(weight_min_avgs) + np.abs(weight_max_avgs)) / 2
 
-        # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins, and 128 are positive
+        # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins,
+        # and 128 are positive
         data_scale = data_threshold / 128
         weight_scales = weight_thresholds / 128
 
@@ -115,10 +115,6 @@ class AverageMaxPerChannelConv2DBiasAddPattern(
 ):
     """Per channel version of Conv2DBiasAddPattern, implementing the average max algorithm to
     calculate scales and zero points."""
-
-    def __init__(self, calibration_callback: CalibrationCallback = None):
-        super().__init__(calibration_callback)
-
 
 class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
     """Per channel version of DensePattern, implementing the average max algorithm to

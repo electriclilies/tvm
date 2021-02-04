@@ -22,7 +22,6 @@
  * \brief The dataflow pattern matcher for Relay.
  */
 
-
 #include <tvm/relay/analysis.h>
 #include <tvm/relay/dataflow_matcher.h>
 #include <tvm/relay/expr_functor.h>

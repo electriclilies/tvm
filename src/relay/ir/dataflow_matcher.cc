@@ -22,6 +22,8 @@
  * \brief The dataflow pattern matcher for Relay.
  */
 
+#include "dataflow_matcher.h"
+
 #include <tvm/relay/analysis.h>
 #include <tvm/relay/dataflow_matcher.h>
 #include <tvm/relay/expr_functor.h>
@@ -29,7 +31,6 @@
 
 #include <stack>
 
-#include "dataflow_matcher.h"
 #include "indexed_graph.h"
 
 namespace tvm {
@@ -492,7 +493,8 @@ TVM_REGISTER_GLOBAL("relay.dataflow_pattern.match").set_body_typed(MatchPattern)
 class PatternGrouper {
  public:
   /*! \brief Internal Group class for storing analysis */
-  PatternGrouper(bool allow_overlapping_groups = false) : allow_overlapping_groups_(allow_overlapping_groups) {}
+  PatternGrouper(bool allow_overlapping_groups = false)
+      : allow_overlapping_groups_(allow_overlapping_groups) {}
   struct Group {
     Expr root_node;
     int gid;
@@ -677,13 +679,13 @@ class PatternGrouper {
       // Check to make sure we aren't overlapping with another group or creating an invalid fusion
       // The MatchExtractor will create a new graph by replacing nodes that match the inputs of the
       // pattern with the input FunctionVar* Variables. The resulting memoization map will only
-      // contain nodes in the expression that matched the pattern. If a non-input node of the pattern
-      // (i.e., some piece of computation) overlaps with the nodes in a previous group, we'll have a
-      // situation where we try to rewrite the same node twice in the second rewriting or parition
-      // pass. This isn't valid, so we check for it here. We ignore Ops, functions, and constants
-      // because they exist more globally outside of the fusion.
-      // Similiarly, if interior nodes in a group are used outside of the group fusing to a single
-      // output would create an invalid graph tranformation, so we block the creation of such groups.
+      // contain nodes in the expression that matched the pattern. If a non-input node of the
+      // pattern (i.e., some piece of computation) overlaps with the nodes in a previous group,
+      // we'll have a situation where we try to rewrite the same node twice in the second rewriting
+      // or parition pass. This isn't valid, so we check for it here. We ignore Ops, functions, and
+      // constants because they exist more globally outside of the fusion. Similiarly, if interior
+      // nodes in a group are used outside of the group fusing to a single output would create an
+      // invalid graph tranformation, so we block the creation of such groups.
       auto memo = extractor.GetMemo();
       for (auto kv : memo) {
         // Check to ensure that this node isn't an input or a global
@@ -785,7 +787,8 @@ TVM_REGISTER_GLOBAL("relay.dataflow_pattern.DFPatternCallback")
  */
 class PatternRewriter : protected MixedModeMutator {
  public:
-  PatternRewriter(IRModule mod, bool allow_overlapping_groups) : mod_(mod), allow_overlapping_groups_(allow_overlapping_groups) {}
+  PatternRewriter(IRModule mod, bool allow_overlapping_groups)
+      : mod_(mod), allow_overlapping_groups_(allow_overlapping_groups) {}
   /*! \brief Rewrite can take a number of callbacks and will repeatedly rewrite the graph with the
    * callbacks until it stops changing */
   Expr Rewrite(const Array<DFPatternCallback>& callbacks, const Expr& pre) {
@@ -845,7 +848,8 @@ class PatternRewriter : protected MixedModeMutator {
   bool allow_overlapping_groups_ = false;
 };
 
-Expr RewritePatterns(Array<DFPatternCallback> callbacks, Expr expr, IRModule mod, int allow_overlapping_groups) {
+Expr RewritePatterns(Array<DFPatternCallback> callbacks, Expr expr, IRModule mod,
+                     int allow_overlapping_groups) {
   return PatternRewriter(mod, allow_overlapping_groups).Rewrite(callbacks, expr);
 }
 

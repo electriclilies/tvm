@@ -17,8 +17,10 @@
 
 import numpy as np
 
-class CalibrationCallback():
+
+class CalibrationCallback:
     """Abstract class that defines the API calibration methods."""
+
     def calibrate_pattern(self, calibration_info):
         """Calculates the scale and zero points for quantizing parts
         of a generic pattern. If you would like to do per-channel or
@@ -39,11 +41,13 @@ class CalibrationCallback():
         """
         raise NotImplementedError
 
+
 class GlobalCalibrationCallback(CalibrationCallback):
     """Sets the scales and zero points to a user-provided value."""
+
     def __init__(self, scale_value, zp_value):
-        self.scale_value = np.array(scale_value).astype('float32')
-        self.zp_value = np.array(zp_value).astype('int32')
+        self.scale_value = np.array(scale_value).astype("float32")
+        self.zp_value = np.array(zp_value).astype("int32")
 
     def calibrate_pattern(self, calibration_info):
         """Returns the scale and zero point value set during initialization to
@@ -57,9 +61,11 @@ class GlobalCalibrationCallback(CalibrationCallback):
 
         return scale_zp_values
 
+
 class AverageMaxCalibrationCallback(CalibrationCallback):
     """Calculates scales and zero points by calculating the average of the maxiumum
     absolute value of the data we are quantizing."""
+
     def calibrate_pattern(self, calibration_info):
         scale_zp_values = {}
         min_sums = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
@@ -90,9 +96,9 @@ class AverageMaxCalibrationCallback(CalibrationCallback):
 
         for i, scale_value in enumerate(scales):
             scale_name = calibration_info.partition_info.input_scale_zps[i][0].name_hint
-            scale_zp_values[scale_name] = np.array(scale_value).astype('float32')
+            scale_zp_values[scale_name] = np.array(scale_value).astype("float32")
             zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
-            scale_zp_values[zp_name] = np.array(0).astype('int32')
+            scale_zp_values[zp_name] = np.array(0).astype("int32")
 
             print("Set ", scale_name, " to ", scale_value)
             print("Set ", zp_name, " to ", 0)

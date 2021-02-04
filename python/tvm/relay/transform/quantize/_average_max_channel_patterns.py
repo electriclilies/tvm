@@ -18,14 +18,22 @@
 import numpy as np
 
 from tvm import relay
-from tvm.relay.transform.quantize import Conv2DPattern, Conv2DBiasAddPattern, \
-     DensePattern, PerChannelPattern, CalibrationCallback, QuantizerPattern, \
-     DatasetManager
+from tvm.relay.transform.quantize import (
+    Conv2DPattern,
+    Conv2DBiasAddPattern,
+    DensePattern,
+    PerChannelPattern,
+    CalibrationCallback,
+    QuantizerPattern,
+    DatasetManager,
+)
+
 
 class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
     """Per channel version of Conv2DPattern, implementing the average max algorithm to
     calculate scales and zero points."""
-    def __init__(self, calibration_callback : CalibrationCallback = None):
+
+    def __init__(self, calibration_callback: CalibrationCallback = None):
         super().__init__(calibration_callback)
 
     def extract_attrs(self, pre, post, node_map):
@@ -34,20 +42,22 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
 
         self.get_attrs(conv2d.attrs, weight.checked_type.shape)
         return post
-        
+
     def scale(self, name, is_weight=False):
         if is_weight:
             shape = (self.channels,)
         else:
             shape = ()
-        var = relay.var(str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=shape, dtype='float32')
+        var = relay.var(
+            str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=shape, dtype="float32"
+        )
         QuantizerPattern.scales_count += 1
         return var
 
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)
         scale_zp_values = {}
-        
+
         data_min_sum = 0
         data_max_sum = 0
 
@@ -69,7 +79,7 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
             weight_max_sums += np.max(weight, axis=list(range(len(weight.shape))).remove(0))
 
         calibration_info.dataset_manager.reset()
-        
+
         data_min_avg = data_min_sum / calibration_info.dataset_manager.num_batches()
         data_max_avg = data_max_sum / calibration_info.dataset_manager.num_batches()
 
@@ -83,33 +93,38 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
         # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins, and 128 are positive
         data_scale = data_threshold / 128
         weight_scales = weight_thresholds / 128
-        
+
         data_scale_name = calibration_info.partition_info.input_scale_zps[0][0].name_hint
         data_zp_name = calibration_info.partition_info.input_scale_zps[0][1].name_hint
 
         # Update the map containing scale and zp values
-        scale_zp_values[data_scale_name] = np.array(data_scale).astype('float32')
-        scale_zp_values[data_zp_name] = np.array(0).astype('int32')
+        scale_zp_values[data_scale_name] = np.array(data_scale).astype("float32")
+        scale_zp_values[data_zp_name] = np.array(0).astype("int32")
 
         weight_scale_name = calibration_info.partition_info.input_scale_zps[1][0].name_hint
         weight_zp_name = calibration_info.partition_info.input_scale_zps[1][1].name_hint
 
-        scale_zp_values[weight_scale_name] = np.array(weight_scales).astype('float32')
-        scale_zp_values[weight_zp_name] = np.array(0).astype('int32')
+        scale_zp_values[weight_scale_name] = np.array(weight_scales).astype("float32")
+        scale_zp_values[weight_zp_name] = np.array(0).astype("int32")
 
         return scale_zp_values
 
-class AverageMaxPerChannelConv2DBiasAddPattern(AverageMaxPerChannelConv2DPattern, Conv2DBiasAddPattern):
+
+class AverageMaxPerChannelConv2DBiasAddPattern(
+    AverageMaxPerChannelConv2DPattern, Conv2DBiasAddPattern
+):
     """Per channel version of Conv2DBiasAddPattern, implementing the average max algorithm to
     calculate scales and zero points."""
-    def __init__(self, calibration_callback : CalibrationCallback = None):
+
+    def __init__(self, calibration_callback: CalibrationCallback = None):
         super().__init__(calibration_callback)
 
 
 class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
     """Per channel version of DensePattern, implementing the average max algorithm to
     calculate scales and zero points."""
-    def __init__(self, calibration_callback : CalibrationCallback):
+
+    def __init__(self, calibration_callback: CalibrationCallback):
         super().__init__(calibration_callback)
 
     def extract_attrs(self, pre, post, node_map):
@@ -117,29 +132,31 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
         weight = node_map[self.weight][0]
 
         self.get_attrs(dense.attrs, weight.checked_type.shape)
-        self.units = self.attrs['units']
+        self.units = self.attrs["units"]
 
         return post
-        
+
     def scale(self, name, is_weight=False):
         if is_weight:
-            shape = (self.attrs['units'],)
+            shape = (self.attrs["units"],)
         else:
             shape = ()
-        var = relay.var(str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=shape, dtype='float32')
+        var = relay.var(
+            str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=shape, dtype="float32"
+        )
         QuantizerPattern.scales_count += 1
         return var
 
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)
-        
+
         scale_zp_values = {}
-        
+
         data_min_sum = 0
         data_max_sum = 0
 
-        weight_min_sums = np.zeros(shape=(self.attrs['units'],))
-        weight_max_sums = np.zeros(shape=(self.attrs['units'],))
+        weight_min_sums = np.zeros(shape=(self.attrs["units"],))
+        weight_max_sums = np.zeros(shape=(self.attrs["units"],))
 
         while not calibration_info.dataset_manager.is_empty():
             # Get the original input from dataset manger, run unquantized graph with those inputs
@@ -148,10 +165,10 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
 
             data = unquantized_inputs[0]
             weight = unquantized_inputs[1]
-            
+
             data_min_sum += np.min(data)
             data_max_sum += np.max(data)
-            
+
             weight_min_sums += np.min(weight, axis=1)
             weight_max_sums += np.max(weight, axis=1)
 
@@ -176,13 +193,13 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
         data_zp_name = calibration_info.partition_info.input_scale_zps[0][1].name_hint
 
         # Update the map containing scale and zp values
-        scale_zp_values[data_scale_name] = np.array(data_scale).astype('float32')
-        scale_zp_values[data_zp_name] = np.array(0).astype('int32')
+        scale_zp_values[data_scale_name] = np.array(data_scale).astype("float32")
+        scale_zp_values[data_zp_name] = np.array(0).astype("int32")
 
         weight_scale_name = calibration_info.partition_info.input_scale_zps[1][0].name_hint
         weight_zp_name = calibration_info.partition_info.input_scale_zps[1][1].name_hint
 
-        scale_zp_values[weight_scale_name] = np.array(weight_scales).astype('float32')
-        scale_zp_values[weight_zp_name] = np.array(0).astype('int32')
+        scale_zp_values[weight_scale_name] = np.array(weight_scales).astype("float32")
+        scale_zp_values[weight_zp_name] = np.array(0).astype("int32")
 
         return scale_zp_values

@@ -15,30 +15,67 @@
 # specific language governing permissions and limitations
 # under the License.
 
+"""Relay pass wrapping the quantization and calibration workflow."""
+
 from typing import List
 
 import tvm
-from tvm.relay.transform.quantize import Quantizer, Calibrater, \
-     Requantizer, QuantizerPattern
+from tvm.relay.transform.quantize import Quantizer, Calibrater, Requantizer, QuantizerPattern
 from .. import function_pass
+
 
 @function_pass(opt_level=5)
 class QuantizePass:
-    """Explicit pass wrapper around quantization workflow"""
-    def __init__(self, quantizer_pattern_list : List[QuantizerPattern], params, \
-                 target='llvm', ctx=tvm.cpu(0)):
+    """Explicit relay pass wrapper around quantization workflow.
+
+    Parameters
+    ----------
+    quantizer_pattern_list : List[QuantizerPattern]
+        The patterns we want to quantize.
+
+    params : dict of str to NDArray
+        Parameters you would pass into relay.build or relay.build_module. We need params
+        so that we can run parts of the graph during calibration.
+
+    skip_first : bool
+        If True, we do not quantize the first quantizable pattern in the function. If False,
+        we will quantize it.
+
+    skip_last : bool
+        If True, we do not quantize the last quantizable pattern in the function. If False,
+        we will quantize it."""
+
+    def __init__(
+        self,
+        quantizer_pattern_list: List[QuantizerPattern],
+        params,
+        target="llvm",
+        ctx=tvm.cpu(0),
+        skip_first=True,
+        skip_last=False,
+    ):
         self.quantizer_pattern_list = quantizer_pattern_list
         self.params = params
+        self.skip_first = skip_first
+        self.skip_last = skip_last
         self.target = target
         self.ctx = ctx
 
     def transform_function(self, func, _):
+        """Quantizes, calibrates and requantizes the function.
+        Parameters
+        ----------
+        func : relay.Function
+            Function to apply the transformation on.
+        """
         params = {}
         # Extract params that are in this function
         for param in func.params:
             params[param.name_hint] = self.params[param.name_hint]
 
-        quantizer = Quantizer(func, params, self.quantizer_pattern_list)
+        quantizer = Quantizer(
+            func, params, self.quantizer_pattern_list, self.skip_first, self.skip_last
+        )
         calibrater = Calibrater(quantizer, target=self.target, ctx=self.ctx)
         transformed_func = calibrater.calibrate()
         transformed_func = Requantizer().requantize(transformed_func)

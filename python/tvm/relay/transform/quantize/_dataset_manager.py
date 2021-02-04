@@ -17,8 +17,10 @@
 
 import numpy as np
 
-class DatasetManager():
+
+class DatasetManager:
     """Simple wrapper class to expose datasets in quantization."""
+
     def __init__(self):
         raise NotImplementedError
 
@@ -60,28 +62,29 @@ class DatasetManager():
         raise NotImplementedError
 
     def reset(self):
-        """Resets the counter in the dataset manager to the beginning.
-        """
+        """Resets the counter in the dataset manager to the beginning."""
         raise NotImplementedError
+
 
 class TFDatasetManager(DatasetManager):
     """DatasetManager wrapping a tensorflow dataset."""
+
     def __init__(self, tf_dataset, batch_size, total_batches):
         self.idx = 0
         self.total_batches = total_batches
         self.batch_size = batch_size
         self.tf_dataset = tf_dataset
         self.tf_iter = iter(self.tf_dataset)
-    
+
     def get_next_batch(self):
         if self.is_empty():
             raise IndexError
         self.idx += 1
-        
+
         data, label = next(self.tf_iter)
 
         return [data.numpy()], label.numpy()
-    
+
     def num_batches(self):
         return self.total_batches
 
@@ -92,17 +95,19 @@ class TFDatasetManager(DatasetManager):
         self.tf_iter = iter(self.tf_dataset)
         self.idx = 0
 
+
 class RandomDatasetManager(DatasetManager):
     """DatasetManager that creates a random input of a specific shape.
     This class is mostly used for testing, and as an example of how to
     implement a DatasetManager.
     """
+
     def __init__(self, data_shape, dtype, total_batches):
         self.idx = 0
         self.data_shape = data_shape
         self.dtype = dtype
         self.total_batches = total_batches
-    
+
     def get_next_batch(self):
         if self.is_empty():
             raise IndexError

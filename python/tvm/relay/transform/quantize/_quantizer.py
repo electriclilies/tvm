@@ -14,27 +14,56 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+"""Quantizes functions by inserting qnn.quantize and qnn.dequantize ops."""
 from typing import List
 
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import partition_outputs, skip_partitions, \
-                                         rewrite_partitions, lower_partitions, \
-                                         QuantizerPattern
+from tvm.relay.transform.quantize import (
+    partition_outputs,
+    skip_partitions,
+    rewrite_partitions,
+    lower_partitions,
+    QuantizerPattern,
+)
 
-class Quantizer():
-    """Class that inserts quantize and dequantizes around every pattern passed in.
-        Also constructs important structures for the Calibrater."""
-    def __init__(self, func, params, patterns: List[QuantizerPattern], skip_first=True, \
-                 skip_last=True):
+
+class Quantizer:
+    """Class that inserts quantize and dequantizes around patterns. It also constructs
+    important structures used by the Calibrater.
+
+    Parameters
+    ----------
+    func : relay.Function
+        Funtion we are quantizing.
+
+    params : dict of str to NDArray
+        Parameters you would pass into relay.build or relay.build_module. We need params
+        so that we can run parts of the graph during calibration.
+
+    patterns : List[QuantizerPattern]
+        A list of all the patterns that we are going to quantize using this Quantizer.
+
+    skip_first : bool
+        If True, we do not quantize the first quantizable pattern in the function. If False,
+        we will quantize it.
+
+    skip_last : bool
+        If True, we do not quantize the last quantizable pattern in the function. If False,
+        we will quantize it.
+    """
+
+    def __init__(
+        self, func, params, patterns: List[QuantizerPattern], skip_first=True, skip_last=False
+    ):
         self.patterns = patterns
         self.original_func = prerequisite_optimize(func, params)
 
-        # num_original outputs is -1 if output is not a Tuple, else is length of tuple
+        # num_orig_outputs is -1 if output is not a Tuple, else is length of tuple
         if isinstance(self.original_func.body, tvm.relay.expr.Tuple):
-            self.num_original_outputs = len(self.original_func.body)
+            self.num_orig_outputs = len(self.original_func.body)
         else:
-            self.num_original_outputs = -1
+            self.num_orig_outputs = -1
 
         # Partition the func into sub functions containing the patterns we want to quantize
         partitioned_func = self.original_func
@@ -51,43 +80,54 @@ class Quantizer():
 
         # Rewrite the multi-output graph to be quantized, and lower partitioned funcs
         outs = rewrite_partitions(self.patterns, tuple_subgraph_func)
-        q_tuple_subgraph_func = outs['new_out']
+        q_tuple_subgraph_func = outs["new_out"]
 
         # Information about each partition used for calibration
-        self.partition_infos = outs['infos_']
+        self.partition_infos = outs["infos_"]
 
         # Lower quantized partitions and store in a mod
         self.q_tuple_subgraph_func = lower_partitions(q_tuple_subgraph_func)
 
         # Create a function containing just the quantized original graph
         quantized_func = self.q_tuple_subgraph_func
-        if self.num_original_outputs == -1:
-            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, \
-                                                 quantized_func.body.fields[0])
+        if self.num_orig_outputs == -1:
+            self.quantized_func = relay.Function(
+                self.q_tuple_subgraph_func.params, quantized_func.body.fields[0]
+            )
         else:
-            tuple_body = relay.Tuple(quantized_func.body.fields[self.num_original_outputs])
-            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, \
-                                                 tuple_body)
+            tuple_body = relay.Tuple(quantized_func.body.fields[self.num_orig_outputs])
+            self.quantized_func = relay.Function(self.q_tuple_subgraph_func.params, tuple_body)
 
 
 def prerequisite_optimize(func, params=None):
-    """ Prerequisite optimization passes for quantization. Perform
-    "SimplifyInference", "FoldScaleAxis", "FoldConstant", and
-    "CanonicalizeOps" optimization before quantization. """
+    """Prerequisite optimization passes for quantization. Perform "DynamicToStatic",
+    "SimplifyInference", "FoldConstant", "FoldScaleAxis" before quantization.
+
+    Parameters
+    ---------
+    params : dict of str to NDArray
+        Parameters to use during calibration.
+
+    Returns
+    -------
+    preopt_func : relay.Function
+        The original function with optimizations needed before quantization applied.
+    """
     optimize = tvm.transform.Sequential(
-        [relay.transform.DynamicToStatic(),
-         relay.transform.SimplifyInference(),
-         relay.transform.FoldConstant(),
-         relay.transform.FoldScaleAxis()])#,
-         #relay.transform.CanonicalizeOps(),
-         #relay.transform.FoldConstant()])
+        [
+            relay.transform.DynamicToStatic(),
+            relay.transform.SimplifyInference(),
+            relay.transform.FoldConstant(),
+            relay.transform.FoldScaleAxis(),
+        ]
+    )
 
     if params is not None:
         func = relay.build_module.bind_params_by_name(func, params)
 
     mod = tvm.ir.IRModule.from_expr(func)
     # AlterOpLayout inserts pads and other ops in weird places, so we disable it
-    with relay.build_config(opt_level=3, disabled_pass=['AlterOpLayout']):
+    with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
         mod = optimize(mod)
 
-    return mod['main']
+    return mod["main"]

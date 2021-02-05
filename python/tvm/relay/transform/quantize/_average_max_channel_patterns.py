@@ -32,6 +32,7 @@ from tvm.relay.transform.quantize import (
 
 
 class AverageMaxPerChannelPattern(PerChannelPattern):
+    """Per channel implementation of the AverageMax algorithm."""
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)
         scale_zp_values = {}
@@ -75,8 +76,7 @@ class AverageMaxPerChannelPattern(PerChannelPattern):
 
 
 class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
-    """Per channel version of Conv2DPattern, implementing the average max algorithm to
-    calculate scales and zero points."""
+    """Conv2DPattern with the per channel average max algorithm as the calibration method."""
 
     def extract_attrs(self, pre, post, node_map):
         conv2d = node_map[self.conv2d][0]

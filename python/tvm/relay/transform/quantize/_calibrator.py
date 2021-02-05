@@ -88,7 +88,6 @@ class QuantizationCalibrator:
         # If num_orig_outputs is -1, original output wasn't a tuple
         params = calibrated_func.params
         if self.quantizer.num_orig_outputs == -1:
-            params = calibrated_func.params
             calibrated_func = relay.Function(params, calibrated_func.body.fields[0])
         else:
             new_body = relay.Tuple(calibrated_func.body.fields[0 : self.quantizer.num_orig_outputs])

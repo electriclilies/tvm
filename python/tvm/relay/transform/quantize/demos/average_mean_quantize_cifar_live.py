@@ -3,7 +3,7 @@
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, Calibrator, GlobalCalibrator, DatasetManager
+from tvm.relay.transform.quantize import Quantizer, QuantizationCalibrator, GlobalCalibrator, DatasetManager
 from tensorflow.keras import datasets, layers, models
 import matplotlib.pyplot as plt
 import onnx
@@ -64,7 +64,7 @@ from tvm.relay.transform.quantize import Conv2DBiasAddPattern, Conv2DPattern, De
 c = GlobalCalibrator(2.0, 0)
 quantizer = Quantizer(mod['main'], [Conv2DBiasAddPattern(c), Conv2DPattern(c), DensePattern(c), AddPattern(c), MultiplyPattern(c)])
 print("Quantizer created")
-calibrator = Calibrator(quantizer, target='llvm', ctx=tvm.cpu())
+calibrator = QuantizationCalibrator(quantizer, target='llvm', ctx=tvm.cpu())
 print("Calibrator created")
 calibrator.calibrate()
 print("Everything worked...")

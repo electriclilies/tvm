@@ -15,7 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from tvm.relay.transform.quantize import CalibrationCallback
+import tvm
+from tvm import relay
+from tvm.relay.transform.quantize import Quantizer, QuantizerPattern, QuantizationCalibrator, Conv2DPattern, Conv2DBiasAddPattern, DensePattern, AddPattern, MultiplyPattern, CalibrationCallback
+from test_quantize import create_conv2d_func, create_q_conv2d_func, create_conv2d_bias_func, create_q_conv2d_bias_func, create_dense_func, create_q_dense_func, create_add_func, create_q_add_func, create_mul_func, create_q_mul_func
+from tvm.relay.frontend.common import infer_type
 
 import numpy as np
 
@@ -45,9 +49,104 @@ class TestCalibrationCallback(CalibrationCallback):
 
         return scale_zp_values
 
-def test_calibration_callback():
-    raise NotImplementedError # TODO: I'm not sure what the best graph to test this on is. I want to just make sure that everything runs OK
+def test_calibrate(quantizer, quantized_func, params):
+    calibrator = QuantizationCalibrator(quantizer)
+    calibrated_func = calibrator.calibrate()
 
+    quantized_func = relay.build_module.bind_params_by_name(quantized_func, calibrator.calibration_info.scale_zp_value_map)
+    quantized_func = relay.build_module.bind_params_by_name(quantized_func, params)
+    quantized_func = infer_type(quantized_func)
+    calibrated_func = infer_type(calibrated_func)
+
+    assert tvm.ir.structural_equal(quantized_func, calibrated_func)
+
+def reset_scale_zp_counter():
+    # For testing purposes, we reset the static scale counter to zero before calibrating so that our variable names
+    # match up properly
+    QuantizerPattern.scales_count = 0
+    QuantizerPattern.zp_count = 0
+
+def test_conv2d(data_shape, weight_shape, attrs):
+    reset_scale_zp_counter()
+
+    conv2d_func, data, weight = create_conv2d_func(data_shape, weight_shape, attrs)
+    q_conv2d_func = create_q_conv2d_func(data, weight, weight_shape, attrs)
+    
+    cc = TestCalibrationCallback(data_shape)
+    params = {'weight': np.random.randn(*weight_shape).astype('float32')}
+    quantizer = Quantizer(conv2d_func, params, [Conv2DPattern(cc)], skip_first=False, skip_last=False)
+    
+    test_calibrate(quantizer, q_conv2d_func, params)
+
+def test_conv2d_bias(data_shape, weight_shape, bias_shape, attrs):
+    reset_scale_zp_counter()
+
+    conv2d_func, data, weight, bias = create_conv2d_bias_func(data_shape, weight_shape, bias_shape, attrs)
+    q_conv2d_func = create_q_conv2d_bias_func(data, weight, bias, weight_shape, attrs)
+    
+    cc = TestCalibrationCallback(data_shape)
+    params = {'weight': np.random.randn(*weight_shape).astype('float32')}
+    quantizer = Quantizer(conv2d_func, params, [Conv2DBiasAddPattern(cc)], skip_first=False, skip_last=False)
+    
+    test_calibrate(quantizer, q_conv2d_func, params)
+
+def test_dense(data_shape, weight_shape, attrs):
+    reset_scale_zp_counter()
+
+    dense_func, data, weight = create_dense_func(data_shape, weight_shape, attrs)
+    q_dense_func = create_q_dense_func(data, weight, attrs)
+
+    cc = TestCalibrationCallback(data_shape)
+    params = {'weight': np.random.randn(*weight_shape).astype('float32')}
+    quantizer = Quantizer(dense_func, params, [DensePattern(cc)], skip_first=False, skip_last=False)
+    
+    test_calibrate(quantizer, q_dense_func, params)
+
+def test_add(lhs_shape, rhs_shape):
+    reset_scale_zp_counter()
+
+    add_func, lhs, rhs = create_add_func(lhs_shape, rhs_shape)
+    q_add_func = create_q_add_func(lhs, rhs)
+
+    cc = TestCalibrationCallback(lhs_shape)
+    params = {'weight': np.random.randn(*rhs_shape).astype('float32')}
+    quantizer = Quantizer(add_func, params, [AddPattern(cc)], skip_first=False, skip_last=False)
+    
+    test_calibrate(quantizer, q_add_func, params)
+
+def test_mul(lhs_shape, rhs_shape):
+    reset_scale_zp_counter()
+
+    mul_func, lhs, rhs = create_mul_func(lhs_shape, rhs_shape)
+    q_mul_func = create_q_mul_func(lhs, rhs)
+
+    cc = TestCalibrationCallback(lhs_shape)
+    params = {'weight': np.random.randn(*rhs_shape).astype('float32')}
+    quantizer = Quantizer(mul_func, params, [MultiplyPattern(cc)], skip_first=False, skip_last=False)
+    
+    test_calibrate(quantizer, q_mul_func, params)
+
+def verify_conv2d():
+    test_conv2d((2, 3, 32, 32), (32, 3, 3, 3), {'kernel_size': [3, 3], 'kernel_layout': 'OIHW', 'data_layout': 'NCHW', 'padding': [0, 0, 0, 0]})
+    test_conv2d((2, 32, 32, 3), (3, 3, 3, 32), {'kernel_size': [3, 3], 'kernel_layout': 'HWIO', 'data_layout': 'NHWC', 'padding': [0, 0, 0, 0]})
+
+def verify_conv2d_bias():
+    test_conv2d_bias((2, 3, 32, 32), (32, 3, 3, 3), (32,), {'kernel_size': [3, 3], 'kernel_layout': 'OIHW', 'data_layout': 'NCHW', 'padding': [0, 0, 0, 0]})
+    test_conv2d_bias((2, 32, 32, 3), (3, 3, 3, 32), (32,), {'kernel_size': [3, 3], 'kernel_layout': 'HWIO', 'data_layout': 'NHWC', 'padding': [0, 0, 0, 0]})
+    
+def verify_dense():
+    test_dense((1, 8), (16, 8), {'units': 16})
+    test_dense((1, 4), (3, 4), {'units': 3})
+
+def verify_add():
+    test_add((1, 2, 3), (1, 2, 3))
+
+def verify_mul():
+    test_mul((1, 2, 3), (1, 2, 3))
 
 if __name__ == '__main__':
-    test_calibration_callback()
+    verify_conv2d()
+    verify_conv2d_bias()
+    verify_dense()
+    verify_add()
+    verify_mul()

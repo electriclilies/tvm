@@ -30,16 +30,18 @@ from tvm.relay.transform.quantize import (
     QuantizerPattern,
 )
 
-class AverageMaxPerChannelPattern(PerChannelPattern):
 
+class AverageMaxPerChannelPattern(PerChannelPattern):
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)
         scale_zp_values = {}
 
         data_max_avg = 0
         weight_max_avg = np.zeros(shape=(self.get_scale_size(),))
-        num_inputs = calibration_info.dataset_manager.num_batches() * \
-                     calibration_info.dataset_manager.batch_size()
+        num_inputs = (
+            calibration_info.dataset_manager.num_batches()
+            * calibration_info.dataset_manager.batch_size()
+        )
 
         while not calibration_info.dataset_manager.is_empty():
             # Get the original input from dataset manger, run unquantized graph with those inputs
@@ -71,6 +73,7 @@ class AverageMaxPerChannelPattern(PerChannelPattern):
 
         return scale_zp_values
 
+
 class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
     """Per channel version of Conv2DPattern, implementing the average max algorithm to
     calculate scales and zero points."""
@@ -86,12 +89,12 @@ class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
         return (self.channels,)
 
 
-
 class AverageMaxPerChannelConv2DBiasAddPattern(
     AverageMaxPerChannelConv2DPattern, Conv2DBiasAddPattern
 ):
     """Per channel version of Conv2DBiasAddPattern, implementing the average max algorithm to
     calculate scales and zero points."""
+
 
 class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
     """Per channel version of DensePattern, implementing the average max algorithm to

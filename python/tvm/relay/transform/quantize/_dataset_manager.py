@@ -36,10 +36,17 @@ class DatasetManager:
             The length of labels should be equal to the batch size.
         """
         raise NotImplementedError
+    
+    def batch_size(self):
+        """Returns the size of each batch the dataset manager has.
 
+        Returns
+        -------
+        batch_size : int
+            The number of inputs in each batch.
+        """
     def num_batches(self):
-        """Returns the number of batches the dataset manager
-        has.
+        """Returns the number of batches the dataset manager has.
 
         Returns
         ------
@@ -86,6 +93,9 @@ class TFDatasetManager(DatasetManager):
     def num_batches(self):
         return self.total_batches
 
+    def batch_size(self):
+        return self.batch_size
+
     def is_empty(self):
         return self.idx >= self.total_batches
 
@@ -100,10 +110,11 @@ class RandomDatasetManager(DatasetManager):
     implement a DatasetManager.
     """
 
-    def __init__(self, data_shape, dtype, total_batches):
+    def __init__(self, data_shape, dtype, batch_size, total_batches):
         self.idx = 0
         self.data_shape = data_shape
         self.dtype = dtype
+        self.batch_size = batch_size
         self.total_batches = total_batches
 
     def get_next_batch(self):
@@ -111,6 +122,9 @@ class RandomDatasetManager(DatasetManager):
             raise IndexError
         self.idx += 1
         return [np.random.randn(*self.data_shape).astype(self.dtype)], [None]
+
+    def batch_size(self):
+        return self.batch_size
 
     def num_batches(self):
         return self.total_batches

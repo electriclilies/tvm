@@ -594,12 +594,46 @@ class PerChannelPattern:
             anything in this pass, so you should just return post.
         """
         raise NotImplementedError()
+    
+    def get_scale_size(self):
+        """Returns the size of the per-channel scale variable
+        
+        Returns
+        -------
+        scale_size : tuple
+            The size of the scale variable
+        """
+        raise NotImplementedError
+
+    def weight_scale(self, name):
+        """Helper to create a variable for a per-channel scale.
+        Parameters
+        ----------
+        name : str
+            Name of the variable
+        """
+        var = relay.var(
+            str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=self.get_scale_size(),
+            dtype="float32"
+        )
+        QuantizerPattern.scales_count += 1
+        return var
 
     def create_scale_zps(self, left_name, right_name):
+        """Helper to create scales and zero points for binops, with the per channel weight scale quantized.
+
+        Parameters
+        ----------
+        left_name : str
+            Identifier of the left hand side scale and zero point.
+
+        right_name : str
+            Identifier of the right hand side scale and zero point.
+        """
         # Create quantization parameters for arguments with per channel on the right
         data_scale = self.scale(left_name)
         data_zp = self.zero_point(left_name)
-        weight_scale = self.scale(right_name, True)
+        weight_scale = self.weight_scale(right_name)
         weight_zp = self.zero_point(right_name)
         self.scale_zps = [data_scale, data_zp, weight_scale, weight_zp]
 

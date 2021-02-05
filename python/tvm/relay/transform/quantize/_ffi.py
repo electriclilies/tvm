@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""DataFlow Pattern Language FFI bindings."""
+"""Quantization FFI bindings."""
 import tvm._ffi
 
 tvm._ffi._init_api("relay.new_quantize", __name__)

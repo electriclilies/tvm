@@ -208,7 +208,7 @@ class Requantizer:
                 in_scale = child_in_scales[i].data.asnumpy()
                 in_zp = child_in_zps[i].data.asnumpy()
 
-                np_in_scale = in_scale.data.asnumpy()
+                np_in_scale = in_scale.data.asnumpy() # TODO: FIX ME!
                 np_in_zp = in_zp.data.asnumpy()
                 assert math.isclose(
                     np_out_scale, np_in_scale, rel_tol=1e-05, abs_tol=1e-05

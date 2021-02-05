@@ -43,7 +43,7 @@ class QuantizationCalibrator:
         data-aware calibration.
     """
 
-    def __init__(self, quantizer, target="llvm", ctx=tvm.cpu(), dataset_manager=None):
+    def __init__(self, quantizer, target="llvm", ctx=tvm.cpu(), dataset_manager=None, show_scale_zps=False):
         self.quantizer = quantizer
 
         self.calibration_info = CalibrationInfo(
@@ -54,6 +54,8 @@ class QuantizationCalibrator:
             target,
             ctx,
         )
+
+        self.show_scale_zps = show_scale_zps
 
     def calibrate(self):
         """Picks the scales and zero points for all qnn ops in the quantized graph, using the
@@ -75,6 +77,8 @@ class QuantizationCalibrator:
 
             # Get the values for scales and ZPs in this layer, store
             scale_zps = quantizer_pattern.calibrate_pattern(self.calibration_info)
+            if self.show_scale_zps:
+                self.report_scale_zps(scale_zps)
             self.calibration_info.update_scale_zp_map(scale_zps)
 
         calibrated_func = build_module.bind_params_by_name(
@@ -91,6 +95,17 @@ class QuantizationCalibrator:
             calibrated_func = relay.Function(params, new_body)
 
         return calibrated_func
+
+    def report_scale_zps(self, scale_zp_map):
+        """Prints the scales and zero points out.
+
+        Parameters
+        ----------
+        scale_zp_map : dict of str to value
+            The map from names of scale and zero point variables to their assigned values.
+        """
+        for key, value in scale_zp_map.items():
+            print("Set ", key, " variable to ", value)
 
 
 class CalibrationInfo:

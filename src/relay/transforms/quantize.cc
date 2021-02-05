@@ -29,9 +29,6 @@
 
 #include "../ir/dataflow_matcher.h"
 
-// IF scale / zp of quantize is an expr, then we don't want to include it as an argument to the
-// function.
-
 namespace tvm {
 namespace relay {
 namespace quantize {

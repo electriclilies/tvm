@@ -1,6 +1,6 @@
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, Calibrator, TFDatasetManager, AverageMeanCalibrationCallback, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
+from tvm.relay.transform.quantize import Quantizer, QuantizationCalibrator, TFDatasetManager, AverageMaxCalibrationCallback, Conv2DBiasAddPattern, Conv2DPattern, DensePattern, AddPattern, MultiplyPattern
 import onnx
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -40,20 +40,21 @@ mnist_train_manager = TFDatasetManager(ds_train, batch_size, 12000)
 mnist_test_manager = TFDatasetManager(ds_test, batch_size, 2000)
 
 # Import onnx model, quantize and calibrate
-onnx_model = onnx.load('/home/lorthsmith/tvm/python/tvm/relay/new_quantize/mnist_model.onnx')
+onnx_model = onnx.load('/Users/lorthsmith/Documents/tvm/python/tvm/relay/transform/quantize/mnist_model.onnx')
 input_dict = {'flatten_input': [batch_size, 28, 28, 1]}
 mod, params = relay.frontend.from_onnx(onnx_model, input_dict)
-print(mod.astext())
 
-cc = AverageMeanCalibrationCallback(mnist_train_manager)
+cc = AverageMaxCalibrationCallback()
 
-quantizer = Quantizer(mod, params, [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)])
-calibrator = Calibrator(quantizer, target='llvm', ctx=tvm.cpu())
-calibrated_mod = calibrator.calibrate()
+quantizer = Quantizer(mod['main'], params, [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)])
+calibrator = QuantizationCalibrator(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=mnist_train_manager)
+calibrated_func = calibrator.calibrate()
+calibrated_mod = tvm.ir.IRModule.from_expr(calibrated_func)
+#requantized_func = Requantizer().requantize(calibrated_func)
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
-    lib = relay.build(mod, target='llvm')
-    q_lib = relay.build(calibrated_mod, target='llvm')
+    lib = relay.build(mod, params=params, target='llvm')
+    q_lib = relay.build(calibrated_mod, params=params, target='llvm')
 from tvm.contrib import graph_runtime
 q_gmod = graph_runtime.GraphModule(q_lib["default"](tvm.cpu()))
 gmod = graph_runtime.GraphModule(lib["default"](tvm.cpu()))

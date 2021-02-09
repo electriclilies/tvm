@@ -29,7 +29,7 @@ class DatasetManager:
         -------
         inputs : List
             The inputs to be provided to the graph.
-            The list is of the form [batched_input_1, batched_input_2]
+            The list is of the form [batched_input_1, batched_input_2, ..., batched_input_n]
 
         labels: List
             The expected outputs of the graph.
@@ -77,7 +77,7 @@ class TFDatasetManager(DatasetManager):
     def __init__(self, tf_dataset, batch_size, total_batches):
         self.idx = 0
         self.total_batches = total_batches
-        self.batch_size = batch_size
+        self.batch_sz = batch_size
         self.tf_dataset = tf_dataset
         self.tf_iter = iter(self.tf_dataset)
 
@@ -94,7 +94,7 @@ class TFDatasetManager(DatasetManager):
         return self.total_batches
 
     def batch_size(self):
-        return self.batch_size
+        return self.batch_sz
 
     def is_empty(self):
         return self.idx >= self.total_batches
@@ -114,7 +114,7 @@ class RandomDatasetManager(DatasetManager):
         self.idx = 0
         self.data_shape = data_shape
         self.dtype = dtype
-        self.batch_size = batch_size
+        self.batch_sz = batch_size
         self.total_batches = total_batches
 
     def get_next_batch(self):
@@ -124,7 +124,7 @@ class RandomDatasetManager(DatasetManager):
         return [np.random.randn(*self.data_shape).astype(self.dtype)], [None]
 
     def batch_size(self):
-        return self.batch_size
+        return self.batch_sz
 
     def num_batches(self):
         return self.total_batches

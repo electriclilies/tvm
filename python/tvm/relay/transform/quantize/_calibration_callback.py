@@ -75,47 +75,91 @@ class GlobalCalibrationCallback(CalibrationCallback):
 
 
 class AverageMaxCalibrationCallback(CalibrationCallback):
-    """Calculates scales by calculating the average of the maxiumum absolute value of the node
-    we are quantizing. Sets zero points to zero."""
 
     def calibrate_pattern(self, calibration_info):
-        """Sets scales to the average of the maximum absolute value of the node we are quantizing.
-        Sets zero points to zero.
-
-        Parameters
-        ----------
-        calibration_info : CalibrationInfo
-            Object containing information needed during calibration.
-
-        Returns
-        -------
-        scale_zp_map : dict of str to value
-            The map from names of scale and zero point variables to the average of the maximum
-        """
         scale_zp_values = {}
-        avg_maxs = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
-        num_inputs = calibration_info.dataset_manager.num_batches() * \
-                     calibration_info.dataset_manager.batch_size()
+        
+        min_sums = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
+        max_sums = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
 
         while not calibration_info.dataset_manager.is_empty():
             # Get the original input from dataset manger, run unquantized graph with those inputs
             image_list, _ = calibration_info.dataset_manager.get_next_batch()
             unquantized_inputs = calibration_info.get_unquantized_layer_inputs(image_list)
 
-            # Iterate through scale and zp variables
-            for i, unquantized_input in enumerate(unquantized_inputs):
+            # Iterate through scale and zp variables 
+            for i, unquantized_input in enumerate(unquantized_inputs):            
                 # Calculate the average min, max across each batch
-                avg_maxs[i] += np.max(np.abs(unquantized_input)) / num_inputs
-
-        # Since this is a symmetric distribution and we are quantizing to int8,
-        # there are 256 bins, and 128 are positive
-        calibration_info.dataset_manager.reset()
-        scales = avg_maxs / 128
+                
+                min_sums[i] += np.min(unquantized_input)
+                max_sums[i] += np.max(unquantized_input)
         
+        calibration_info.dataset_manager.reset()
+
+        avg_mins = min_sums / calibration_info.dataset_manager.num_batches()
+        avg_maxs = max_sums / calibration_info.dataset_manager.num_batches()
+
+        # Threshold for quantization of an input to a layer is mean(abs(avg_max), abs(avg_min))
+        thresholds = np.mean([np.abs(avg_mins), np.abs(avg_maxs)], axis=0)
+
+        # Since this is a symmetric distribution and we are quantizing to int8, there are 256 bins, and 128 are positive
+        scales = thresholds / 128
+
         for i, scale_value in enumerate(scales):
             scale_name = calibration_info.partition_info.input_scale_zps[i][0].name_hint
-            scale_zp_values[scale_name] = np.array(scale_value).astype("float32")
+            scale_zp_values[scale_name] = np.array(scale_value).astype('float32')
             zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
-            scale_zp_values[zp_name] = np.array(0).astype("int32")
+            scale_zp_values[zp_name] = np.array(0).astype('int32')
+        
+            print("Set ", scale_name, " to ", scale_value)
+            print("Set ", zp_name, " to ", 0)
 
         return scale_zp_values
+
+
+# class AverageMaxCalibrationCallback(CalibrationCallback):
+#     """Calculates scales by calculating the average of the maxiumum absolute value of the node
+#     we are quantizing. Sets zero points to zero."""
+
+#     def calibrate_pattern(self, calibration_info):
+#         """Sets scales to the average of the maximum absolute value of the node we are quantizing.
+#         Sets zero points to zero.
+
+#         Parameters
+#         ----------
+#         calibration_info : CalibrationInfo
+#             Object containing information needed during calibration.
+
+#         Returns
+#         -------
+#         scale_zp_map : dict of str to value
+#             The map from names of scale and zero point variables to the average of the maximum
+#         """
+#         scale_zp_values = {}
+#         avg_maxs = np.zeros(shape=(len(calibration_info.partition_info.input_scale_zps)))
+#         #num_inputs = calibration_info.dataset_manager.num_batches() * \
+#         #             calibration_info.dataset_manager.batch_size()
+#         num_inputs = calibration_info.dataset_manager.num_batches()
+
+#         while not calibration_info.dataset_manager.is_empty():
+#             # Get the original input from dataset manger, run unquantized graph with those inputs
+#             image_list, _ = calibration_info.dataset_manager.get_next_batch()
+#             unquantized_inputs = calibration_info.get_unquantized_layer_inputs(image_list)
+
+#             # Iterate through scale and zp variables
+#             for i, unquantized_input in enumerate(unquantized_inputs):
+#                 # Calculate the average min, max across each batch
+#                 avg_maxs[i] += np.max(np.abs(unquantized_input)) #/ num_inputs
+
+#         # Since this is a symmetric distribution and we are quantizing to int8,
+#         # there are 256 bins, and 128 are positive
+#         calibration_info.dataset_manager.reset()
+#         scales = avg_maxs / (num_inputs * 128)
+        
+#         for i, scale_value in enumerate(scales):
+#             scale_name = calibration_info.partition_info.input_scale_zps[i][0].name_hint
+#             scale_zp_values[scale_name] = np.array(scale_value).astype("float32")
+#             zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
+#             scale_zp_values[zp_name] = np.array(0).astype("int32")
+
+#         return scale_zp_values

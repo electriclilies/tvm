@@ -198,32 +198,30 @@ class Requantizer:
 
             # Check to make sure output and input scales and zps match before we apply this
             # transformation
-            out_scale = rq_parent_scale_out
-            out_zp = rq_parent_zp_out
-
-            np_out_scale = out_scale.data.asnumpy()
-            np_out_zp = out_zp.data.asnumpy()
+            out_scale = rq_parent_scale_out.data.asnumpy()
+            out_zp = rq_parent_zp_out.data.asnumpy()
 
             for i in range(0, len_children):
+                
                 in_scale = child_in_scales[i].data.asnumpy()
                 in_zp = child_in_zps[i].data.asnumpy()
 
-                np_in_scale = in_scale.data.asnumpy() # TODO: FIX ME!
-                np_in_zp = in_zp.data.asnumpy()
+                
                 assert math.isclose(
-                    np_out_scale, np_in_scale, rel_tol=1e-05, abs_tol=1e-05
-                ) and math.isclose(np_out_zp, np_in_zp, rel_tol=1e-05, abs_tol=1e-05), (
+                    out_scale, in_scale, rel_tol=1e-05, abs_tol=1e-05
+                ) and math.isclose(out_zp, in_zp, rel_tol=1e-05, abs_tol=1e-05), (
                     "Out scales/zps should match in scales/zps. Indicates an internal issue "
                     "in the quantizer somewhere."
                 )
 
-                out_scale = child_out_scales[i]
-                out_zp = child_out_zps[i]
+                out_scale = child_out_scales[i].data.asnumpy()
+                out_zp = child_out_zps[i].data.asnumpy()
+                
 
             parent_axis = rq_parent.attrs["axis"]
 
             return relay.qnn.op.requantize(
-                data, rq_parent_scale_in, rq_parent_zp_in, out_scale, out_zp, axis=parent_axis
+                data, rq_parent_scale_in, rq_parent_zp_in, rq_parent_scale_out, rq_parent_zp_out, axis=parent_axis
             )
 
     class ConsolidateRequantizeandQuantize(DFPatternCallback):
@@ -290,19 +288,20 @@ class Requantizer:
         func : relay.Function
             Function to requantize.
         """
-        rewritten_func = rewrite(self.RequantizerCallback(), func, allow_overlapping_groups=True)
+        # We have to fold scale/zp expressions for requantize to work
+        # AlterOpLayout adds some extra ops that mess things up
+        optimize = tvm.transform.Sequential(
+            [relay.transform.FoldConstant(), relay.transform.EliminateCommonSubexpr()]
+        )
+        
+        mod = tvm.ir.IRModule.from_expr(func)
+        with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
+            rewritten_func = optimize(mod)['main']
+
+        rewritten_func = rewrite(self.RequantizerCallback(), rewritten_func, allow_overlapping_groups=True)
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
         rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
 
         rewritten_mod = tvm.ir.IRModule.from_expr(rewritten_func)
-
-        optimize = tvm.transform.Sequential(
-            [relay.transform.FoldConstant(), relay.transform.EliminateCommonSubexpr()]
-        )
-
-        # We have to fold scale/zp expressions for requantize to work
-        # AlterOpLayout adds some extra ops that mess things up
-        with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
-            rewritten_mod = optimize(rewritten_mod)
 
         return rewritten_mod["main"]

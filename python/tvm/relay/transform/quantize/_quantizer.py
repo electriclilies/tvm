@@ -19,13 +19,10 @@ from typing import List
 
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import (
-    partition_outputs,
-    skip_partitions,
-    rewrite_partitions,
-    lower_partitions,
-    QuantizerPattern,
-)
+from tvm.relay.dataflow_pattern import ffi as pattern_ffi
+from tvm.relay.dataflow_pattern import _DFPatternCallback
+from tvm.relay.transform.quantize import QuantizerPattern
+from . import _ffi as ffi
 
 
 class Quantizer:
@@ -58,6 +55,7 @@ class Quantizer:
     ):
         self.patterns = patterns
         self.original_func = prerequisite_optimize(func, params)
+        print("preopt func: ", self.original_func)
 
         # num_orig_outputs is -1 if output is not a Tuple, else is length of tuple
         if isinstance(self.original_func.body, tvm.relay.expr.Tuple):
@@ -119,6 +117,8 @@ def prerequisite_optimize(func, params=None):
             relay.transform.SimplifyInference(),
             relay.transform.FoldConstant(),
             relay.transform.FoldScaleAxis(),
+            relay.transform.FoldConstant(),
+            relay.transform.EliminateCommonSubexpr(),
         ]
     )
 
@@ -126,8 +126,29 @@ def prerequisite_optimize(func, params=None):
         func = relay.build_module.bind_params_by_name(func, params)
 
     mod = tvm.ir.IRModule.from_expr(func)
-    # AlterOpLayout inserts pads and other ops in weird places, so we disable it
-    with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
+
+    with relay.build_config(opt_level=3):
         mod = optimize(mod)
 
     return mod["main"]
+
+def partition_outputs(expr):
+    return ffi.partition_outputs(expr)
+
+
+def rewrite_partitions(callbacks, expr):
+    return ffi.rewrite_partitions(
+        [
+            _DFPatternCallback(callback.pattern, callback.callback, callback.require_type)
+            for callback in callbacks
+        ],
+        infer_type(expr),
+    )
+
+
+def lower_partitions(expr):
+    return ffi.lower_partitions(expr)
+
+
+def skip_partitions(expr, skip_first=True, skip_last=True):
+    return ffi.skip_partitions(expr, skip_first, skip_last)

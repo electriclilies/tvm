@@ -14,7 +14,5 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Quantization FFI bindings."""
-import tvm._ffi
-
-tvm._ffi._init_api("relay.transform.quantize", __name__)
+# pylint: disable=wildcard-import, redefined-builtin, invalid-name
+from ._dataset_manager import DatasetManager, TFDatasetManager, RandomDatasetManager

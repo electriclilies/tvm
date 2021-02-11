@@ -20,9 +20,8 @@
 import tvm
 from tvm import relay
 
-from tvm.relay.transform.quantize import CalibrationCallback
-from tvm.relay.dataflow_pattern import is_op, wildcard, DFPatternCallback, _DFPatternCallback
-from tvm.relay.dataflow_pattern import ffi as pattern_ffi
+from tvm.relay.transform.quantize import CalibrationCallback, AverageMaxCalibrationCallback, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDenseBiasAddPattern, AverageMaxPerChannelDensePattern
+from tvm.relay.dataflow_pattern import is_op, wildcard, is_constant, DFPatternCallback, _DFPatternCallback
 from tvm.relay.frontend.common import infer_type
 from tvm.relay.op.nn.utils import get_pad_tuple2d
 from . import _ffi as ffi
@@ -332,9 +331,9 @@ class Conv2DBiasAddPattern(Conv2DPattern):
 
     def __init__(self, calibration_callback: CalibrationCallback = None):
         super().__init__(calibration_callback)
-        self.bias_weight = wildcard()
+        self.bias_weight = is_constant()
         self.inputs.append(self.bias_weight)
-        self.bias_add = is_op("nn.bias_add")(self.conv2d, self.bias_weight)
+        self.bias_add = is_op("nn.bias_add")(self.conv2d, self.bias_weight) | is_op("add")(self.conv2d, self.bias_weight)
         self.pattern = self.bias_add
 
     def quantize_args(self):
@@ -346,7 +345,7 @@ class Conv2DBiasAddPattern(Conv2DPattern):
         self.quantized_args.append(quantized_bias)
 
     def create_conv(self, args):
-        """Creates the qnn.conv2d -> nn.bias_add.
+        """Creates the qnn.dense -> nn.bias_add.
 
         Parameters
         ----------
@@ -457,6 +456,34 @@ class DensePattern(QuantizerPattern):
 
         return deq_call
 
+class DenseBiasAddPattern(DensePattern):
+    """Pattern to rewrite nn.dense -> add and nn.dense -> nn.bias_add pattern as qnn.dense -> nn.bias_add.
+
+    Parameters
+    ----------
+    calibration_callback : CalibrationCallback
+        The method we will use to calibrate this pattern.
+    """
+    def __init__(self, calibration_callback : CalibrationCallback = None):
+        super().__init__(calibration_callback)
+        self.bias_weight = is_constant()
+        self.inputs.append(self.bias_weight)
+        self.bias_add = is_op("nn.bias_add")(self.dense, self.bias_weight) | is_op("add")(self.dense, self.bias_weight)
+        self.pattern = self.bias_add
+
+    def quantize_args(self):
+        super().quantize_args()
+        quantized_bias = relay.qnn.op.quantize(
+            self.args[2], self.scale_zps[0], self.scale_zps[1], axis=0, out_dtype="int32"
+        )
+        self.quantized_args.append(quantized_bias)
+
+    def create_dense(self, args):
+        qnn_call = relay.qnn.op.dense(*args, **self.attrs)
+        bias_add = relay.op.nn.bias_add(
+            qnn_call, self.quantized_args[2], axis=1 # Axis is always 1 for dense
+        )
+        return bias_add
 
 class AddPattern(QuantizerPattern):
     """Pattern to rewrite add as quantized.
@@ -654,24 +681,10 @@ class PerChannelPattern:
             False,
         )
 
+def all_patterns(cc : CalibrationCallback = None):
+    return [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DenseBiasAddPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]
 
-def partition_outputs(expr):
-    return ffi.partition_outputs(expr)
+def average_max_per_channel_patterns():
+    cc = AverageMaxCalibrationCallback()
+    return [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDenseBiasAddPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]
 
-
-def rewrite_partitions(callbacks, expr):
-    return ffi.rewrite_partitions(
-        [
-            _DFPatternCallback(callback.pattern, callback.callback, callback.require_type)
-            for callback in callbacks
-        ],
-        infer_type(expr),
-    )
-
-
-def lower_partitions(expr):
-    return ffi.lower_partitions(expr)
-
-
-def skip_partitions(expr, skip_first=True, skip_last=True):
-    return ffi.skip_partitions(expr, skip_first, skip_last)

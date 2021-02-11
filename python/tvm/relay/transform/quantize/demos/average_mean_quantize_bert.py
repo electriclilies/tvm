@@ -3,7 +3,8 @@
 import tensorflow as tf
 import tvm
 from tvm import relay
-from tvm.relay.transform.quantize import Quantizer, GlobalCalibrator, DatasetManager, Requantizer
+from tvm.relay.data import DatasetManager
+from tvm.relay.transform.quantize import Quantizer, GlobalCalibrator, Requantizer
 
 from tensorflow.keras import datasets, layers, models
 import matplotlib.pyplot as plt

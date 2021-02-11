@@ -354,17 +354,17 @@ class LowerPartitions : protected MixedModeMutator {
   bool skipping_partitions_;
 };
 
-TVM_REGISTER_GLOBAL("relay.new_quantize.partition_outputs").set_body_typed([](const Expr& expr) {
+TVM_REGISTER_GLOBAL("relay.transform.quantize.partition_outputs").set_body_typed([](const Expr& expr) {
   return PartitionOutputs().GetPartitionOutputs(expr);
 });
-TVM_REGISTER_GLOBAL("relay.new_quantize.rewrite_partitions")
+TVM_REGISTER_GLOBAL("relay.transform.quantize.rewrite_partitions")
     .set_body_typed([](const Array<DFPatternCallback>& callbacks, const Expr& expr) {
       return RewritePartitions(callbacks).Rewrite(expr);
     });
-TVM_REGISTER_GLOBAL("relay.new_quantize.lower_partitions").set_body_typed([](const Expr& expr) {
+TVM_REGISTER_GLOBAL("relay.transform.quantize.lower_partitions").set_body_typed([](const Expr& expr) {
   return LowerPartitions().Rewrite(expr);
 });
-TVM_REGISTER_GLOBAL("relay.new_quantize.skip_partitions")
+TVM_REGISTER_GLOBAL("relay.transform.quantize.skip_partitions")
     .set_body_typed([](const Expr& expr, bool skip_first, bool skip_last) {
       auto targets = PartitionsInOrder(skip_first, skip_last).GetPartitionsInOrder(expr);
       return LowerPartitions(targets, true).Rewrite(expr);

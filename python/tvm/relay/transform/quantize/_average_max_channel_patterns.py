@@ -25,6 +25,7 @@ from tvm.relay.transform.quantize import (
     Conv2DPattern,
     Conv2DBiasAddPattern,
     DensePattern,
+    DenseBiasAddPattern,
     PerChannelPattern,
     CalibrationCallback,
     QuantizerPattern,
@@ -114,3 +115,7 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
 
     def get_scale_size(self):
         return (self.units,)
+
+class AverageMaxPerChannelDenseBiasAddPattern(AverageMaxPerChannelDensePattern, DenseBiasAddPattern):
+        """Per channel version of DenseBiasAddPattern, implementing the average max algorithm to
+        calculate scales and zero point."""

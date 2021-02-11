@@ -20,7 +20,7 @@
 import tvm
 from tvm import relay
 
-from tvm.relay.transform.quantize import CalibrationCallback, AverageMaxCalibrationCallback, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDenseBiasAddPattern, AverageMaxPerChannelDensePattern
+from tvm.relay.transform.quantize import CalibrationCallback
 from tvm.relay.dataflow_pattern import is_op, wildcard, is_constant, DFPatternCallback, _DFPatternCallback
 from tvm.relay.frontend.common import infer_type
 from tvm.relay.op.nn.utils import get_pad_tuple2d
@@ -680,11 +680,3 @@ class PerChannelPattern:
             tvm.ir.IRModule(),
             False,
         )
-
-def all_patterns(cc : CalibrationCallback = None):
-    return [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DenseBiasAddPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]
-
-def average_max_per_channel_patterns():
-    cc = AverageMaxCalibrationCallback()
-    return [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDenseBiasAddPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]
-

@@ -5,31 +5,10 @@ from tvm import relay
 import torch
 
 from torchvision.models import resnet
-from tvm.relay.transform.quantize import Quantizer, Calibrator, DatasetManager, AverageMaxCalibrationCallback, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern, Requantizer
+from tvm.data import RandomDatasetManager
+from tvm.relay.transform.quantize import Quantizer, QuantizationCalibrator, AverageMaxCalibrationCallback, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDenseBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDensePattern, AddPattern, MultiplyPattern, Requantizer
 
 import numpy as np
-
-class RandomDatasetManager(DatasetManager):
-    def __init__(self, data_shape, dtype, num_batches):
-        self.idx = 0
-        self.data_shape = data_shape
-        self.dtype = dtype
-        self.n_batches = num_batches
-    
-    def get_next_batch(self):
-        if self.is_empty():
-            raise IndexError
-        self.idx += 1
-        return [np.random.randn(*self.data_shape).astype(self.dtype)], [None]
-
-    def num_batches(self):
-        return self.n_batches
-
-    def is_empty(self):
-        return self.idx >= self.n_batches
-
-    def reset(self):
-        self.idx = 0
 
 
 pytorch_model = resnet.resnet18(pretrained=True)
@@ -41,20 +20,25 @@ script_module = torch.jit.trace(pytorch_model, input_data)
 
 input_shapes = [(input_name, input_shape)]
 mod, params = relay.frontend.from_pytorch(script_module, named_input_shape)
-
+print(mod['main'])
 cc = AverageMaxCalibrationCallback()
-quantizer = Quantizer(mod, params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDensePattern(cc)])
-random_dataset_manager = RandomDatasetManager(input_shape, 'float32', 3)
+# Conv2d bias does does not work
+# Dense works
 
-calibrator = Calibrator(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=random_dataset_manager)
-calibrated_mod = calibrator.calibrate()
-print("Done calibrating")
-requantized_mod = Requantizer().requantize(calibrated_mod)
+#quantizer = Quantizer(mod['main'], params, [AverageMaxPerChannelDenseBiasAddPattern(cc), AverageMaxPerChannelDensePattern(cc)])
+quantizer = Quantizer(mod['main'], params, [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDenseBiasAddPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc), MultiplyPattern(cc)])
+random_dataset_manager = RandomDatasetManager(input_shape, 'float32', 3, 20)
 
+calibrator = QuantizationCalibrator(quantizer, target='llvm', ctx=tvm.cpu(), dataset_manager=random_dataset_manager)
+calibrated_func = calibrator.calibrate()
+print(calibrated_func)
+requantized_func = Requantizer().requantize(calibrated_func)
+requantized_mod = tvm.ir.IRModule.from_expr(requantized_func)
+print(requantized_mod)
 
 with tvm.transform.PassContext(opt_level=3, disabled_pass=["AlterOpLayout"]):
     lib = relay.build(mod, target='llvm')
-    q_lib = relay.build(requantized_mod, target='llvm')
+    #q_lib = relay.build(requantized_mod, target='llvm')
 
 from tvm.contrib import graph_runtime
 input_np = np.random.randn(*input_shape).astype('float32')

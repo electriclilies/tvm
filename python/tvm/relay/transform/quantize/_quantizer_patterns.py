@@ -263,13 +263,16 @@ class Conv2DPattern(QuantizerPattern):
         )
         self.quantized_args = [quantized_data, quantized_weight]
 
-    def create_conv(self, args):
+    def create_conv(self, args, node_map):
         """Creates the qnn.conv2d.
 
         Parameters
         ----------
         args : List[relay.Expr]
             Quantized arguments for the qnn.conv2d.
+
+        node_map : tvm.ir.container.Map
+            Node map from DFPatternCallback's callback
 
         Returns
         -------
@@ -312,7 +315,7 @@ class Conv2DPattern(QuantizerPattern):
             args[0] = relay.op.nn.pad(args[0], pad_width, pad_val)
 
         # Construct quantized qnn.conv2d and dequantize
-        qnn_call = self.create_conv(args)
+        qnn_call = self.create_conv(args, node_map)
         dequantized_call = relay.qnn.op.dequantize(
             qnn_call, conv_scale, conv_zp, out_dtype=self.out_dtype, axis=self.data_channel_axis
         )
@@ -333,8 +336,9 @@ class Conv2DBiasAddPattern(Conv2DPattern):
         super().__init__(calibration_callback)
         self.bias_weight = is_constant()
         self.inputs.append(self.bias_weight)
-        self.bias_add = is_op("nn.bias_add")(self.conv2d, self.bias_weight) | is_op("add")(self.conv2d, self.bias_weight)
-        self.pattern = self.bias_add
+        self.add = is_op("add")(self.conv2d, self.bias_weight)
+        self.bias_add = is_op("nn.bias_add")(self.conv2d, self.bias_weight)
+        self.pattern = self.bias_add | self.add
 
     def quantize_args(self):
         """Quantizes the arguments to the nn.conv2d -> nn.bias_add pattern."""
@@ -344,7 +348,7 @@ class Conv2DBiasAddPattern(Conv2DPattern):
         )
         self.quantized_args.append(quantized_bias)
 
-    def create_conv(self, args):
+    def create_conv(self, args, node_map):
         """Creates the qnn.dense -> nn.bias_add.
 
         Parameters
@@ -352,15 +356,21 @@ class Conv2DBiasAddPattern(Conv2DPattern):
         args : List[relay.Expr]
             Quantized arguments for the qnn.conv2d and bias_add.
 
+        node_map : tvm.ir.container.Map
+            Node map from DFPatternCallback's callback
+
         Returns
         -------
         q_conv2d : relay.Expr
             Quantized version of the pattern.
         """
         qnn_call = relay.qnn.op.conv2d(*args, **self.attrs)
-        bias_add = relay.op.nn.bias_add(
-            qnn_call, self.quantized_args[2], axis=self.data_channel_axis
-        )
+        if node_map[self.add]:
+            bias_add = relay.op.add(qnn_call, self.quantized_args[2])
+        else: # self.bias_add in node_map
+            bias_add = relay.op.nn.bias_add(
+                qnn_call, self.quantized_args[2], axis=self.data_channel_axis
+            )
         return bias_add
 
 
@@ -414,13 +424,16 @@ class DensePattern(QuantizerPattern):
         )  # Axis = 0 for per channel quantization
         self.quantized_args = [quantized_data, quantized_weight]
 
-    def create_dense(self, args):
+    def create_dense(self, args, node_map):
         """Creates the qnn.dense.
 
         Parameters
         ----------
         args : List[relay.Expr]
             Quantized arguments for the qnn.dense.
+
+        node_map : tvm.ir.container.Map
+            Node map from DFPatternCallback's callback
 
         Returns
         -------
@@ -444,7 +457,7 @@ class DensePattern(QuantizerPattern):
 
         # args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
         args = self.quantized_args[0:2] + [self.scale_zps[i] for i in [1, 3, 0, 2]]
-        qnn_call = self.create_dense(args)
+        qnn_call = self.create_dense(args, node_map)
 
         deq_call = relay.qnn.op.dequantize(
             qnn_call,
@@ -468,8 +481,9 @@ class DenseBiasAddPattern(DensePattern):
         super().__init__(calibration_callback)
         self.bias_weight = is_constant()
         self.inputs.append(self.bias_weight)
-        self.bias_add = is_op("nn.bias_add")(self.dense, self.bias_weight) | is_op("add")(self.dense, self.bias_weight)
-        self.pattern = self.bias_add
+        self.bias_add = is_op("nn.bias_add")(self.dense, self.bias_weight)
+        self.add = is_op("add")(self.dense, self.bias_weight)
+        self.pattern = self.bias_add | self.add
 
     def quantize_args(self):
         super().quantize_args()
@@ -478,11 +492,14 @@ class DenseBiasAddPattern(DensePattern):
         )
         self.quantized_args.append(quantized_bias)
 
-    def create_dense(self, args):
+    def create_dense(self, args, node_map):
         qnn_call = relay.qnn.op.dense(*args, **self.attrs)
-        bias_add = relay.op.nn.bias_add(
-            qnn_call, self.quantized_args[2], axis=1 # Axis is always 1 for dense
-        )
+        if node_map[self.add]:
+            bias_add = relay.op.add(qnn_call, self.quantized_args[2])
+        else: # self.bias_add in node_map
+            bias_add = relay.op.nn.bias_add(
+                qnn_call, self.quantized_args[2], axis=1 # Axis is always 1 for dense
+            )
         return bias_add
 
 class AddPattern(QuantizerPattern):

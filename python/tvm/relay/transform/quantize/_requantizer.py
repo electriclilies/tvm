@@ -127,11 +127,14 @@ class Requantizer:
                     call = node_map[self.is_int_8_op][i]
                     # Transform relu into max(zeropoint)
                     if call.op == relay.op.get("nn.relu"):
-                        if deq_zp.data.asnumpy() == relay.const(0, dtype="int32").data.asnumpy():
+                        if (
+                            quantize_zp.data.asnumpy()
+                            == relay.const(0, dtype="int32").data.asnumpy()
+                        ):
                             transformed_data = relay.op.nn.relu(transformed_data)
                         else:
                             transformed_data = relay.op.maximum(
-                                transformed_data, relay.cast(deq_zp, "int8")
+                                transformed_data, relay.cast(quantize_zp, "int8")
                             )
                     elif call.op in self.op_map.keys():
                         transformed_data = self.op_map[call.op](transformed_data, **call.attrs)
@@ -198,30 +201,30 @@ class Requantizer:
 
             # Check to make sure output and input scales and zps match before we apply this
             # transformation
-            out_scale = rq_parent_scale_out.data.asnumpy()
-            out_zp = rq_parent_zp_out.data.asnumpy()
+            out_scale = rq_parent_scale_out
+            out_zp = rq_parent_zp_out
 
             for i in range(0, len_children):
-                
-                in_scale = child_in_scales[i].data.asnumpy()
-                in_zp = child_in_zps[i].data.asnumpy()
 
-                
+                in_scale = child_in_scales[i]
+                in_zp = child_in_zps[i]
+
                 assert math.isclose(
-                    out_scale, in_scale, rel_tol=1e-05, abs_tol=1e-05
-                ) and math.isclose(out_zp, in_zp, rel_tol=1e-05, abs_tol=1e-05), (
+                    out_scale.data.asnumpy(), in_scale.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05
+                ) and math.isclose(
+                    out_zp.data.asnumpy(), in_zp.data.asnumpy(), rel_tol=1e-05, abs_tol=1e-05
+                ), (
                     "Out scales/zps should match in scales/zps. Indicates an internal issue "
                     "in the quantizer somewhere."
                 )
 
-                out_scale = child_out_scales[i].data.asnumpy()
-                out_zp = child_out_zps[i].data.asnumpy()
-                
+                out_scale = child_out_scales[i]
+                out_zp = child_out_zps[i]
 
             parent_axis = rq_parent.attrs["axis"]
 
             return relay.qnn.op.requantize(
-                data, rq_parent_scale_in, rq_parent_zp_in, rq_parent_scale_out, rq_parent_zp_out, axis=parent_axis
+                data, rq_parent_scale_in, rq_parent_zp_in, out_scale, out_zp, axis=parent_axis
             )
 
     class ConsolidateRequantizeandQuantize(DFPatternCallback):
@@ -293,12 +296,14 @@ class Requantizer:
         optimize = tvm.transform.Sequential(
             [relay.transform.FoldConstant(), relay.transform.EliminateCommonSubexpr()]
         )
-        
+
         mod = tvm.ir.IRModule.from_expr(func)
         with relay.build_config(opt_level=3, disabled_pass=["AlterOpLayout"]):
-            rewritten_func = optimize(mod)['main']
+            rewritten_func = optimize(mod)["main"]
 
-        rewritten_func = rewrite(self.RequantizerCallback(), rewritten_func, allow_overlapping_groups=True)
+        rewritten_func = rewrite(
+            self.RequantizerCallback(), rewritten_func, allow_overlapping_groups=True
+        )
         rewritten_func = rewrite(self.RequantizeChainCallback(), rewritten_func)
         rewritten_func = rewrite(self.ConsolidateRequantizeandQuantize(), rewritten_func)
 

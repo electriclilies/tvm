@@ -19,6 +19,7 @@
 
 import numpy as np
 
+
 class DatasetManager:
     """Simple wrapper class to expose datasets in quantization."""
 
@@ -36,7 +37,7 @@ class DatasetManager:
             The length of labels should be equal to the batch size.
         """
         raise NotImplementedError
-    
+
     def batch_size(self):
         """Returns the size of each batch the dataset manager has.
 
@@ -45,6 +46,7 @@ class DatasetManager:
         batch_size : int
             The number of inputs in each batch.
         """
+
     def num_batches(self):
         """Returns the number of batches the dataset manager has.
 
@@ -121,7 +123,7 @@ class RandomDatasetManager(DatasetManager):
         if self.is_empty():
             raise IndexError
         self.idx += 1
-        return [np.random.randn(*self.data_shape).astype(self.dtype)], [None]
+        return [np.random.randn(*self.data_shape).astype(self.dtype)], None
 
     def batch_size(self):
         return self.batch_sz

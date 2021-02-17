@@ -21,7 +21,14 @@ import tvm
 from tvm import relay
 
 from tvm.relay.transform.quantize import CalibrationCallback
-from tvm.relay.dataflow_pattern import is_op, wildcard, is_constant, DFPatternCallback, _DFPatternCallback
+from tvm.relay.dataflow_pattern import (
+    is_op,
+    wildcard,
+    is_constant,
+    DFPatternCallback,
+    _DFPatternCallback,
+)
+from tvm.relay.dataflow_pattern import ffi as pattern_ffi
 from tvm.relay.frontend.common import infer_type
 from tvm.relay.op.nn.utils import get_pad_tuple2d
 from . import _ffi as ffi
@@ -81,7 +88,7 @@ class QuantizerPattern(DFPatternCallback):
             Identifier at the beginning of the scale variable.
 
         is_weight : bool
-            Whether this scale is a weight scale or a data scale. If it is a weight scale, we 
+            Whether this scale is a weight scale or a data scale. If it is a weight scale, we
             the returned variable has shape (channels,). Only used for per-channel quantization.
 
         Returns
@@ -365,9 +372,9 @@ class Conv2DBiasAddPattern(Conv2DPattern):
             Quantized version of the pattern.
         """
         qnn_call = relay.qnn.op.conv2d(*args, **self.attrs)
-        if node_map[self.add]:
+        if node_map.get(self.add) is not None:
             bias_add = relay.op.add(qnn_call, self.quantized_args[2])
-        else: # self.bias_add in node_map
+        else:  # self.bias_add in node_map
             bias_add = relay.op.nn.bias_add(
                 qnn_call, self.quantized_args[2], axis=self.data_channel_axis
             )
@@ -391,6 +398,8 @@ class DensePattern(QuantizerPattern):
         self.dense = is_op("nn.dense")(self.data, self.weight)
 
         self.pattern = self.dense
+        self.attrs = None
+        self.units = None
 
     def get_attrs(self, attrs, weight_shape):
         """Constructs the attributes for qnn.conv2d.
@@ -412,8 +421,8 @@ class DensePattern(QuantizerPattern):
         units = attrs["units"]
         if units is None:
             units = weight_shape[0]
-        units = units.value
-        self.attrs["units"] = units
+        self.units = units.value
+        self.attrs["units"] = self.units
 
     def quantize_args(self):
         """Quantizes the arguments to the nn.dense pattern."""
@@ -449,9 +458,7 @@ class DensePattern(QuantizerPattern):
 
         dense = node_map[self.dense][0]
         out_dtype = dense.checked_type.dtype
-
         self.get_attrs(dense.attrs, infer_type(weight).checked_type.shape)
-
         self.create_scale_zps("dense_data", "dense_weight")
         self.quantize_args()
 
@@ -469,6 +476,7 @@ class DensePattern(QuantizerPattern):
 
         return deq_call
 
+
 class DenseBiasAddPattern(DensePattern):
     """Pattern to rewrite nn.dense -> add and nn.dense -> nn.bias_add pattern as qnn.dense -> nn.bias_add.
 
@@ -477,7 +485,8 @@ class DenseBiasAddPattern(DensePattern):
     calibration_callback : CalibrationCallback
         The method we will use to calibrate this pattern.
     """
-    def __init__(self, calibration_callback : CalibrationCallback = None):
+
+    def __init__(self, calibration_callback: CalibrationCallback = None):
         super().__init__(calibration_callback)
         self.bias_weight = is_constant()
         self.inputs.append(self.bias_weight)
@@ -494,13 +503,14 @@ class DenseBiasAddPattern(DensePattern):
 
     def create_dense(self, args, node_map):
         qnn_call = relay.qnn.op.dense(*args, **self.attrs)
-        if node_map[self.add]:
+        if node_map.get(self.add) is not None:
             bias_add = relay.op.add(qnn_call, self.quantized_args[2])
-        else: # self.bias_add in node_map
+        else:  # self.bias_add in node_map
             bias_add = relay.op.nn.bias_add(
-                qnn_call, self.quantized_args[2], axis=1 # Axis is always 1 for dense
+                qnn_call, self.quantized_args[2], axis=1  # Axis is always 1 for dense
             )
         return bias_add
+
 
 class AddPattern(QuantizerPattern):
     """Pattern to rewrite add as quantized.
@@ -638,10 +648,10 @@ class PerChannelPattern:
             anything in this pass, so you should just return post.
         """
         raise NotImplementedError()
-    
+
     def get_scale_size(self):
         """Returns the size of the per-channel scale variable
-        
+
         Returns
         -------
         scale_size : tuple
@@ -657,8 +667,9 @@ class PerChannelPattern:
             Name of the variable
         """
         var = relay.var(
-            str(name) + "_scale_" + str(QuantizerPattern.scales_count), shape=self.get_scale_size(),
-            dtype="float32"
+            str(name) + "_scale_" + str(QuantizerPattern.scales_count),
+            shape=self.get_scale_size(),
+            dtype="float32",
         )
         QuantizerPattern.scales_count += 1
         return var
@@ -677,6 +688,7 @@ class PerChannelPattern:
         # Create quantization parameters for arguments with per channel on the right
         data_scale = self.scale(left_name)
         data_zp = self.zero_point(left_name)
+
         weight_scale = self.weight_scale(right_name)
         weight_zp = self.zero_point(right_name)
         self.scale_zps = [data_scale, data_zp, weight_scale, weight_zp]

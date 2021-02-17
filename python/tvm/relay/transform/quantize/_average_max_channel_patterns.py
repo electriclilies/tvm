@@ -34,12 +34,13 @@ from tvm.relay.transform.quantize import (
 
 class AverageMaxPerChannelPattern(PerChannelPattern):
     """Per channel implementation of the AverageMax algorithm."""
+
     def calibrate_pattern(self, calibration_info):
         self.attr_callback(calibration_info.partition_info.expr)
         scale_zp_values = {}
 
         data_max_avg = 0
-        weight_max_avg = np.zeros(shape=(self.get_scale_size(),))
+        weight_max_avg = np.zeros(shape=self.get_scale_size())
         num_inputs = (
             calibration_info.dataset_manager.num_batches()
             * calibration_info.dataset_manager.batch_size()
@@ -70,13 +71,13 @@ class AverageMaxPerChannelPattern(PerChannelPattern):
             scale_name = calibration_info.partition_info.input_scale_zps[i][0].name_hint
             zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
 
-            scale_zp_values[scale_name] = scale
+            scale_zp_values[scale_name] = scale.astype("float32")
             scale_zp_values[zp_name] = np.array(0).astype("int32")
 
         return scale_zp_values
 
 
-class AverageMaxPerChannelConv2DPattern(Conv2DPattern, PerChannelPattern):
+class AverageMaxPerChannelConv2DPattern(AverageMaxPerChannelPattern, Conv2DPattern):
     """Conv2DPattern with the per channel average max algorithm as the calibration method."""
 
     def extract_attrs(self, pre, post, node_map):
@@ -97,11 +98,11 @@ class AverageMaxPerChannelConv2DBiasAddPattern(
     calculate scales and zero points."""
 
 
-class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
+class AverageMaxPerChannelDensePattern(AverageMaxPerChannelPattern, DensePattern):
     """Per channel version of DensePattern, implementing the average max algorithm to
     calculate scales and zero points."""
 
-    def __init__(self, calibration_callback: CalibrationCallback):
+    def __init__(self, calibration_callback: CalibrationCallback = None):
         super().__init__(calibration_callback)
 
     def extract_attrs(self, pre, post, node_map):
@@ -116,6 +117,9 @@ class AverageMaxPerChannelDensePattern(DensePattern, PerChannelPattern):
     def get_scale_size(self):
         return (self.units,)
 
-class AverageMaxPerChannelDenseBiasAddPattern(AverageMaxPerChannelDensePattern, DenseBiasAddPattern):
-        """Per channel version of DenseBiasAddPattern, implementing the average max algorithm to
-        calculate scales and zero point."""
+
+class AverageMaxPerChannelDenseBiasAddPattern(
+    AverageMaxPerChannelDensePattern, DenseBiasAddPattern
+):
+    """Per channel version of DenseBiasAddPattern, implementing the average max algorithm to
+    calculate scales and zero point."""

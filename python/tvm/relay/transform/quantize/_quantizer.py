@@ -57,7 +57,6 @@ class Quantizer:
     ):
         self.patterns = patterns
         self.original_func = prerequisite_optimize(func, params)
-        print("preopt func: ", self.original_func)
 
         # num_orig_outputs is -1 if output is not a Tuple, else is length of tuple
         if isinstance(self.original_func.body, tvm.relay.expr.Tuple):
@@ -133,6 +132,7 @@ def prerequisite_optimize(func, params=None):
         mod = optimize(mod)
 
     return mod["main"]
+
 
 def partition_outputs(expr):
     return ffi.partition_outputs(expr)

@@ -711,7 +711,7 @@ class PatternGrouper {
         }
       }
     }
-    }
+    
     // Assign Group Ids
     group.gid = ++gid_;
     for (auto kv : extractor.GetMemo()) {

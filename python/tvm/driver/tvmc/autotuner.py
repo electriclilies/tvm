@@ -210,6 +210,13 @@ def add_tune_parser(subparsers):
     #     can be improved in future to add integration with a modelzoo
     #     or URL, for example.
     parser.add_argument("FILE", help="path to the input model file")
+    parser.add_argument(
+        "--input-shapes",
+        help="specify non-generic shapes for model to run, format is "
+        '"input_name:[dim1,dim2,...,dimn] input_name2:[dim1,dim2]"',
+        type=common.parse_shape_string,
+        default=None,
+    )
 
 
 def drive_tune(args):
@@ -235,7 +242,7 @@ def drive_tune(args):
             )
 
     target = common.target_from_cli(args.target)
-    mod, params = frontends.load_model(args.FILE, args.model_format)
+    mod, params = frontends.load_model(args.FILE, args.model_format, shape_dict=args.input_shapes)
 
     # min_repeat_ms should be:
     # a. the value provided by the user, if any, or
@@ -326,6 +333,18 @@ def drive_tune(args):
 
         tune_tasks(tasks, args.output, **tuning_option)
 
+        # Schedule the tasks (i.e., produce a schedule for each task)
+        schedule_tasks(
+            tasks, weights, tuning_options, args.tuning_records, args.log_estimated_latency
+        )
+    else:
+        tasks = autotvm_get_tuning_tasks(
+            mod=mod,
+            params=params,
+            target=target,
+            target_host=args.target_host,
+            alter_layout=args.desired_layout,
+        )
 
 def autotvm_get_tuning_tasks(mod, params, target, target_host=None, alter_layout=None):
     """Get the autotvm tuning tasks for a given relay module.

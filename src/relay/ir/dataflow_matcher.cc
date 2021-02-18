@@ -125,8 +125,12 @@ bool DFPatternMatcher::VisitDFPattern_(const AttrPatternNode* attr_pattern, cons
       if (Op::HasAttrMap(attr_name)) {
         auto op_map = Op::GetAttrMap<TVMRetValue>(attr_name);
         if (op_map.count(op)) {
-          matches = MatchRetValue(attr_value, op_map[op]);
+          matches &= MatchRetValue(attr_value, op_map[op]);
+        } else {
+          matches = false;
         }
+      } else {
+        matches = false;
       }
     }
   } else if (auto* op = expr.as<CallNode>()) {
@@ -159,6 +163,8 @@ bool DFPatternMatcher::VisitDFPattern_(const AttrPatternNode* attr_pattern, cons
         break;
       }
     }
+  } else {
+    matches = false;
   }
   return matches;
 }
@@ -627,6 +633,14 @@ class PatternGrouper {
             for (auto match : node_map[fuzzy_op]) {
               fuzzy_matches.insert(match);
             }
+          }
+        }
+      }
+      // Don't treat Function params as input variables for partition
+      if (auto op = node->ref_.as<FunctionPatternNode>()) {
+        for (auto fuzzy_op : op->params) {
+          for (auto match : node_map[fuzzy_op]) {
+            fuzzy_matches.insert(match);
           }
         }
       }

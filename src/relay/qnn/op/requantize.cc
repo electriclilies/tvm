@@ -256,8 +256,9 @@ Expr RequantizeQnnCanonicalize(const Attrs& attrs, const Array<Expr>& new_args,
  */
 bool RequantizeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                    const TypeReporter& reporter) {
-  // Expected Types: data, input_scale, input_zero_point, output_scale, output_zero_point, output
-  ICHECK_EQ(types.size(), 6);
+  // types = [data_type, input_scale_type, input_zero_point_type,
+  //          output_scale_type, output_zero_point_type, ret_type]
+  CHECK_EQ(types.size(), 6);
   const auto* data = types[0].as<TensorTypeNode>();
 
   if (data == nullptr) {

@@ -29,13 +29,13 @@ from ._quantizer_patterns import (
     DenseBiasAddPattern,
     AddPattern,
     MultiplyPattern,
-    PerChannelPattern
+    PerChannelPattern,
 )
 from ._average_max_channel_patterns import (
     AverageMaxPerChannelConv2DBiasAddPattern,
     AverageMaxPerChannelConv2DPattern,
     AverageMaxPerChannelDenseBiasAddPattern,
-    AverageMaxPerChannelDensePattern
+    AverageMaxPerChannelDensePattern,
 )
 
 from ._quantizer_pattern_utils import all_patterns, average_max_per_channel_patterns
@@ -43,5 +43,7 @@ from ._quantizer_pattern_utils import all_patterns, average_max_per_channel_patt
 from ._quantizer import Quantizer
 from ._calibrator import QuantizationCalibrator
 from ._requantizer import Requantizer
+
+from ._quantize_pass import QuantizePass
 
 from . import _ffi as ffi

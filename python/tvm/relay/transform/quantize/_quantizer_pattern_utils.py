@@ -15,12 +15,40 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from tvm.relay.transform.quantize import CalibrationCallback, Conv2DPattern, Conv2DBiasAddPattern, DensePattern, DenseBiasAddPattern, AddPattern, MultiplyPattern, AverageMaxCalibrationCallback, AverageMaxPerChannelConv2DBiasAddPattern, AverageMaxPerChannelConv2DPattern, AverageMaxPerChannelDenseBiasAddPattern, AverageMaxPerChannelDensePattern
+from tvm.relay.transform.quantize import (
+    CalibrationCallback,
+    Conv2DPattern,
+    Conv2DBiasAddPattern,
+    DensePattern,
+    DenseBiasAddPattern,
+    AddPattern,
+    MultiplyPattern,
+    AverageMaxCalibrationCallback,
+    AverageMaxPerChannelConv2DBiasAddPattern,
+    AverageMaxPerChannelConv2DPattern,
+    AverageMaxPerChannelDenseBiasAddPattern,
+    AverageMaxPerChannelDensePattern,
+)
 
-def all_patterns(cc : CalibrationCallback = None):
-    return [Conv2DBiasAddPattern(cc), Conv2DPattern(cc), DenseBiasAddPattern(cc), DensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]
+
+def all_patterns(cc: CalibrationCallback = None):
+    return [
+        Conv2DBiasAddPattern(cc),
+        Conv2DPattern(cc),
+        DenseBiasAddPattern(cc),
+        DensePattern(cc),
+        AddPattern(cc),
+        MultiplyPattern(cc),
+    ]
+
 
 def average_max_per_channel_patterns():
     cc = AverageMaxCalibrationCallback()
-    return [AverageMaxPerChannelConv2DBiasAddPattern(cc), AverageMaxPerChannelConv2DPattern(cc), AverageMaxPerChannelDenseBiasAddPattern(cc), AverageMaxPerChannelDensePattern(cc), AddPattern(cc), MultiplyPattern(cc)]
-
+    return [
+        AverageMaxPerChannelConv2DBiasAddPattern(cc),
+        AverageMaxPerChannelConv2DPattern(cc),
+        AverageMaxPerChannelDenseBiasAddPattern(cc),
+        AverageMaxPerChannelDensePattern(cc),
+        AddPattern(cc),
+        MultiplyPattern(cc),
+    ]

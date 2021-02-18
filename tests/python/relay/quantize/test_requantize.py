@@ -30,7 +30,6 @@ def check_requantize(pre_graph, expected_graph):
     expected_graph = infer_type(expected_graph)
 
     assert tvm.ir.structural_equal(post_graph, expected_graph)
-    assert tvm.ir.structural_equal(post_graph, expected_graph)
 
 
 def test_simple_requantize():

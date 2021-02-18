@@ -20,7 +20,12 @@
 from typing import List
 
 import tvm
-from tvm.relay.transform.quantize import Quantizer, QuantizationCalibrator, Requantizer, QuantizerPattern
+from tvm.relay.transform.quantize import (
+    Quantizer,
+    QuantizationCalibrator,
+    Requantizer,
+    QuantizerPattern,
+)
 from .. import function_pass
 
 
@@ -34,8 +39,11 @@ class QuantizePass:
         The patterns we want to quantize.
 
     params : dict of str to NDArray
-        Parameters you would pass into relay.build or relay.build_module. We need params
-        so that we can run parts of the graph during calibration.
+            Constants needed to run the mod. We need params so that we can run parts of the
+            graph during calibration.
+
+    target : str
+        Target to generate code for calibration on.
 
     skip_first : bool
         If True, we do not quantize the first quantizable pattern in the function. If False,
@@ -48,35 +56,37 @@ class QuantizePass:
     def __init__(
         self,
         quantizer_pattern_list: List[QuantizerPattern],
-        params,
+        params=None,
         target="llvm",
-        ctx=tvm.cpu(0),
+        device=tvm.cpu(0),
         skip_first=True,
         skip_last=False,
     ):
         self.quantizer_pattern_list = quantizer_pattern_list
         self.params = params
+        self.target = target
+        self.device = device
         self.skip_first = skip_first
         self.skip_last = skip_last
-        self.target = target
-        self.ctx = ctx
 
-    def transform_function(self, func, _):
+    def transform_function(self, func, mod, ctx):
         """Quantizes, calibrates and requantizes the function.
         Parameters
         ----------
         func : relay.Function
             Function to apply the transformation on.
+
         """
         params = {}
         # Extract params that are in this function
         for param in func.params:
-            params[param.name_hint] = self.params[param.name_hint]
-
+            if param.name_hint in self.params.keys():
+                params[param.name_hint] = self.params[param.name_hint]
         quantizer = Quantizer(
             func, params, self.quantizer_pattern_list, self.skip_first, self.skip_last
         )
-        calibrator = QuantizationCalibrator(quantizer, target=self.target, ctx=self.ctx)
+
+        calibrator = QuantizationCalibrator(quantizer, target=self.target, ctx=self.device)
         transformed_func = calibrator.calibrate()
         transformed_func = Requantizer().requantize(transformed_func)
         return transformed_func

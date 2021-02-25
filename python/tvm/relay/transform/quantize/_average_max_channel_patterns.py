@@ -66,9 +66,10 @@ class AverageMaxPerChannelPattern(PerChannelPattern):
             weight = unquantized_inputs[1]
 
             data_max_avg += np.max(np.abs(data)) / num_inputs
-
-            axis = list(range(len(weight.shape))).remove(0)
-            weight_max_avg += np.max(np.abs(weight), axis=axis) / num_inputs
+            axis = list(range(len(weight.shape)))
+            axis.remove(0)
+            axis = tuple(axis)
+            weight_max_avg += np.amax(np.abs(weight), axis=axis) / num_inputs
 
         calibration_info.dataset_manager.reset()
 
@@ -81,7 +82,6 @@ class AverageMaxPerChannelPattern(PerChannelPattern):
         for i, scale in enumerate(scales):
             scale_name = calibration_info.partition_info.input_scale_zps[i][0].name_hint
             zp_name = calibration_info.partition_info.input_scale_zps[i][1].name_hint
-
             scale_zp_values[scale_name] = scale.astype("float32")
             scale_zp_values[zp_name] = np.array(0).astype("int32")
 

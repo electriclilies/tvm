@@ -18,7 +18,7 @@
  */
 
 /*!
- * \file src/tvm/relay/transforms/new_quantize.cc
+ * \file src/tvm/relay/transforms/quantize.cc
  * \brief Relay Quantization related passes
  */
 

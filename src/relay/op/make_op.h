@@ -91,6 +91,9 @@ Expr MakeUpSampling3D(Expr data, double scale_d, double scale_h, double scale_w,
 Expr MakeVariance(Expr data, Expr mean, Array<Integer> axis, bool keepdims, bool exclude,
                   bool unbiased);
 
+Expr MakeQuantize(Expr data, Expr output_scale, Expr output_zero_point, int axis,
+                  DataType out_dtype);
+
 Expr MakeZeros(Array<Integer> shape, DataType dtype);
 
 Expr MakeOneHot(Expr indices, Expr on_value, Expr off_value, int depth, int axis, DataType dtype);

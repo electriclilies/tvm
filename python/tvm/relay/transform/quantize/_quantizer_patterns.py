@@ -285,7 +285,95 @@ class Conv2DPattern(QuantizerPattern):
         q_conv2d : relay.Expr
             Quantized version of the pattern.
         """
-        return relay.qnn.op.conv2d(*args, **self.attrs)
+
+        # Figure out whether to use fallback, depthwise or normal codegen
+        possible_fallback = False
+        depthwise = False
+        if "dilation" in self.attrs.keys():
+            dilation = self.attrs["dilation"]
+            # TODO: make sure .size is correct here (could be len?)
+            assert dilation.size() == 2, "Quantization only supports 2D dilation"
+            dilation_h = dilation[0]
+            dilation_w = dilation[1]
+            if dilation_h != 1 or dilation_w != 1: # TODO: In QNN, we only use fallback if kernel zp is also non-zero.. At this point we can't tell if it is zero or not. What to do?
+                possible_fallback = True
+
+        if "groups" in self.attrs.keys():
+            groups = self.attrs["groups"]
+            if groups != 1: # TODO: in QNN, we check to make sure channels == groups before doing depthwise. Here I assume if groups != 1, then groups must equal channels
+                depthwise = True
+        
+        # Pad data (DONE -- DATA IS PADDED IN CALLBACK) # TODO: Does it matter whether I pad based on kernel or data layout? QNN uses data layout
+        
+        # First term
+        first_term = relay.op.nn.conv2d(**args, **self.attrs)
+
+        if depthwise:
+            if "channel_multiplier" in self.attrs.keys():
+                assert self.attrs["channel_multiplier"] != 1, "Channel multiplier should not be -1"
+            # Do depthwise calculation of 2nd term
+            # Do depthwise calcuation of 3rd term
+            # Do depthwise calculation of fourth term
+            pass
+        else:
+            # second term
+            casted_t2 = relay.op.cast(args[0], "int32") # TODO: is this a problem for microcontrollers?
+            reduced_c_t2 = relay.op.sum(casted_t2, self.data_channel_axis, True, False)
+            reduced_t2 = reduced_c_t2
+            kernel_size = self.attrs["kernel_size"]
+            padding = (0, 0)
+            if (kernel_size[0] * kernel_size[1] != 1):
+                reduced_c_t2 = relay.op.multiply(reduced_c_t2, relay.const(kernel_size[0] * kernel_size[1], dtype="int32"))
+                reduced_t2 = relay.op.nn.avg_pool2d(reduced_c_t2, kernel_size, self.attrs["strides"], self.attrs["data_layout"], ceil_mode=False, count_include_pad=False)
+            else:
+                strides = self.attrs["strides"]
+                stride_1 = strides[0]
+                stride_2 = strides[1]
+                kernel_size = self.attrs["kernel_size"]
+                if (stride_1 * stride_2 != 1):
+                    reduced_t2 = relay.op.nn.avg_pool2d(reduced_c_t2, self.attrs["kernel_size"], self.attrs["strides"], padding, self.attrs["data_layout"])
+            
+            # If zp is 1, then we don't multiply
+            cond = relay.op.equal(relay.const(1, dtype="int32"), self.scale_zps[2]) # TODO: Do we need scale and ZP dtypes to be variable as well? For microcontrollers?
+            multiplied_t2 = relay.If(cond, reduced_t2, reduced_t2 * self.scale_zps[2]) # multiply reduced_t2 by kernel_zero_point # TODO: WHY?
+            
+            second_term = multiplied_t2
+            # third term
+            if self.kernel_layout == "OIHW": # IHW are reduce axes
+                axes = [1, 2, 3]
+            elif self.kernel_layout == "HWIO":
+                axes = [0, 1, 2]
+            else:
+                raise ValueError(
+                    "Quantizting kernel layout %s for conv2d is not yet supported."
+                    + "Please use OIHW or HWIO",
+                    self.kernel_layout,
+                )
+            casted_weight = relay.op.cast(self.args[1], dtype="int32")
+            reduced_t3 = relay.op.sum(casted_weight, axes, False, False)
+
+
+            # fourth term
+            pass
+
+        # Combine terms
+
+        if possible_fallback:
+            # Use relay IF to deterimine if we need fallback based on ZP value
+            # Cast zps to int16 (will this break things later when we extract zps?)
+
+            # Cast data to int16
+            # If data zp is not zero, subtract zp from casted data
+
+            # If kernel zp is not zero, subtract zp from casted kernel
+
+            # Return normal nn.conv2d of the shifted data and shifted zp
+            # TODO: Fallback doesn't even use scales? Seems bad. Definitely not something we want to use very often
+            return None
+
+
+        return None
+        #return relay.qnn.op.conv2d(*args, **self.attrs)
 
     def callback(self, pre, post, node_map):
         self.args = [node_map[i][0] for i in self.inputs]
@@ -305,6 +393,8 @@ class Conv2DPattern(QuantizerPattern):
         # args = [quantized_data, quantized_weight, data_zp, weight_zp, data_scale, weight_scale]
         args = self.quantized_args[0:2] + [self.scale_zps[i] for i in [1, 3, 0, 2]]
 
+
+        # TODO: QNN pads based on data layout, but I'm padding based on kernel layout here. Is that OK? Should I change it?
         if self.padding is not None:
 
             top, left, bottom, right = [p.value for p in get_pad_tuple2d(self.padding)]
@@ -317,7 +407,13 @@ class Conv2DPattern(QuantizerPattern):
                     (0, 0),
                     (0, 0),
                 )
-            pad_val = 0
+            else:
+                raise ValueError(
+                    "Quantizting kernel layout %s for conv2d is not yet supported."
+                    + "Please use OIHW or HWIO",
+                    self.kernel_layout,
+                )
+            pad_val = self.scale_zps[1] # Pad val is data zero point
             args[0] = relay.op.nn.pad(args[0], pad_width, pad_val)
 
         # Construct quantized qnn.conv2d and dequantize
@@ -401,7 +497,7 @@ class DensePattern(QuantizerPattern):
         self.units = None
 
     def get_attrs(self, attrs, weight_shape):
-        """Constructs the attributes for qnn.conv2d.
+        """Constructs the attributes for qnn.dense.
 
         Parameters
         ----------

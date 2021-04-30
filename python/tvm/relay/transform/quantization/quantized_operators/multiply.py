@@ -14,46 +14,29 @@ from tvm.relay.op import nn, tensor
 from tvm.relay.transform.quantization.quantized_operators import utils
 
 
-def generate_generic_quantized_multiply(
+def generate_quantized_multiply(
     input1: tvm.relay.Expr,
     input2: tvm.relay.Expr,
-    output_qparams: Optional[utils.QParams],
-    input1_qparams: Optional[utils.QParams] = None,
-    input2_qparams: Optional[utils.QParams] = None,
-    internal_accumulation_dtype: str = "float32",
-    simulated_accumulation_dtype: str = "int32",
+    input1_qparams: utils.QParams,
+    input2_qparams: utils.QParams,
+    simulated: Optional[utils.SimulatedDTypes] = None,
+    accumulation_dtype: str = "int32",
     dequantize: bool = True,
 ) -> Tuple[tvm.relay.Expr, utils.QParams]:
-    if output_qparams is None and (input1_qparams is None or input2_qparams is None):
-        raise ValueError(
-            "Must give either the output qparams or both input qparams to infer output qparams!"
-        )
+    internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
 
-    if output_qparams is None:
-        output_qparams = utils.QParams(
-            (input1_qparams.scale_factor * input2_qparams.scale_factor),
-            relay.const(0, dtype=simulated_accumulation_dtype),
-            simulated_accumulation_dtype,
-        )
-        input1, input2 = utils.quantize_inputs(
-            internal_accumulation_dtype, input1, input1_qparams, input2, input2_qparams
-        )
-        input1_zero_point, input2_zero_point = utils.cast_all(
-            internal_accumulation_dtype, input1_qparams.zero_point, input2_qparams.zero_point
-        )
-        output_term = (input1 - input1_zero_point) * (input2 - input2_zero_point)
-    else:
-        input_qparams = utils.QParams(
-            relay.sqrt(output_term.scale_factor),
-            output_term.zero_point,
-            simulated_accumulation_dtype,
-        )
-        input1, input2 = utils.quantize_inputs(
-            internal_accumulation_dtype, input1, input_qparams, input2, input_qparams
-        )
-        output_term = (input1 - input_qparams.zero_point) * (
-            input2 - input_qparams.zero_point
-        ) + output_term.zero_point
+    output_qparams = utils.QParams(
+        (input1_qparams.scale_factor * input2_qparams.scale_factor),
+        relay.const(0, dtype=accumulation_dtype),
+        accumulation_dtype,
+    )
+    input1, input2 = utils.quantize_inputs(
+        internal_accumulation_dtype, input1, input1_qparams, input2, input2_qparams
+    )
+    input1_zero_point, input2_zero_point = utils.cast_all(
+        internal_accumulation_dtype, input1_qparams.zero_point, input2_qparams.zero_point
+    )
+    output_term = (input1 - input1_zero_point) * (input2 - input2_zero_point)
 
     if dequantize:
         output_term = utils.dequantize_expr(
@@ -62,48 +45,6 @@ def generate_generic_quantized_multiply(
 
     # TODO: simulate the effects of overflow
     return output_term, output_qparams
-
-
-def generate_static_quantized_multiply(
-    input1: tvm.relay.Expr,
-    input2: tvm.relay.Expr,
-    output_qparams: Optional[utils.QParams],
-    input1_qparams: Optional[utils.QParams] = None,
-    input2_qparams: Optional[utils.QParams] = None,
-    accumulation_dtype: str = "int32",
-    dequantize: bool = True,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
-    return generate_generic_quantized_multiply(
-        input1,
-        input2,
-        output_qparams,
-        input1_qparams=input1_qparams,
-        input2_qparams=input2_qparams,
-        internal_accumulation_dtype=accumulation_dtype,
-        simulated_accumulation_dtype=accumulation_dtype,
-        dequantize=dequantize,
-    )
-
-
-def generate_simulated_quantized_multiply(
-    input1: tvm.relay.Expr,
-    input2: tvm.relay.Expr,
-    output_qparams: Optional[utils.QParams],
-    input1_qparams: Optional[utils.QParams] = None,
-    input2_qparams: Optional[utils.QParams] = None,
-    accumulation_dtype: str = "int32",
-    dequantize: bool = True,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
-    return generate_generic_quantized_multiply(
-        input1,
-        input2,
-        output_qparams,
-        input1_qparams=input1_qparams,
-        input2_qparams=input2_qparams,
-        internal_accumulation_dtype="float32",
-        simulated_accumulation_dtype=accumulation_dtype,
-        dequantize=dequantize,
-    )
 
 
 def example_multiply_simulated(seed=42):
@@ -116,8 +57,8 @@ def example_multiply_simulated(seed=42):
     b = relay.var("b")
     a_qparams = var_creator.get_qparams("a")
     b_qparams = var_creator.get_qparams("b")
-    mul_output, output_qparams = generate_simulated_quantized_multiply(
-        a, b, None, a_qparams, b_qparams, dequantize=True
+    mul_output, output_qparams = generate_quantized_multiply(
+        a, b, a_qparams, b_qparams, dequantize=True, simulated=utils.SimulatedDTypes.FLOAT32
     )
     f = relay.Function(
         [

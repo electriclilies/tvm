@@ -1,8 +1,32 @@
+from enum import Enum, EnumMeta
 from typing import *
 
 import numpy as np
 import tvm
 from tvm import relay
+
+
+class ContainsEnum(EnumMeta):
+    def __contains__(cls, item):
+        try:
+            cls(item)
+        except ValueError:
+            return False
+        return True
+
+
+class SimulatedDTypes(Enum, metaclass=ContainsEnum):
+    """Represents data types for simulated quantization.
+
+    This is where we have non-integral types hold quantized values for
+    type interoperability.
+    """
+
+    FLOAT32 = "float32"
+    FLOAT64 = "float64"
+    FLOAT = FLOAT32
+    DOUBLE = FLOAT64
+
 
 QParams = NamedTuple(
     "QParams", [("scale_factor", tvm.relay.Expr), ("zero_point", tvm.relay.Expr), ("dtype", str)]
@@ -26,6 +50,7 @@ class AffineQuantizationVarCreator:
 
 
 def cast_all(dtype: str, *args: List[relay.Expr]) -> Union[List[relay.Expr], relay.Expr]:
+    """Utility function for casting a lot of things in relay. Handles unpacking well."""
     result = [relay.cast(data, dtype) for data in args]
     if len(result) == 1:
         result = result[0]
@@ -42,9 +67,10 @@ def quantize_inputs(
         )
 
     # This means use simulated operations
-    if internal_accumulation_dtype == "float32":
+    if internal_accumulation_dtype in SimulatedDTypes:
         quantize_op = relay.qnn.op.simulated_quantize
     elif "int" in internal_accumulation_dtype:
+        # TODO: str matching int is unsafe lol.
         quantize_op = relay.qnn.op.quantize
     else:
         raise ValueError(
@@ -84,7 +110,7 @@ def dequantize_expr(
     expr: relay.Expr,
     qparam: QParams,
 ) -> Tuple[relay.Expr]:
-    if internal_accumulation_dtype == "float32":
+    if internal_accumulation_dtype in SimulatedDTypes:
         dequantize_op = relay.qnn.op.simulated_dequantize
     elif "int" in internal_accumulation_dtype:
         dequantize_op = relay.qnn.op.dequantize

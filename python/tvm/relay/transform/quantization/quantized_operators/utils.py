@@ -111,13 +111,25 @@ def dequantize_expr(
     qparam: QParams,
 ) -> Tuple[relay.Expr]:
     if internal_accumulation_dtype in SimulatedDTypes:
-        dequantize_op = relay.qnn.op.simulated_dequantize
+        return relay.qnn.op.simulated_dequantize(
+            data=expr,
+            input_scale=qparam.scale_factor,
+            input_zero_point=qparam.zero_point,
+            in_dtype=qparam.dtype,
+        )
     elif "int" in internal_accumulation_dtype:
-        dequantize_op = relay.qnn.op.dequantize
+        return relay.qnn.op.dequantize(
+            data=expr,
+            input_scale=qparam.scale_factor,
+            input_zero_point=qparam.zero_point,
+            in_dtype=qparam.dtype,
+        )
+
     else:
         raise ValueError(
             f"Unknown quantization from specified internal accumulation dtype {internal_accumulation_dtype}"
         )
+
     return dequantize_op(
         data=expr,
         input_scale=qparam.scale_factor,

@@ -1,4 +1,4 @@
-gfrom typing import *
+from typing import *
 
 import numpy as np
 import tvm
@@ -14,19 +14,20 @@ from tvm.relay.op import nn, tensor
 from tvm.relay.transform.quantization.quantized_operators import utils
 
 
-def generate_generic_quantized_dense(
+def generate_quantized_dense(
     data: tvm.relay.Expr,
     weight: tvm.relay.Expr,
     data_qparams: utils.QParams,
     weight_qparams: utils.QParams,
-    internal_accumulation_dtype: str = "float32",
-    simulated_accumulation_dtype: str = "int32",
+    simulated: Optional[utils.SimulatedDTypes] = None,
+    accumulation_dtype: str = "int32",
     out_units: Optional[int] = None,
     in_units: Optional[int] = None,
-    dequantize: bool = False,
+    dequantize: bool = True,
     bias: Optional[tvm.relay.Expr] = None,
 ) -> Tuple[tvm.relay.Expr, utils.QParams]:
     """TODO"""
+    internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
 
     # TODO: figure out whether we need this or we can always have the
     # callee pass it in
@@ -80,8 +81,8 @@ def generate_generic_quantized_dense(
 
     output_qparams = utils.QParams(
         data_qparams.scale_factor * weight_qparams.scale_factor,
-        relay.const(0, dtype=simulated_accumulation_dtype),
-        simulated_accumulation_dtype,
+        relay.const(0, dtype=internal_accumulation_dtype),
+        accumulation_dtype,
     )
 
     # Make graph more parallizable by manually creating tree of computation
@@ -99,56 +100,6 @@ def generate_generic_quantized_dense(
     return output_term, output_qparams
 
 
-def generate_static_quantized_dense(
-    data: tvm.relay.Expr,
-    weight: tvm.relay.Expr,
-    data_qparams: utils.QParams,
-    weight_qparams: utils.QParams,
-    accumulation_dtype: str = "int32",
-    out_units: Optional[int] = None,
-    in_units: Optional[int] = None,
-    dequantize: bool = True,
-    bias: Optional[tvm.relay.Expr] = None,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
-    return generate_generic_quantized_dense(
-        data,
-        weight,
-        data_qparams,
-        weight_qparams,
-        internal_accumulation_dtype=accumulation_dtype,
-        simulated_accumulation_dtype=accumulation_dtype,
-        out_units=out_units,
-        in_units=in_units,
-        dequantize=dequantize,
-        bias=bias,
-    )
-
-
-def generate_simulated_quantized_dense(
-    data: tvm.relay.Expr,
-    weight: tvm.relay.Expr,
-    data_qparams: utils.QParams,
-    weight_qparams: utils.QParams,
-    simulated_accumulation_dtype: str = "int32",
-    out_units: Optional[int] = None,
-    in_units: Optional[int] = None,
-    dequantize: bool = True,
-    bias: Optional[tvm.relay.Expr] = None,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
-    return generate_generic_quantized_dense(
-        data,
-        weight,
-        data_qparams,
-        weight_qparams,
-        internal_accumulation_dtype="float32",
-        simulated_accumulation_dtype=simulated_accumulation_dtype,
-        out_units=out_units,
-        in_units=in_units,
-        dequantize=dequantize,
-        bias=bias,
-    )
-
-
 def example_dense_simulated(n, in_units, out_units, seed=42):
     np.random.seed(seed=seed)
     data_arr = np.random.uniform(-10, 10, size=(n, in_units)).astype("float32")
@@ -161,11 +112,12 @@ def example_dense_simulated(n, in_units, out_units, seed=42):
     bias = relay.var("bias")
     data_qparams = var_creator.get_qparams("dense_data")
     weight_qparams = var_creator.get_qparams("dense_weight")
-    dense_output, output_qparams = generate_simulated_quantized_dense(
+    dense_output, output_qparams = generate_quantized_dense(
         data,
         weight,
         data_qparams,
         weight_qparams,
+        simulated=utils.SimulatedDTypes.FLOAT32,
         in_units=in_units,
         out_units=out_units,
         bias=bias,

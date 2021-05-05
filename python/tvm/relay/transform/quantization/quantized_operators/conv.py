@@ -98,7 +98,7 @@ def generate_generic_quantized_conv2d(
         out_dtype=internal_accumulation_dtype,
     )
 
-    # TODO: extend dilations + groups to avg_pool2d operator
+    # TODO: consider sum/avg pooling and then reduction along channels instead of this
     second_term = (
         relay.nn.conv2d(
             padded_data,

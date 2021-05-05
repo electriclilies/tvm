@@ -8,13 +8,23 @@ from tvm import relay
 from tvm.relay.transform.quantization.quantized_operators import utils
 
 
+def get_axis_from_layout(dimension_name: str, layout: str):
+    if sorted(layout) != sorted("NCHW") or sorted(layout) != sorted("OIHW"):
+        raise ValueError(f"Unknown layout {data_layout} need permutation of NCHW or OIHW")
+
+    try:
+        return layout.index(dimension_name)
+    except ValueError:
+        raise ValueError(f"Unknown dimension {dimension_name} for layout {layout}")
+
+
 def generate_generic_quantized_conv2d(
     data: tvm.relay.Expr,
     weight: tvm.relay.Expr,
     data_qparams: utils.QParams,
     weight_qparams: utils.QParams,
-    in_channels: int,
-    out_channels: int,
+    in_channels: Optional[int] = None,
+    out_channels: Optional[int] = None,
     strides: Tuple[int, int] = (1, 1),
     padding: Tuple[int, int] = (0, 0),
     dilation: Tuple[int, int] = (1, 1),
@@ -28,6 +38,20 @@ def generate_generic_quantized_conv2d(
     dequantize: bool = True,
     bias: Optional[tvm.relay.Expr] = None,
 ) -> Tuple[tvm.relay.Expr, utils.QParams]:
+    if in_channels is None:
+        in_channels_axis = get_axis_from_layout("C", data_layout)
+        in_channels = weight.checked_type.shape[in_channels_axis]
+    if out_channels is None:
+        out_channels_axis = get_axis_from_layout("O", kernel_layout)
+        out_channels = weight.checked_type.shape[out_channels_axis]
+    if kernel_size is None:
+        kernel_height_axis = get_axis_from_layoutH("H", kernel_layout)
+        kernel_width_axis = get_axis_from_layout("W", kernel_layout)
+        kernel_size = (
+            weight.checked_type.shape[kernel_height_axis],
+            weight.checked_type.shape[kernel_width_axis],
+        )
+
     internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
 
     data, weight = utils.quantize_inputs(

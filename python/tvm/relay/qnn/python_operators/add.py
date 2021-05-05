@@ -17,12 +17,12 @@ from tvm.relay.qnn.python_operators import utils
 def generate_generic_quantized_add_or_subtract(
     input1: tvm.relay.Expr,
     input2: tvm.relay.Expr,
-    output_qparams: Optional[utils.QParams],
+    output_qparams: Optional[utils.AffineQParams],
     simulated: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
     mode: str = "add",
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
+) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
     internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
 
     input1, input2 = utils.quantize_inputs(
@@ -52,11 +52,11 @@ def generate_generic_quantized_add_or_subtract(
 def generate_quantized_add(
     input1: tvm.relay.Expr,
     input2: tvm.relay.Expr,
-    output_qparams: Optional[utils.QParams],
+    output_qparams: Optional[utils.AffineQParams],
     simulated: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
+) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
     return generate_generic_quantized_add_or_subtract(
         input1=input1,
         input2=input2,
@@ -71,11 +71,11 @@ def generate_quantized_add(
 def generate_quantized_sub(
     input1: tvm.relay.Expr,
     input2: tvm.relay.Expr,
-    output_qparams: Optional[utils.QParams],
+    output_qparams: Optional[utils.AffineQParams],
     simulated: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
+) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
     return generate_generic_quantized_add_or_subtract(
         input1=input1,
         input2=input2,

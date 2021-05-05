@@ -3,13 +3,8 @@ from typing import *
 import numpy as np
 import tvm
 from tvm import relay
-from tvm.relay.dataflow_pattern import (
-    DFPatternCallback,
-    _DFPatternCallback,
-    is_constant,
-    is_op,
-    wildcard,
-)
+from tvm.relay.dataflow_pattern import (DFPatternCallback, _DFPatternCallback,
+                                        is_constant, is_op, wildcard)
 from tvm.relay.op import nn, tensor
 from tvm.relay.qnn.python_operators import utils
 
@@ -17,15 +12,15 @@ from tvm.relay.qnn.python_operators import utils
 def generate_quantized_multiply(
     input1: tvm.relay.Expr,
     input2: tvm.relay.Expr,
-    input1_qparams: utils.QParams,
-    input2_qparams: utils.QParams,
+    input1_qparams: utils.AffineQParams,
+    input2_qparams: utils.AffineQParams,
     simulated: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
+) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
     internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
 
-    output_qparams = utils.QParams(
+    output_qparams = utils.AffineQParams(
         (input1_qparams.scale_factor * input2_qparams.scale_factor),
         relay.const(0, dtype=accumulation_dtype),
         accumulation_dtype,

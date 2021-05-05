@@ -21,8 +21,8 @@ def get_axis_from_layout(dimension_name: str, layout: str):
 def generate_generic_quantized_conv2d(
     data: tvm.relay.Expr,
     weight: tvm.relay.Expr,
-    data_qparams: utils.QParams,
-    weight_qparams: utils.QParams,
+    data_qparams: utils.AffineQParams,
+    weight_qparams: utils.AffineQParams,
     in_channels: Optional[int] = None,
     out_channels: Optional[int] = None,
     strides: Tuple[int, int] = (1, 1),
@@ -37,7 +37,7 @@ def generate_generic_quantized_conv2d(
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
     bias: Optional[tvm.relay.Expr] = None,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
+) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
     if in_channels is None:
         in_channels_axis = get_axis_from_layout("C", data_layout)
         in_channels = weight.checked_type.shape[in_channels_axis]
@@ -145,7 +145,7 @@ def generate_generic_quantized_conv2d(
         / relay.const(groups, dtype=internal_accumulation_dtype)
     )
 
-    output_qparams = utils.QParams(
+    output_qparams = utils.AffineQParams(
         data_qparams.scale_factor * weight_qparams.scale_factor,
         relay.const(0, dtype=accumulation_dtype),
         accumulation_dtype,

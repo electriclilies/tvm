@@ -17,15 +17,15 @@ from tvm.relay.qnn.python_operators import utils
 def generate_quantized_dense(
     data: tvm.relay.Expr,
     weight: tvm.relay.Expr,
-    data_qparams: utils.QParams,
-    weight_qparams: utils.QParams,
+    data_qparams: utils.AffineQParams,
+    weight_qparams: utils.AffineQParams,
     simulated: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     out_units: Optional[int] = None,
     in_units: Optional[int] = None,
     dequantize: bool = True,
     bias: Optional[tvm.relay.Expr] = None,
-) -> Tuple[tvm.relay.Expr, utils.QParams]:
+) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
     """TODO"""
     internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
 
@@ -79,7 +79,7 @@ def generate_quantized_dense(
 
     # TODO: simulate overflow for other data types
 
-    output_qparams = utils.QParams(
+    output_qparams = utils.AffineQParams(
         data_qparams.scale_factor * weight_qparams.scale_factor,
         relay.const(0, dtype=internal_accumulation_dtype),
         accumulation_dtype,

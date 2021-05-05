@@ -11,7 +11,7 @@ from tvm.relay.dataflow_pattern import (
     wildcard,
 )
 from tvm.relay.op import nn, tensor
-from tvm.relay.transform.quantization.quantized_operators import utils
+from tvm.relay.qnn.python_operators import utils
 
 
 def generate_generic_quantized_add_or_subtract(

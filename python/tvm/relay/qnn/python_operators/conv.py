@@ -5,7 +5,7 @@ import torch
 import tvm
 from torch import nn
 from tvm import relay
-from tvm.relay.transform.quantization.quantized_operators import utils
+from tvm.relay.qnn.python_operators import utils
 
 
 def get_axis_from_layout(dimension_name: str, layout: str):

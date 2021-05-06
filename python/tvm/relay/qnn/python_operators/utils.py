@@ -35,7 +35,11 @@ class SimulatedDTypes(Enum, metaclass=ContainsEnum):
 
 AffineQParams = NamedTuple(
     "AffineQParams",
-    [("scale_factor", tvm.relay.Expr), ("zero_point", tvm.relay.Expr), ("dtype", str)],
+    [
+        ("scale_factor", Union[tvm.relay.Expr, np.array]),
+        ("zero_point", Union[tvm.relay.Expr, np.array]),
+        ("dtype", str),
+    ],
 )
 
 
@@ -182,37 +186,8 @@ def get_quantization_parameters(
             "int8",
         )
     else:
-        return (
+        return AffineQParams(
             np.float32(scale),
             np.int32(zero_point),
             "int8",
         )
-
-
-def numpy_quantize_values(
-    arr: np.array,
-    signed: bool,
-    nbits: int,
-    per_channel: Optional[int] = None,
-    symmetric: bool = False,
-) -> Tuple[np.array, AffineQParams]:
-    """Quantize the given input numpy array and return the quantized array and qparams."""
-    a = relay.var("a")
-    AffineQParams = get_quantization_parameters(arr, signed, nbits, per_channel, symmetric)
-    out = quantize_inputs("float32", a, AffineQParams)
-
-    f = relay.Function([a], out)
-    mod = tvm.ir.IRModule.from_expr(f)
-    intrp = relay.create_executor(kind="debug", mod=mod)
-    return intrp.evaluate(f)(arr).asnumpy(), AffineQParams
-
-
-def numpy_dequantize_values(arr: np.array, qparam: AffineQParams):
-    """Dequantize the given numpy array given AffineQParams."""
-    a = relay.var("a")
-    out = dequantize_expr("float32", a, qparam)
-
-    f = relay.Function([a], out)
-    mod = tvm.ir.IRModule.from_expr(f)
-    intrp = relay.create_executor(kind="debug", mod=mod)
-    return intrp.evaluate(f)(arr).asnumpy()

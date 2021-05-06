@@ -64,6 +64,7 @@ def cast_all(dtype: str, *args: List[relay.Expr]) -> Union[List[relay.Expr], rel
 
 
 def quantize_inputs(
+    simulated: bool,
     internal_accumulation_dtype: str,
     *args: Union[relay.Expr, AffineQParams],
 ) -> Union[List[relay.Expr], relay.Expr]:
@@ -76,19 +77,14 @@ def quantize_inputs(
 
     if len(args) % 2 != 0:
         raise ValueError(
-            f"Expected alternating expressions and AffineQParams but have odd number of entries: {len(args)}"
+            f"Expected alternating expressions and AffineQParams but have even number of entries: {len(args)}"
         )
 
     # This means use simulated operations
-    if internal_accumulation_dtype in SimulatedDTypes:
+    if simulated:
         quantize_op = relay.qnn.op.simulated_quantize
-    elif "int" in internal_accumulation_dtype:
-        # TODO: str matching int is unsafe lol.
-        quantize_op = relay.qnn.op.quantize
     else:
-        raise ValueError(
-            f"Unknown quantization from specified internal accumulation dtype {internal_accumulation_dtype}"
-        )
+        quantize_op = relay.qnn.op.quantize
 
     quantized_expr = []
     for i in range(len(args) // 2):
@@ -104,14 +100,16 @@ def quantize_inputs(
                 f"Expected alternating relay.Expr and AffineQParams! Got a {type(cur_expr)} when expecting AffineQParams"
             )
 
-        quantized_expr.append(
-            quantize_op(
-                data=cur_expr,
-                output_scale=cur_qparam.scale_factor,
-                output_zero_point=cur_qparam.zero_point,
-                out_dtype=cur_qparam.dtype,
-            )
+        quantized_value = quantize_op(
+            data=cur_expr,
+            output_scale=cur_qparam.scale_factor,
+            output_zero_point=cur_qparam.zero_point,
+            out_dtype=cur_qparam.dtype,
         )
+
+        if not simulated:
+            quantized_value = relay.op.cast(quantized_value, internal_accumulation_dtype)
+        quantized_expr.append(quantized_value)
 
     if len(quantized_expr) == 1:
         quantized_expr = quantized_expr[0]
@@ -119,37 +117,25 @@ def quantize_inputs(
 
 
 def dequantize_expr(
-    internal_accumulation_dtype: str,
+    simulated: bool,
     expr: relay.Expr,
     qparam: AffineQParams,
 ) -> Tuple[relay.Expr]:
     """Dequantize the given relay node."""
-    if internal_accumulation_dtype in SimulatedDTypes:
+    if simulated:
         return relay.qnn.op.simulated_dequantize(
             data=expr,
             input_scale=qparam.scale_factor,
             input_zero_point=qparam.zero_point,
             in_dtype=qparam.dtype,
         )
-    elif "int" in internal_accumulation_dtype:
+    else:
         return relay.qnn.op.dequantize(
             data=expr,
             input_scale=qparam.scale_factor,
             input_zero_point=qparam.zero_point,
             in_dtype=qparam.dtype,
         )
-
-    else:
-        raise ValueError(
-            f"Unknown quantization from specified internal accumulation dtype {internal_accumulation_dtype}"
-        )
-
-    return dequantize_op(
-        data=expr,
-        input_scale=qparam.scale_factor,
-        input_zero_point=qparam.zero_point,
-        in_dtype=qparam.dtype,
-    )
 
 
 def get_quantization_parameters(
@@ -158,7 +144,8 @@ def get_quantization_parameters(
     nbits: int,
     per_channel: Optional[int] = None,
     symmetric: bool = False,
-) -> AffineQParams:
+    as_relay: bool = True,
+) -> Union[AffineQParams, Tuple]:
     """Given a numpy array calculates the optimal AffineQParams."""
 
     if per_channel is not None:
@@ -190,11 +177,18 @@ def get_quantization_parameters(
     if signed:
         zero_point -= 2 ** (nbits - 1)
 
-    return AffineQParams(
-        relay.const(np.float32(scale)),
-        relay.const(np.int8(zero_point)),
-        "int8",
-    )
+    if as_relay:
+        return AffineQParams(
+            relay.const(np.float32(scale)),
+            relay.const(np.int8(zero_point)),
+            "int8",
+        )
+    else:
+        return (
+            np.float32(scale),
+            np.int8(zero_point),
+            "int8",
+        )
 
 
 def numpy_quantize_values(

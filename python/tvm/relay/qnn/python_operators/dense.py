@@ -19,7 +19,7 @@ def generate_quantized_dense(
     weight: tvm.relay.Expr,
     data_qparams: utils.AffineQParams,
     weight_qparams: utils.AffineQParams,
-    simulated: Optional[utils.SimulatedDTypes] = None,
+    simulated_dtype: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     out_units: Optional[int] = None,
     in_units: Optional[int] = None,
@@ -27,7 +27,8 @@ def generate_quantized_dense(
     bias: Optional[tvm.relay.Expr] = None,
 ) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
     """TODO"""
-    internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
+    simulated = simulated_dtype is not None
+    internal_accumulation_dtype = simulated_dtype.value if simulated else accumulation_dtype
 
     # TODO: figure out whether we need this or we can always have the
     # callee pass it in
@@ -37,6 +38,7 @@ def generate_quantized_dense(
         out_units = weight.checked_type.shape[-2]
 
     data, weight = utils.quantize_inputs(
+        simulated,
         internal_accumulation_dtype,
         data,
         data_qparams,
@@ -89,12 +91,12 @@ def generate_quantized_dense(
     output_term = (first_term - second_term) - (third_term - fourth_term)
 
     if bias is not None:
-        bias = utils.quantize_inputs(internal_accumulation_dtype, bias, output_qparams)
+        bias = utils.quantize_inputs(simulated, internal_accumulation_dtype, bias, output_qparams)
         output_term += bias
 
     if dequantize:
         output_term = utils.dequantize_expr(
-            internal_accumulation_dtype, output_term, output_qparams
+            simulated, output_term, output_qparams
         )
 
     return output_term, output_qparams
@@ -117,7 +119,7 @@ def example_dense_simulated(n, in_units, out_units, seed=42):
         weight,
         data_qparams,
         weight_qparams,
-        simulated=utils.SimulatedDTypes.FLOAT32,
+        simulated_dtype=utils.SimulatedDTypes.FLOAT32,
         in_units=in_units,
         out_units=out_units,
         bias=bias,

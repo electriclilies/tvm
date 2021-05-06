@@ -33,11 +33,12 @@ def generate_generic_quantized_conv2d(
     data_layout: str = "NCHW",
     kernel_layout: str = "OIHW",
     out_layout: str = "",
-    simulated: Optional[utils.SimulatedDTypes] = None,
+    simulated_dtype: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
     bias: Optional[tvm.relay.Expr] = None,
 ) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
+    simulated = simulated_dtype is not None
     if in_channels is None:
         in_channels_axis = get_axis_from_layout("C", data_layout)
         in_channels = weight.checked_type.shape[in_channels_axis]
@@ -52,10 +53,12 @@ def generate_generic_quantized_conv2d(
             weight.checked_type.shape[kernel_width_axis],
         )
 
-    internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
+    internal_accumulation_dtype = (
+        simulated_dtype.value if simulated is not None else accumulation_dtype
+    )
 
     data, weight = utils.quantize_inputs(
-        internal_accumulation_dtype, data, data_qparams, weight, weight_qparams
+        simulated, internal_accumulation_dtype, data, data_qparams, weight, weight_qparams
     )
 
     pad_n = (0, 0)
@@ -155,12 +158,12 @@ def generate_generic_quantized_conv2d(
     output_term = (first_term - second_term) - (third_term - fourth_term)
 
     if bias is not None:
-        bias = utils.quantize_inputs(internal_accumulation_dtype, bias, output_qparams)
+        bias = utils.quantize_inputs(simulated, internal_accumulation_dtype, bias, output_qparams)
         output_term += bias
 
     if dequantize:
         output_term = utils.dequantize_expr(
-            internal_accumulation_dtype, output_term, output_qparams
+            simulated, output_term, output_qparams
         )
 
     return output_term, output_qparams
@@ -196,7 +199,7 @@ def example_conv_no_zp(in_channels, out_channels, img_height, img_width, groups=
         out_channels=out_channels,
         in_channels=in_channels,
         groups=groups,
-        simulated=utils.SimulatedDTypes.FLOAT32,
+        simulated_dtype=utils.SimulatedDTypes.FLOAT32,
         dequantize=True,
     )
 

@@ -18,15 +18,16 @@ def generate_generic_quantized_add_or_subtract(
     input1: tvm.relay.Expr,
     input2: tvm.relay.Expr,
     output_qparams: Optional[utils.AffineQParams],
-    simulated: Optional[utils.SimulatedDTypes] = None,
+    simulated_dtype: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
     mode: str = "add",
 ) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
-    internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
+    simulated = simulated_dtype is not None
+    internal_accumulation_dtype = simulated_dtype.value if simulated else accumulation_dtype
 
     input1, input2 = utils.quantize_inputs(
-        internal_accumulation_dtype, input1, output_qparams, input2, output_qparams
+        simulated, internal_accumulation_dtype, input1, output_qparams, input2, output_qparams
     )
 
     if mode == "add":
@@ -41,9 +42,7 @@ def generate_generic_quantized_add_or_subtract(
         raise ValueError("Only support addition and subtraction")
 
     if dequantize:
-        output_term = utils.dequantize_expr(
-            internal_accumulation_dtype, output_term, output_qparams
-        )
+        output_term = utils.dequantize_expr(simulated, output_term, output_qparams)
 
     # TODO: simulate the effects of overflow
     return output_term, output_qparams
@@ -53,7 +52,7 @@ def generate_quantized_add(
     input1: tvm.relay.Expr,
     input2: tvm.relay.Expr,
     output_qparams: Optional[utils.AffineQParams],
-    simulated: Optional[utils.SimulatedDTypes] = None,
+    simulated_dtype: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
 ) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
@@ -61,7 +60,7 @@ def generate_quantized_add(
         input1=input1,
         input2=input2,
         output_qparams=output_qparams,
-        simulated=simulated,
+        simulated_dtype=simulated_dtype,
         accumulation_dtype=accumulation_dtype,
         dequantize=dequantize,
         mode="add",
@@ -72,7 +71,7 @@ def generate_quantized_sub(
     input1: tvm.relay.Expr,
     input2: tvm.relay.Expr,
     output_qparams: Optional[utils.AffineQParams],
-    simulated: Optional[utils.SimulatedDTypes] = None,
+    simulated_dtype: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
 ) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
@@ -80,7 +79,7 @@ def generate_quantized_sub(
         input1=input1,
         input2=input2,
         output_qparams=output_qparams,
-        simulated=simulated,
+        simulated_dtype=simulated_dtype,
         accumulation_dtype=accumulation_dtype,
         dequantize=dequantize,
         mode="sub",
@@ -98,7 +97,7 @@ def example_add_simulated(seed=42):
     output_qparams = var_creator.get_qparams("output")
 
     add_output, output_qparams = generate_quantized_add(
-        a, b, output_qparams, simulated=utils.SimulatedDTypes.FLOAT32
+        a, b, output_qparams, simulated_dtype=utils.SimulatedDTypes.FLOAT32
     )
     f = relay.Function(
         [a, b, output_qparams.scale_factor, output_qparams.zero_point],

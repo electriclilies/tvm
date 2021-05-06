@@ -14,11 +14,12 @@ def generate_quantized_multiply(
     input2: tvm.relay.Expr,
     input1_qparams: utils.AffineQParams,
     input2_qparams: utils.AffineQParams,
-    simulated: Optional[utils.SimulatedDTypes] = None,
+    simulated_dtype: Optional[utils.SimulatedDTypes] = None,
     accumulation_dtype: str = "int32",
     dequantize: bool = True,
 ) -> Tuple[tvm.relay.Expr, utils.AffineQParams]:
-    internal_accumulation_dtype = simulated.value if simulated is not None else accumulation_dtype
+    simulated = simulated_dtype is not None
+    internal_accumulation_dtype = simulated_dtype.value if simulated else accumulation_dtype
 
     output_qparams = utils.AffineQParams(
         (input1_qparams.scale_factor * input2_qparams.scale_factor),
@@ -26,7 +27,7 @@ def generate_quantized_multiply(
         accumulation_dtype,
     )
     input1, input2 = utils.quantize_inputs(
-        internal_accumulation_dtype, input1, input1_qparams, input2, input2_qparams
+        simulated, internal_accumulation_dtype, input1, input1_qparams, input2, input2_qparams
     )
     input1_zero_point, input2_zero_point = utils.cast_all(
         internal_accumulation_dtype, input1_qparams.zero_point, input2_qparams.zero_point
@@ -35,7 +36,7 @@ def generate_quantized_multiply(
 
     if dequantize:
         output_term = utils.dequantize_expr(
-            internal_accumulation_dtype, output_term, output_qparams
+            simulated, output_term, output_qparams
         )
 
     # TODO: simulate the effects of overflow
@@ -53,7 +54,7 @@ def example_multiply_simulated(seed=42):
     a_qparams = var_creator.get_qparams("a")
     b_qparams = var_creator.get_qparams("b")
     mul_output, output_qparams = generate_quantized_multiply(
-        a, b, a_qparams, b_qparams, dequantize=True, simulated=utils.SimulatedDTypes.FLOAT32
+        a, b, a_qparams, b_qparams, dequantize=True, simulated_dtype=utils.SimulatedDTypes.FLOAT32
     )
     f = relay.Function(
         [

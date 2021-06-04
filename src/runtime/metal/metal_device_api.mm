@@ -29,17 +29,20 @@ namespace tvm {
 namespace runtime {
 namespace metal {
 
+AutoReleasePoolWrapper& AutoReleasePoolWrapper::GetInstance() {
+  static AutoReleasePoolWrapper instance;
+  return instance;
+}
+
 MetalWorkspace* MetalWorkspace::Global() {
-  @autoreleasepool {
-    // NOTE: explicitly use new to avoid exit-time destruction of global state
-    // Global state will be recycled by OS as the process exits.
-    static MetalWorkspace* inst = new MetalWorkspace();
-    return inst;
-  }
+  // NOTE: explicitly use new to avoid exit-time destruction of global state
+  // Global state will be recycled by OS as the process exits.
+  static MetalWorkspace* inst = new MetalWorkspace();
+  return inst;
 }
 
 void MetalWorkspace::GetAttr(Device dev, DeviceAttrKind kind, TVMRetValue* rv) {
-  @autoreleasepool {
+  AUTORELEASEPOOL {
     this->Init();
     size_t index = static_cast<size_t>(dev.device_id);
     if (kind == kExist) {
@@ -77,8 +80,10 @@ void MetalWorkspace::GetAttr(Device dev, DeviceAttrKind kind, TVMRetValue* rv) {
         return;
       case kApiVersion:
         return;
+      case kDriverVersion:
+        return;
     }
-  }
+  };
 }
 
 static const char* kDummyKernel = R"A0B0(
@@ -121,8 +126,8 @@ MetalWorkspace::~MetalWorkspace() {
   for (auto x : devices) {
     [x release];
   }
-  for (auto x : queues) {
-    [x release];
+  for (auto x : default_streams_) {
+    delete x;
   }
 }
 
@@ -136,13 +141,17 @@ void MetalWorkspace::Init() {
   // on iPhone
   id<MTLDevice> d = MTLCreateSystemDefaultDevice();
   devices.push_back(d);
-  queues.push_back([d newCommandQueue]);
+  Stream* stream = new Stream(d);
+  MetalThreadEntry::ThreadLocal()->stream.push_back(stream);
+  default_streams_.push_back(stream);
 #else
   NSArray<id<MTLDevice> >* devs = MTLCopyAllDevices();
   for (size_t i = 0; i < devs.count; ++i) {
     id<MTLDevice> d = [devs objectAtIndex:i];
     devices.push_back(d);
-    queues.push_back([d newCommandQueue]);
+    Stream* stream = new Stream(d);
+    MetalThreadEntry::ThreadLocal()->stream.push_back(stream);
+    default_streams_.push_back(stream);
     LOG(INFO) << "Intializing Metal device " << i << ", name=" << [d.name UTF8String];
     warp_size.push_back(GetWarpSize(d));
   }
@@ -155,7 +164,8 @@ void MetalWorkspace::SetDevice(Device dev) {
 
 void* MetalWorkspace::AllocDataSpace(Device device, size_t nbytes, size_t alignment,
                                      DLDataType type_hint) {
-  @autoreleasepool {
+  id<MTLBuffer> buf;
+  AUTORELEASEPOOL {
     this->Init();
     id<MTLDevice> dev = GetDevice(device);
     // GPU memory only
@@ -167,32 +177,41 @@ void* MetalWorkspace::AllocDataSpace(Device device, size_t nbytes, size_t alignm
     storage_mode = MTLResourceStorageModeManaged;
     #endif
     */
-    id<MTLBuffer> buf = [dev newBufferWithLength:nbytes options:storage_mode];
+    buf = [dev newBufferWithLength:nbytes options:storage_mode];
     ICHECK(buf != nil);
-    return (void*)(buf);
-  }
+  };
+  return (void*)(buf);
 }
 
 void MetalWorkspace::FreeDataSpace(Device dev, void* ptr) {
-  @autoreleasepool {
+  AUTORELEASEPOOL {
     // MTLBuffer PurgeableState should be set to empty before manual
     // release in order to prevent memory leak
     [(id<MTLBuffer>)ptr setPurgeableState:MTLPurgeableStateEmpty];
     // release the ptr.
     CFRelease(ptr);
-  }
+  };
+}
+
+Stream* GetStream(TVMStreamHandle stream, int device_id) {
+  if (stream != nullptr)
+    return static_cast<Stream*>(stream);
+  else
+    return MetalThreadEntry::ThreadLocal()->stream[device_id];
 }
 
 void MetalWorkspace::CopyDataFromTo(const void* from, size_t from_offset, void* to,
                                     size_t to_offset, size_t size, Device dev_from, Device dev_to,
                                     DLDataType type_hint, TVMStreamHandle stream) {
-  @autoreleasepool {
+  AUTORELEASEPOOL {
     this->Init();
-    ICHECK(stream == nullptr);
     Device dev = dev_from;
+    Stream* s = GetStream(stream, dev.device_id);
+    if (s->HasErrorHappened()) {
+      LOG(FATAL) << "Error! Some problems on GPU happaned! Cannot copy data to current stream";
+    }
     if (dev_from.device_type == kDLCPU) dev = dev_to;
-    id<MTLCommandQueue> queue = GetCommandQueue(dev);
-    id<MTLCommandBuffer> cb = [queue commandBuffer];
+    id<MTLCommandBuffer> cb = s->GetCommandBuffer();
     int from_dev_type = static_cast<int>(dev_from.device_type);
     int to_dev_type = static_cast<int>(dev_to.device_type);
 
@@ -246,18 +265,35 @@ void MetalWorkspace::CopyDataFromTo(const void* from, size_t from_offset, void* 
       LOG(FATAL) << "Expect copy from/to Metal or between Metal"
                  << ", from=" << from_dev_type << ", to=" << to_dev_type;
     }
-  }
+  };
+}
+
+TVMStreamHandle MetalWorkspace::CreateStream(Device dev) {
+  Stream* stream = new Stream(devices[dev.device_id]);
+  return static_cast<TVMStreamHandle>(stream);
+}
+
+void MetalWorkspace::FreeStream(Device dev, TVMStreamHandle stream) {
+  ICHECK(stream != nullptr);
+  Stream* s = static_cast<Stream*>(stream);
+  delete s;
 }
 
 void MetalWorkspace::StreamSync(Device dev, TVMStreamHandle stream) {
-  @autoreleasepool {
-    ICHECK(stream == nullptr);
+  AUTORELEASEPOOL {
+    Stream* s = GetStream(stream, dev.device_id);
     // commit an empty command buffer and wait until it completes.
-    id<MTLCommandQueue> queue = GetCommandQueue(dev);
-    id<MTLCommandBuffer> cb = [queue commandBuffer];
+    id<MTLCommandBuffer> cb = s->GetCommandBuffer();
     [cb commit];
     [cb waitUntilCompleted];
-  }
+    if (s->HasErrorHappened()) {
+      LOG(FATAL) << "Error! Some problems on GPU happaned!";
+    }
+  };
+}
+
+void MetalWorkspace::SetStream(Device dev, TVMStreamHandle stream) {
+  MetalThreadEntry::ThreadLocal()->stream[dev.device_id] = static_cast<Stream*>(stream);
 }
 
 void* MetalWorkspace::AllocWorkspace(Device dev, size_t size, DLDataType type_hint) {

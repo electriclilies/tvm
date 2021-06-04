@@ -182,6 +182,9 @@ class Target(Object):
         target_is_dict_key : Bool
             When the type of target is dict, whether Target is the key (Otherwise the value)
         """
+        if target is None:
+            assert host is None, "Target host is not empty when target is empty."
+            return target, host
         if isinstance(target, dict) and "kind" not in target:
             new_target = {}
             for tgt, mod in target.items():
@@ -275,6 +278,7 @@ MICRO_SUPPORTED_MODELS = {
     "host": [],
     "stm32f746xx": ["-mcpu=cortex-m7", "-march=armv7e-m"],
     "nrf5340dk": ["-mcpu=cortex-m33"],
+    "mps2_an521": ["-mcpu=cortex-m33"],
 }
 
 
@@ -292,9 +296,12 @@ def micro(model="unknown", options=None):
     if model not in MICRO_SUPPORTED_MODELS:
         raise ValueError(f"Model {model} not supported by tvm.target.micro.")
     opts = _merge_opts(
-        MICRO_SUPPORTED_MODELS[model] + ["-runtime=c", "--system-lib", f"-model={model}"],
+        MICRO_SUPPORTED_MODELS[model] + ["-runtime=c", f"-model={model}"],
         options,
     )
+
+    if (not options) or (options and "--executor=aot" not in options):
+        opts = _merge_opts(opts, "--system-lib")
 
     # NOTE: in the future, the default micro target will be LLVM except when
     # external dependencies are present.

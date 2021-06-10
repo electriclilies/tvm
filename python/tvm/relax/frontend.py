@@ -37,8 +37,13 @@ def print_fn(func):
     buffer.write("}")
     return buffer.getvalue()
 
+def span_to_span(diag_ctx, span: synr.ast.Span) -> tvm.ir.Span:
+    src_name = diag_ctx.str_to_source_name[span.filename]
+    tvm_span = tvm.ir.Span(src_name, span.start_line, span.end_line, span.start_column, span.end_column)
+    return tvm_span
 
 expr.Function.__str__ = print_fn # type: ignore
+
 
 # Module = Dict[str, relax.Function]
 # Transformer[Module, relax.Function, relax.Expr, relax.Expr, relax.Expr, relax.Expr, relax.Type]):
@@ -51,10 +56,8 @@ class R2Transformer(Transformer): # Transformer[Module, relax.Function, relax.Ex
         self.module = {}
         super().__init__()
 
-    def span_to_span(self, span):
-        src_name = self.diag_ctx.str_to_source_name[span.filename]
-        tvm_span = tvm.ir.Span(src_name, span.start_line, span.end_line, span.start_column, span.end_column)
-        return tvm_span
+    def span_to_span(self, span: synr.ast.Span) -> tvm.ir.Span:
+        return span_to_span(self, span)
 
     def decl_var(self, name, ty, span=None):
         identifier = Id(name)
@@ -226,7 +229,7 @@ class TVMDiagnosticContext(synr.DiagnosticContext):
         src_name = self.tvm_diag_ctx.module.source_map.add(name, source)
         self.str_to_source_name[name] = src_name
 
-    def emit(self, level: str, message: str, span: Span) -> None:
+    def emit(self, level: str, message: str, span: synr.ast.Span) -> None:
         """Called when an error has occured."""
 
         if level == "error":
@@ -239,7 +242,8 @@ class TVMDiagnosticContext(synr.DiagnosticContext):
             level = "error"
 
         assert span, "Span must not be null"
-
+        #assert isinstance(span, tvm.ir.Span), "Make sure you're passing a tvm span, not a synr span!"
+        span = span_to_span(self, span)
         diag = diagnostics.Diagnostic(level, span, message)
 
         self.tvm_diag_ctx.emit(diag)
@@ -269,6 +273,7 @@ def r2(f):
     ir_module = tvm.IRModule({})
     diag_ctx = diagnostics.DiagnosticContext(ir_module, diagnostics.get_renderer())
     diag_ctx = TVMDiagnosticContext(diag_ctx)
+    print(type(diag_ctx))
     ast = synr.to_ast(f, diag_ctx)
     definition_scope = inspect.getmodule(f)
     # Why have diag context at transform time? TK?

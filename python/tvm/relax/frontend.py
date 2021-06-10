@@ -57,7 +57,7 @@ class R2Transformer(Transformer): # Transformer[Module, relax.Function, relax.Ex
         super().__init__()
 
     def span_to_span(self, span: synr.ast.Span) -> tvm.ir.Span:
-        return span_to_span(self, span)
+        return span_to_span(self.diag_ctx, span)
 
     def decl_var(self, name, ty, span=None):
         identifier = Id(name)
@@ -273,7 +273,6 @@ def r2(f):
     ir_module = tvm.IRModule({})
     diag_ctx = diagnostics.DiagnosticContext(ir_module, diagnostics.get_renderer())
     diag_ctx = TVMDiagnosticContext(diag_ctx)
-    print(type(diag_ctx))
     ast = synr.to_ast(f, diag_ctx)
     definition_scope = inspect.getmodule(f)
     # Why have diag context at transform time? TK?

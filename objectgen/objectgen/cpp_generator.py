@@ -182,22 +182,29 @@ class CPPGenerator(Generator):
         # Equality
         header_buf.write(f"{4 * ' '}bool SEqualReduce(const {object_def.payload_name()}* other, SEqualReducer equal) const {{\n")
         header_buf.write(f"{8 * ' '}return")
-
+        print()
+        print()
+        print(object_def.name)
         if len(object_def.fields):
+            print(object_def.fields)
             has_bindings = any([f.is_binding for f in object_def.fields])
-
             if has_bindings:
                 raise Exception("add MarkNodeGraph")
 
             for i, field in enumerate(object_def.fields):
-                if has_bindings and field.is_binding:
-                    equal_method = "DefEqual"
-                else:
-                    equal_method = "equal"
+                print(field.field_type)
 
-                header_buf.write(f" {equal_method}({field.field_name}, other->{field.field_name})")
-                if i != len(object_def.fields) - 1:
-                    header_buf.write(" && ")
+                if 'runtime::String' not in field.field_type:  # Don't check whether names are equal
+                    if has_bindings and field.is_binding:
+                        equal_method = "DefEqual"
+                    else:
+                        equal_method = "equal"
+
+                    header_buf.write(f" {equal_method}({field.field_name}, other->{field.field_name})")
+                    if i != len(object_def.fields) - 1:
+                        header_buf.write(" && ")
+                else:
+                    print("Did not generate equality")
         else:
             header_buf.write(" true")
 

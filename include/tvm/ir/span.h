@@ -45,10 +45,12 @@ class SourceNameNode : public Object {
   // override attr visitor
   void VisitAttrs(AttrVisitor* v) { v->Visit("name", &name); }
 
+  static constexpr bool _type_has_method_sequal_reduce = true;
+
   bool SEqualReduce(const SourceNameNode* other, SEqualReducer equal) const {
     return equal(name, other->name);
   }
-
+  
   static constexpr const char* _type_key = "SourceName";
   TVM_DECLARE_FINAL_OBJECT_INFO(SourceNameNode, Object);
 };
@@ -89,7 +91,7 @@ class SpanNode : public Object {
   int end_line;
   /*! \brief The end column number. */
   int end_column;
-
+  
   // override attr visitor
   void VisitAttrs(AttrVisitor* v) {
     v->Visit("source_name", &source_name);
@@ -98,6 +100,7 @@ class SpanNode : public Object {
     v->Visit("end_line", &end_line);
     v->Visit("end_column", &end_column);
   }
+  static constexpr bool _type_has_method_sequal_reduce = true;
 
   bool SEqualReduce(const SpanNode* other, SEqualReducer equal) const {
     return equal(source_name, other->source_name) && equal(line, other->line) &&

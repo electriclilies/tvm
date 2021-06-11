@@ -48,7 +48,7 @@ class SourceNameNode : public Object {
   static constexpr bool _type_has_method_sequal_reduce = true;
 
   bool SEqualReduce(const SourceNameNode* other, SEqualReducer equal) const {
-    return true;
+    return equal(name, other->name);
   }
   
   static constexpr const char* _type_key = "SourceName";
@@ -103,7 +103,9 @@ class SpanNode : public Object {
   static constexpr bool _type_has_method_sequal_reduce = true;
 
   bool SEqualReduce(const SpanNode* other, SEqualReducer equal) const {
-    return true;
+    return equal(source_name, other->source_name) && equal(line, other->line) &&
+           equal(column, other->column) && equal(end_line, other->end_line) &&
+           equal(end_column, other->end_column);
   }
 
   static constexpr const char* _type_key = "Span";

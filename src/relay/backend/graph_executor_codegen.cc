@@ -397,22 +397,8 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
 
   std::vector<GraphNodeRef> GraphAddCallNode(const CallNode* op, const std::string& func_name,
                                              GraphAttrs op_attrs) {
-    Expr expr = GetRef<Expr>(op);
+    
     GraphAttrs attrs = GraphAttrs();
-    if (op->op.as<FunctionNode>()) {
-      std::cout << "Is fn node, copying attrs" << std::endl;
-      Function func = GetRef<Function>(op->op.as<FunctionNode>());
-
-      // Copy attrs from function into the graph node
-      // For now we only handle strings
-      for (auto p : func->attrs->dict) {
-        if (p.second.as<StringObj>()) {
-          attrs[p.first] = std::string(Downcast<String>(p.second));
-        }
-      }
-    } else {
-      std::cout << "Not a function node" << std::endl;
-    }
 
     std::vector<GraphNodeRef> inputs;
     for (auto arg : op->args) {
@@ -443,8 +429,12 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     relay::Call call = GetRef<Call>(call_node);
     if (auto global_node = call->op.as<GlobalVarNode>()) {
       auto prim_fn_name = global_node->name_hint;
-
+      
       // TODO(@jroesch): attach attributes somehow
+      ModuleNode mod_node = mod_.as<ModuleNode>();
+      //auto func = mod_node->GetFunction(prim_func_name);
+      //auto func = mod_->lookup(prim_func_name);
+
       return GraphAddCallNode(call_node, prim_fn_name, GraphAttrs());
     } else {
       ICHECK(false) << "Non-primitive-call nodes should have been transformed away.\n"

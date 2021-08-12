@@ -223,7 +223,7 @@ def _build_for_device(input_mod, target, target_host):
     rt_mod_dev = codegen.build_module(mod_dev, target) if len(mod_dev.functions) != 0 else None
     return mod_host, rt_mod_dev
 
-
+# TODO: might need to remove this
 def build(
     inputs: Union[schedule.Schedule, PrimFunc, IRModule, Mapping[str, IRModule]],
     args: Optional[List[Union[Buffer, tensor.Tensor, Var]]] = None,
@@ -320,7 +320,7 @@ def build(
         )
 
     if not isinstance(inputs, (dict, container.Map)):
-        target = Target.current() if target is None else target
+        target = Target.current() if target is None else target # TODO: what is target.current
         target = target if target else "llvm"
         target_input_mod = {target: input_mod}
     else:

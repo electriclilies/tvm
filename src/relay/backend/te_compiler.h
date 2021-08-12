@@ -184,7 +184,6 @@ Target GetTargetFromInteger(DLDeviceType dev_type, TargetMap targets);
  * \param device_map An analysis result mapping each sub-expression to a device.
  * \return The lowered module, see above.
  */
-// TODO(@electriclilies): Not sure if this default initialization is correct...
 LoweredModule LowerTE(
     const IRModule& module, TargetMap targets, DeviceMap device_map,
     backend::StaticMemoryPlan memory_plan, const String& module_name,

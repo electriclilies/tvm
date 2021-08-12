@@ -118,7 +118,7 @@ class Target(Object):
         return _ffi_api.WithHost(self, Target(host))
 
     @staticmethod
-    def current(allow_none=True):
+    def current(allow_none=True): # TODO: what is TargetCurrent
         """Returns the current target.
 
         Parameters

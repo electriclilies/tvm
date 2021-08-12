@@ -54,7 +54,7 @@ class TargetInternal {
   static ObjectPtr<Object> FromRawString(const String& target_str);
   static ObjectPtr<Object> FromConfig(std::unordered_map<String, ObjectRef> config);
   static void ConstructorDispatcher(TVMArgs args, TVMRetValue* rv);
-  static Target WithHost(const Target& target, const Target& target_host) {
+  static Target WithHost(const Target& target, const Target& target_host) { // TODO: why don't we just use this everywhere
     ObjectPtr<TargetNode> n = make_object<TargetNode>(*target.get());
     n->host = target_host;
     return (Target)n;
@@ -552,6 +552,7 @@ void Target::ExitWithScope() {
   entry->context_stack.pop();
 }
 
+// TODO: what is target context
 Target Target::Current(bool allow_not_defined) {
   TVMTargetThreadLocalEntry* entry = TVMTargetThreadLocalStore::Get();
   if (entry->context_stack.size() > 0) {

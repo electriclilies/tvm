@@ -88,6 +88,11 @@ class TECompilerImpl : public TECompilerNode {
     return LowerShapeFuncInternal(key)->cached_func;
   }
 
+  // expected map from target string to IRModule
+  // go thru and group functions by target
+  // 
+  // this could return IRModule
+  // could annotate here
   Map<String, IRModule> GetLoweredFunctions() {
     Map<String, IRModule> lowered_functions;
     for (const auto& it : cache_) {
@@ -104,6 +109,8 @@ class TECompilerImpl : public TECompilerNode {
     return lowered_functions;
   }
 
+  // Map<String, IRModule> -> IRModule (conversion functions that we can push up the stack until we finally delete the maps)
+  // IRModule -> Map<String, IRModule>
   Array<tvm::runtime::Module> LowerExternalFunctions() {
     Array<tvm::runtime::Module> ret;
     std::unordered_map<std::string, std::string> cached_symbol;
@@ -338,6 +345,7 @@ class LowerTensorExpr : public ExprMutator {
       args.push_back(VisitExpr(expr->args[i]));
     }
 
+    // where the mess starts
     Target target;
 
     if (func->GetAttr<String>(attr::kCompiler).defined()) {
@@ -367,7 +375,8 @@ class LowerTensorExpr : public ExprMutator {
            "in the memory planner.";
 
     auto& device_context = this->device_context_map_[expr];
-    target = GetTargetFromInteger(device_context.device_type, targets_);
+    target = GetTargetFromInteger(device_context.device_type, targets_); // not what we want, this conversion is potentially lossy
+    // ok to annotate here
     // Non-External Relay Function
     CCacheKey key = CCacheKey(func, target);
     CachedFunc lowered_func = compiler_->Lower(key, module_name_);
@@ -383,8 +392,8 @@ class LowerTensorExpr : public ExprMutator {
     relay::Function func_with_metadata = func;
     func_with_metadata = WithAttr(func_with_metadata, "prim_fn_var", lowered_func->prim_fn_var);
     func_with_metadata = WithAttr(func_with_metadata, "prim_funcs", prim_fns);
-    func_with_metadata = WithAttr(func_with_metadata, "target", lowered_func->target);
-
+    func_with_metadata = WithAttr(func_with_metadata, "target", lowered_func->target); // annotating with target here, change this to function attribute
+    kTargetInfo : Array<Target> // could have func run on multiple targets
     // Provide a callback hook which allows one-level up code generators to
     // act when we process a function.
     this->process_fn(func_with_metadata);
@@ -424,6 +433,9 @@ class LowerTensorExpr : public ExprMutator {
  * \param dev_type
  * \return Target
  */
+// tries to compute target associated w device but we should annotate this onto the function itself
+// v1 -- every function gets its own target
+// v2 -- collapse the maps
 Target GetTargetFromInteger(DLDeviceType dev_type, TargetMap targets) {
   if (targets.size() == 1) {
     // The homogeneous execution case, return the only target.

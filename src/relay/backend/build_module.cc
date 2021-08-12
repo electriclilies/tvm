@@ -178,6 +178,7 @@ class RelayBuildModule : public runtime::ModuleNode {
     } else if (name == "build") {
       return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
         ICHECK_EQ(args.num_args, 5);
+        // TODO: why is get function structured like this, this seems bad.
         this->Build(args[0], args[1], args[2], args[3], args[4]);
       });
     } else if (name == "list_params") {
@@ -278,6 +279,7 @@ class RelayBuildModule : public runtime::ModuleNode {
    * \param target Target device
    * \param target_host Host target device
    */
+  // TODO: This is only called in one place
   void Build(IRModule mod, const TargetsMap& targets, const tvm::Target& target_host,
              const String executor, const String mod_name) {
     // Create protected variable targets_ from ground up

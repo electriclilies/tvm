@@ -152,7 +152,12 @@ struct LoweredModule {
    *
    */
   backend::FunctionInfo main_func_info;
+
 };
+
+
+IRModule LoweredModuleToIRModule(LoweredModule mod);
+LoweredModule IRModuleToLoweredModule(IRModule mod);
 
 /*!
  * \brief A function to create the function metadata for an input function (ie calculate buffer

@@ -452,6 +452,20 @@ std::pair<IRModule, IRModule> SplitDevHostFuncs(IRModule mod_mixed, const Target
 
 // Can we make this take one annotated IRModule?
 //
+// Pack : Map -> IRModule
+// Unpack : IRMdule -> Map 
+// 
+// mod = Lower(...)
+// map = unpack(mod)
+// build(map)
+//
+// mod = Lower(...)
+
+// def build(map):
+// ...
+// unpack(mod)
+// ...
+
 // Build for heterogeneous execution.
 runtime::Module build(const Map<Target, IRModule>& inputs_arg, const Target& target_host_arg) {
   auto pass_ctx = transform::PassContext::Current();
@@ -482,9 +496,20 @@ runtime::Module build(const Map<Target, IRModule>& inputs_arg, const Target& tar
   IRModule mhost_all = IRModule(Map<GlobalVar, BaseFunc>());
 
   ICHECK(mhost_all.defined()) << "The host module must be defined";
-
+  // IRmodule input_ir_module; 
+  // Map<Target, IRModule> device_modules; (should only exist here)
+  // for (auto function : input_ir_module.functions) {
+  //    for (auto target : function )  {
+  // .      device_modules[target].append(function);
+  // .  }
+  // }
+  // 
+  // for (auto mod_and_target : device_modules) {
+  //  Codegen::Build(mod_and_target)
+  // }
   for (const auto& it : inputs) {
     if (it.second.defined()) {
+      // splits ir module and then codegens per device. this code is kind of ok but it should be rewritten as a single irmodule
       auto pair = SplitDevHostFuncs(it.second, it.first, target_host, pass_ctx);
       auto& mhost = pair.first;
       auto& mdevice = pair.second;
@@ -500,7 +525,7 @@ runtime::Module build(const Map<Target, IRModule>& inputs_arg, const Target& tar
       }
     }
   }
-
+  // right here we can 
   runtime::Module mhost = codegen::Build(mhost_all, target_host);
   // Import all modules
   for (const auto& it : device_modules) {

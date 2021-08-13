@@ -53,7 +53,17 @@ class GraphExecutorCodegen(object):
         self._get_irmodule = self._mod["get_irmodule"]
         self._setup(mod, target)
 
-    def _setup(self, mod, target):
+    # Do we make this change here and flow it through or do someting else?
+    # if you have two cpus, this doesn't work
+    # 0 (kCPU) -> tg1
+    # target_map = { 
+    # tvm.Device.cpu(0) -> target1
+    # tvm.Device.cpu(1) -> target2,
+    
+    # 
+    # 
+    # 
+    def _setup(self, mod, target: Dict[int, Target]):
         tgts = {}
         if isinstance(target, dict):
             for dev, tgt in target.items():
@@ -62,7 +72,7 @@ class GraphExecutorCodegen(object):
                 tgts[dev] = Target(tgt)
         elif isinstance(target, (str, Target)):
             tgts[_expr.IntImm("int32", 0)] = Target(target)
-        self._init(mod, tgts)
+        self._init(mod, tgts) # init is invoked here (init in graph_executor_codegen)
 
     def codegen(self, func):
         """Compile a single function into a graph.

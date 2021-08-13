@@ -181,6 +181,7 @@ class GraphOpNode : public GraphNode {
 /*! \brief Code generator for the graph executor, produces a module containing the graph JSON,
  * module, and parameters.
  */
+// targets is passed in here
 class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<GraphNodeRef>> {
  public:
   GraphExecutorCodegen(runtime::Module* mod, const tec::TargetMap& targets) : mod_(mod) {
@@ -607,8 +608,10 @@ class GraphExecutorCodegenModule : public runtime::ModuleNode {
         ICHECK_EQ(args.num_args, 2) << "The expected of arguments are: "
                                     << "runtime::Module mod and Map<int, Target> targets";
         void* mod = args[0];
+        // this is built in python
         Map<Integer, tvm::Target> tmp = args[1];
         tec::TargetMap targets;
+        // copying target map here
         for (const auto& it : tmp) {
           auto dev_type = it.first.as<tir::IntImmNode>();
           ICHECK(dev_type);

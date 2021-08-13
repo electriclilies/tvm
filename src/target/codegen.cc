@@ -40,6 +40,8 @@
 namespace tvm {
 namespace codegen {
 
+// expects module to compile for one target (hardest thing to change currently)
+
 runtime::Module Build(IRModule mod, Target target) {
   if (transform::PassContext::Current()
           ->GetConfig<Bool>("tir.disable_assert", Bool(false))

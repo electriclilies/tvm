@@ -393,7 +393,7 @@ class LowerTensorExpr : public ExprMutator {
     func_with_metadata = WithAttr(func_with_metadata, "prim_fn_var", lowered_func->prim_fn_var);
     func_with_metadata = WithAttr(func_with_metadata, "prim_funcs", prim_fns);
     func_with_metadata = WithAttr(func_with_metadata, "target", lowered_func->target); // annotating with target here, change this to function attribute
-    kTargetInfo : Array<Target> // could have func run on multiple targets
+    // kTargetInfo : Array<Target> // could have func run on multiple targets
     // Provide a callback hook which allows one-level up code generators to
     // act when we process a function.
     this->process_fn(func_with_metadata);
@@ -718,6 +718,98 @@ LoweredModule LowerTE(const IRModule& module, TargetMap targets, DeviceMap devic
   lowered_module.per_target_module = compiler->GetLoweredFunctions();
   lowered_module.external_mods = compiler->LowerExternalFunctions();
   lowered_module.main_func_info = func_info;
+  return lowered_module;
+}
+
+
+IRModule LoweredModuleToIRModule(LoweredModule mod) {
+  Map<GlobalVar, BaseFunc> unified_funcs;
+  Map<GlobalTypeVar, TypeData> unified_type_defs;
+  // TODO: what to do about import_set and parser::SourceMap?
+
+  // copy main module funcs to unified funcs (what target do we need to annotate with here?)
+  for (const auto& kv: mod.main_module->functions) {
+    const GlobalVar& var = kv.first;
+    const BaseFunc& func = kv.second;
+    unified_funcs.Set(var, func);
+  }
+  
+  // copy the type definitions for the main module
+  for (const auto& kv: mod.main_module->type_definitions) {
+    const GlobalTypeVar& ty_var = kv.first;
+    const TypeData& ty_data = kv.second;
+    unified_type_defs.Set(ty_var, ty_data);
+  }
+
+  // Move functions in per target IRModule into unified module
+  // Also move the type definitions
+  for (const auto& kv: mod.per_target_module) {
+    const String target = kv.first;
+    const IRModule target_module = kv.second;
+    // Move the per module functions, and annotate the funcs with their target
+    for (const auto& kv: target_module->functions) {
+      const GlobalVar& var = kv.first;
+      const BaseFunc& func = kv.second;
+      // TODO: is this the right way to do this?
+      ICHECK(func->IsInstance<tir::PrimFuncNode>());
+      tir::PrimFunc primFunc = WithAttr(Downcast<tir::PrimFunc>(std::move(func)), attr::kTarget, runtime::String(target));
+      unified_funcs.Set(var, primFunc);
+    }
+    
+    // Move the type definitions for the per target IRModule
+    for (const auto& kv: target_module->type_definitions) {
+      const GlobalTypeVar& ty_var = kv.first;
+      const TypeData& ty_data = kv.second;
+      unified_type_defs.Set(ty_var, ty_data);
+    }
+  }
+
+  // TODO: what to do with the runtime modules?
+  // should go in DictAttrs
+  return IRModule(unified_funcs, unified_type_defs);
+}
+
+LoweredModule IRModuleToLoweredModule(IRModule mod) {
+  Map<GlobalVar, BaseFunc> main_mod_funcs;
+  Map<String, Map<GlobalVar, BaseFunc>> target_funcs;
+  for (const auto& kv: mod->functions) {
+    const GlobalVar& var = kv.first;
+    const BaseFunc& func = kv.second;
+ 
+    if (func->IsInstance<relay::FunctionNode>()) {
+      main_mod_funcs.Set(var, func);
+    } else if (func->IsInstance<tir::PrimFuncNode>()) {
+      // Extract target
+      String target = func->GetAttr<String>(attr::kTarget).value();
+      ICHECK(target != nullptr) << "Target should be defined at this point...";
+      if (target_funcs.count(target)) {
+        Map<GlobalVar, BaseFunc> funcs = target_funcs.at(target);
+        funcs.Set(var, func);
+        // TODO: Do I need to do target_funcs.Set again here?
+
+      } else {
+        // Initialize the map and put it in target_funcs
+        Map<GlobalVar, BaseFunc> funcs;
+        funcs.Set(var, func);
+        target_funcs.Set(target, funcs);
+      }
+    } else {
+      LOG(FATAL) << "The function types in the IRModule should be RelayFunction or PrimFunc, but got " << func->GetTypeKey();
+    }
+  }
+  // Create the per_target_module map
+  Map<String, IRModule> per_target_modules;
+  for (const auto& kv: target_funcs) {
+    String target = kv.first;
+    Map<GlobalVar, BaseFunc> funcs = kv.second;
+    // Note that here we just copy the type defs to every module, TIR doesn't use the defs
+    // so the duplication is OK.
+    per_target_modules.Set(target, IRModule(funcs, mod->type_definitions));
+  }
+  LoweredModule lowered_module;
+  lowered_module.main_module = IRModule(main_mod_funcs, mod->type_definitions);
+  lowered_module.per_target_module = per_target_modules;
+  // TODO: set external_mods and main_func_info
   return lowered_module;
 }
 

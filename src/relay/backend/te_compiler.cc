@@ -718,8 +718,11 @@ LoweredModule LowerTE(const IRModule& module, TargetMap targets, DeviceMap devic
   lowered_module.per_target_module = compiler->GetLoweredFunctions();
   lowered_module.external_mods = compiler->LowerExternalFunctions();
   lowered_module.main_func_info = func_info;
+  std::cout << "Through most of LowerTE" << std::endl;
   IRModule mod = LoweredModuleToIRModule(lowered_module);
+  std::cout << "Converted LoweredModule to IRModule" << std::endl;
   LoweredModule lowered_module2 = IRModuleToLoweredModule(mod);
+  std::cout << "Converted LoweredModule back to IRModule" << std::endl;
   return lowered_module2;
 }
 
@@ -733,6 +736,7 @@ IRModule LoweredModuleToIRModule(LoweredModule mod) {
   for (const auto& kv: mod.main_module->functions) {
     const GlobalVar& var = kv.first;
     const BaseFunc& func = kv.second;
+    ICHECK(!func->IsInstance<tir::PrimFuncNode>());
     unified_funcs.Set(var, func);
   }
   
@@ -742,10 +746,11 @@ IRModule LoweredModuleToIRModule(LoweredModule mod) {
     const TypeData& ty_data = kv.second;
     unified_type_defs.Set(ty_var, ty_data);
   }
-
+  std::cout << "Doing the per-target-modules" << std::endl;
   // Move functions in per target IRModule into unified module
   // Also move the type definitions
   for (const auto& kv: mod.per_target_module) {
+    std::cout << "in per target module loop" << std::endl;
     const String target = kv.first;
     const IRModule target_module = kv.second;
     // Move the per module functions, and annotate the funcs with their target
@@ -754,7 +759,9 @@ IRModule LoweredModuleToIRModule(LoweredModule mod) {
       const BaseFunc& func = kv.second;
       // TODO: is this the right way to do this?
       ICHECK(func->IsInstance<tir::PrimFuncNode>());
+      std::cout << "Target is: " << target << std::endl;
       tir::PrimFunc primFunc = WithAttr(Downcast<tir::PrimFunc>(std::move(func)), attr::kTarget, runtime::String(target));
+      std::cout << "Target on primfunc: " << primFunc->GetAttr<String>(attr::kTarget).value() << std::endl;
       unified_funcs.Set(var, primFunc);
     }
     
@@ -777,28 +784,34 @@ LoweredModule IRModuleToLoweredModule(IRModule mod) {
   for (const auto& kv: mod->functions) {
     const GlobalVar& var = kv.first;
     const BaseFunc& func = kv.second;
- 
+    std::cout << "in the loop" << std::endl;
     if (func->IsInstance<relay::FunctionNode>()) {
+      std::cout << "is a relay func" << std::endl;
       main_mod_funcs.Set(var, func);
     } else if (func->IsInstance<tir::PrimFuncNode>()) {
+      std::cout << "is a primfuncnode" << std::endl;
       // Extract target
-      String target = func->GetAttr<String>(attr::kTarget).value();
-      ICHECK(target != nullptr) << "Target should be defined at this point...";
-      if (target_funcs.count(target)) {
-        Map<GlobalVar, BaseFunc> funcs = target_funcs.at(target);
+      auto target = func->GetAttr<String>(attr::kTarget);
+      if (!target) {
+        LOG(FATAL) << "target shoudl be set here";
+      }
+      if (target_funcs.count(target.value())) {
+        Map<GlobalVar, BaseFunc> funcs = target_funcs.at(target.value());
         funcs.Set(var, func);
         // TODO: Do I need to do target_funcs.Set again here?
 
       } else {
+        std::cout << "not relay func or prim func node" << std::endl;
         // Initialize the map and put it in target_funcs
         Map<GlobalVar, BaseFunc> funcs;
         funcs.Set(var, func);
-        target_funcs.Set(target, funcs);
+        target_funcs.Set(target.value(), funcs);
       }
     } else {
       LOG(FATAL) << "The function types in the IRModule should be RelayFunction or PrimFunc, but got " << func->GetTypeKey();
     }
   }
+  std::cout << "Finish annotating funcs with thier targets" << std::endl;
   // Create the per_target_module map
   Map<String, IRModule> per_target_modules;
   for (const auto& kv: target_funcs) {
@@ -808,14 +821,17 @@ LoweredModule IRModuleToLoweredModule(IRModule mod) {
     // so the duplication is OK.
     per_target_modules.Set(target, IRModule(funcs, mod->type_definitions));
   }
+  std::cout << "finished making per_target_modules" << std::endl;
   LoweredModule lowered_module;
   lowered_module.main_module = IRModule(main_mod_funcs, mod->type_definitions);
   lowered_module.per_target_module = per_target_modules;
   // Extract external modules and main func info, add to lowered module if they exist
+  std::cout << "external modules" << std::endl;
   auto external_mods = mod->GetAttr<Array<tvm::runtime::Module>>("external_mods");
   if (external_mods) {
     lowered_module.external_mods = external_mods.value();
   }
+  std::cout << "main func info" << std::endl;
   auto main_func_info = mod->GetAttr<backend::FunctionInfo>("main_func_info");
   if (main_func_info) {
     lowered_module.main_func_info = main_func_info.value();

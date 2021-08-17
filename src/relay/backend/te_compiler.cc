@@ -764,9 +764,9 @@ IRModule LoweredModuleToIRModule(LoweredModule mod) {
     }
   }
 
-  // TODO: what to do with the runtime modules?
-  // should go in DictAttrs
-  return IRModule(unified_funcs, unified_type_defs);
+  IRModule ret_mod = WithAttr(IRModule(unified_funcs, unified_type_defs), "external_mods", mod.external_mods);
+  ret_mod = WithAttr(ret_mod, "main_func_info", mod.main_func_info);
+  return ret_mod;
 }
 
 LoweredModule IRModuleToLoweredModule(IRModule mod) {
@@ -809,7 +809,15 @@ LoweredModule IRModuleToLoweredModule(IRModule mod) {
   LoweredModule lowered_module;
   lowered_module.main_module = IRModule(main_mod_funcs, mod->type_definitions);
   lowered_module.per_target_module = per_target_modules;
-  // TODO: set external_mods and main_func_info
+  // Extract external modules and main func info, add to lowered module if they exist
+  auto external_mods = mod->GetAttr<Array<tvm::runtime::Module>>("external_mods");
+  if (external_mods) {
+    lowered_module.external_mods = external_mods.value();
+  }
+  auto main_func_info = mod->GetAttr<backend::FunctionInfo>("main_func_info");
+  if (main_func_info) {
+    lowered_module.main_func_info = main_func_info.value();
+  }
   return lowered_module;
 }
 

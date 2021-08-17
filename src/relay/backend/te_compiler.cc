@@ -718,7 +718,9 @@ LoweredModule LowerTE(const IRModule& module, TargetMap targets, DeviceMap devic
   lowered_module.per_target_module = compiler->GetLoweredFunctions();
   lowered_module.external_mods = compiler->LowerExternalFunctions();
   lowered_module.main_func_info = func_info;
-  return lowered_module;
+  IRModule mod = LoweredModuleToIRModule(lowered_module);
+  LoweredModule lowered_module2 = IRModuleToLoweredModule(mod);
+  return lowered_module2;
 }
 
 

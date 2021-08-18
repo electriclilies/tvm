@@ -28,6 +28,7 @@
 #include <tvm/relay/expr_functor.h>
 #include <tvm/relay/op.h>
 #include <tvm/relay/op_attr_types.h>
+#include <tvm/relay/transform.h>
 #include <tvm/runtime/device_api.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/te/operation.h>
@@ -90,7 +91,7 @@ class TECompilerImpl : public TECompilerNode {
 
   // expected map from target string to IRModule
   // go thru and group functions by target
-  // 
+  //
   // this could return IRModule
   // could annotate here
   Map<String, IRModule> GetLoweredFunctions() {
@@ -109,8 +110,8 @@ class TECompilerImpl : public TECompilerNode {
     return lowered_functions;
   }
 
-  // Map<String, IRModule> -> IRModule (conversion functions that we can push up the stack until we finally delete the maps)
-  // IRModule -> Map<String, IRModule>
+  // Map<String, IRModule> -> IRModule (conversion functions that we can push up the stack until we
+  // finally delete the maps) IRModule -> Map<String, IRModule>
   Array<tvm::runtime::Module> LowerExternalFunctions() {
     Array<tvm::runtime::Module> ret;
     std::unordered_map<std::string, std::string> cached_symbol;
@@ -375,7 +376,9 @@ class LowerTensorExpr : public ExprMutator {
            "in the memory planner.";
 
     auto& device_context = this->device_context_map_[expr];
-    target = GetTargetFromInteger(device_context.device_type, targets_); // not what we want, this conversion is potentially lossy
+    target =
+        GetTargetFromInteger(device_context.device_type,
+                             targets_);  // not what we want, this conversion is potentially lossy
     // ok to annotate here
     // Non-External Relay Function
     CCacheKey key = CCacheKey(func, target);
@@ -392,7 +395,9 @@ class LowerTensorExpr : public ExprMutator {
     relay::Function func_with_metadata = func;
     func_with_metadata = WithAttr(func_with_metadata, "prim_fn_var", lowered_func->prim_fn_var);
     func_with_metadata = WithAttr(func_with_metadata, "prim_funcs", prim_fns);
-    func_with_metadata = WithAttr(func_with_metadata, "target", lowered_func->target); // annotating with target here, change this to function attribute
+    func_with_metadata = WithAttr(
+        func_with_metadata, "target",
+        lowered_func->target);  // annotating with target here, change this to function attribute
     // kTargetInfo : Array<Target> // could have func run on multiple targets
     // Provide a callback hook which allows one-level up code generators to
     // act when we process a function.
@@ -673,6 +678,14 @@ void UpdateFunctionMetadata(Function relay_func,
   function_metadata.Set(prim_fn_var.value()->name_hint, fi);
 }
 
+Pass LowerTE(TargetMap targets, DeviceMap device_context_map, backend::StaticMemoryPlan memory_plan,
+             const String& module_name, std::function<void(Function)> process_fn) {
+  runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule module, PassContext ctx) {
+        return LoweredModuleToIRModule(LowerTE(module, targets, device_context_map, memory_plan, module_name, process_fn));
+      };
+  return tvm::transform::CreateModulePass(pass_func, 1, "LowerTE", {});
+}
+
 LoweredModule LowerTE(const IRModule& module, TargetMap targets, DeviceMap device_context_map,
                       backend::StaticMemoryPlan memory_plan, const String& module_name,
                       std::function<void(Function)> process_fn) {
@@ -726,22 +739,21 @@ LoweredModule LowerTE(const IRModule& module, TargetMap targets, DeviceMap devic
   return lowered_module2;
 }
 
-
 IRModule LoweredModuleToIRModule(LoweredModule mod) {
   Map<GlobalVar, BaseFunc> unified_funcs;
   Map<GlobalTypeVar, TypeData> unified_type_defs;
   // TODO: what to do about import_set and parser::SourceMap?
 
   // copy main module funcs to unified funcs (what target do we need to annotate with here?)
-  for (const auto& kv: mod.main_module->functions) {
+  for (const auto& kv : mod.main_module->functions) {
     const GlobalVar& var = kv.first;
     const BaseFunc& func = kv.second;
     ICHECK(!func->IsInstance<tir::PrimFuncNode>());
     unified_funcs.Set(var, func);
   }
-  
+
   // copy the type definitions for the main module
-  for (const auto& kv: mod.main_module->type_definitions) {
+  for (const auto& kv : mod.main_module->type_definitions) {
     const GlobalTypeVar& ty_var = kv.first;
     const TypeData& ty_data = kv.second;
     unified_type_defs.Set(ty_var, ty_data);
@@ -749,31 +761,34 @@ IRModule LoweredModuleToIRModule(LoweredModule mod) {
   std::cout << "Doing the per-target-modules" << std::endl;
   // Move functions in per target IRModule into unified module
   // Also move the type definitions
-  for (const auto& kv: mod.per_target_module) {
+  for (const auto& kv : mod.per_target_module) {
     std::cout << "in per target module loop" << std::endl;
     const String target = kv.first;
     const IRModule target_module = kv.second;
     // Move the per module functions, and annotate the funcs with their target
-    for (const auto& kv: target_module->functions) {
+    for (const auto& kv : target_module->functions) {
       const GlobalVar& var = kv.first;
       const BaseFunc& func = kv.second;
       // TODO: is this the right way to do this?
       ICHECK(func->IsInstance<tir::PrimFuncNode>());
       std::cout << "Target is: " << target << std::endl;
-      tir::PrimFunc primFunc = WithAttr(Downcast<tir::PrimFunc>(std::move(func)), attr::kTarget, runtime::String(target));
-      std::cout << "Target on primfunc: " << primFunc->GetAttr<String>(attr::kTarget).value() << std::endl;
+      tir::PrimFunc primFunc = WithAttr(Downcast<tir::PrimFunc>(std::move(func)), attr::kTarget,
+                                        runtime::String(target));
+      std::cout << "Target on primfunc: " << primFunc->GetAttr<String>(attr::kTarget).value()
+                << std::endl;
       unified_funcs.Set(var, primFunc);
     }
-    
+
     // Move the type definitions for the per target IRModule
-    for (const auto& kv: target_module->type_definitions) {
+    for (const auto& kv : target_module->type_definitions) {
       const GlobalTypeVar& ty_var = kv.first;
       const TypeData& ty_data = kv.second;
       unified_type_defs.Set(ty_var, ty_data);
     }
   }
 
-  IRModule ret_mod = WithAttr(IRModule(unified_funcs, unified_type_defs), "external_mods", mod.external_mods);
+  IRModule ret_mod =
+      WithAttr(IRModule(unified_funcs, unified_type_defs), "external_mods", mod.external_mods);
   ret_mod = WithAttr(ret_mod, "main_func_info", mod.main_func_info);
   return ret_mod;
 }
@@ -781,7 +796,7 @@ IRModule LoweredModuleToIRModule(LoweredModule mod) {
 LoweredModule IRModuleToLoweredModule(IRModule mod) {
   Map<GlobalVar, BaseFunc> main_mod_funcs;
   Map<String, Map<GlobalVar, BaseFunc>> target_funcs;
-  for (const auto& kv: mod->functions) {
+  for (const auto& kv : mod->functions) {
     const GlobalVar& var = kv.first;
     const BaseFunc& func = kv.second;
     std::cout << "in the loop" << std::endl;
@@ -808,13 +823,15 @@ LoweredModule IRModuleToLoweredModule(IRModule mod) {
         target_funcs.Set(target.value(), funcs);
       }
     } else {
-      LOG(FATAL) << "The function types in the IRModule should be RelayFunction or PrimFunc, but got " << func->GetTypeKey();
+      LOG(FATAL)
+          << "The function types in the IRModule should be RelayFunction or PrimFunc, but got "
+          << func->GetTypeKey();
     }
   }
   std::cout << "Finish annotating funcs with thier targets" << std::endl;
   // Create the per_target_module map
   Map<String, IRModule> per_target_modules;
-  for (const auto& kv: target_funcs) {
+  for (const auto& kv : target_funcs) {
     String target = kv.first;
     Map<GlobalVar, BaseFunc> funcs = kv.second;
     // Note that here we just copy the type defs to every module, TIR doesn't use the defs

@@ -588,7 +588,7 @@ class AOTExecutorCodegen : public ExprVisitor {
     // performing the preexisting AOT executor code generation phase.
     IRModule mod = IRModule::FromExpr(func);
 
-    IRModule new_mod = LowerTEPass(targets_, device_context_map, memory_plan, mod_name, [this](Function func) {
+    IRModule new_mod = transform::LowerTEPass(targets_, device_context_map, memory_plan, mod_name, [this](Function func) {
           // We need to maintain the constant map for external
           // functions so we pass this processing function which
           // allows us to process each function as we lower it.

@@ -848,13 +848,14 @@ LoweredModule IRModuleToLoweredModule(IRModule mod) {
   return lowered_module;
 }
 
-  Pass LowerTEPass(TargetMap targets, DeviceMap device_context_map, backend::StaticMemoryPlan memory_plan,
+}  // namespace tec
+
+Pass LowerTEPass(TargetMap targets, DeviceMap device_context_map, backend::StaticMemoryPlan memory_plan,
               const String& module_name, std::function<void(Function)> process_fn) {
     runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func = [=](IRModule module, PassContext ctx) {
           return LoweredModuleToIRModule(LowerTE(module, targets, device_context_map, memory_plan, module_name, process_fn));
         };
-    return tvm::transform::CreateModulePass(pass_func, 1, "LowerTE", {});
+    return CreateModulePass(pass_func, 1, "LowerTE", {});
   }
-}  // namespace tec
 }  // namespace relay
 }  // namespace tvm

@@ -194,9 +194,6 @@ LoweredModule LowerTE(
     backend::StaticMemoryPlan memory_plan, const String& module_name,
     ProcessFn process_fn = [](Function f) {});
 
-using namespace transform;
-Pass LowerTEPass(TargetMap targets, DeviceMap device_context_map, backend::StaticMemoryPlan memory_plan,
-              const String& module_name, std::function<void(Function)> process_fn);
 }  // namespace tec
 }  // namespace relay
 }  // namespace tvm

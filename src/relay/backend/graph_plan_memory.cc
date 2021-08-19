@@ -35,8 +35,6 @@
 namespace tvm {
 namespace relay {
 
-using backend::StaticMemoryPlan;
-using backend::StorageInfo;
 using IntegerArray = Array<Integer>;
 
 struct StorageToken {
@@ -221,7 +219,7 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
 
     // The value of smap contains two integer arrays where the first array
     // contains the planned storage ids and the second holds the device types.
-    Map<Expr, backend::StorageInfo> smap;
+    Map<Expr, StorageInfo> smap;
     int num_annotated_nodes = 0;
     int num_nodes = 0;
 
@@ -239,7 +237,7 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
         device_types.push_back(static_cast<DLDeviceType>(tok->device_type));
         sid_sizes_byte.push_back(GetMemorySize(tok));
       }
-      auto storage_info = backend::StorageInfo(storage_ids, device_types, sid_sizes_byte);
+      auto storage_info = StorageInfo(storage_ids, device_types, sid_sizes_byte);
       smap.Set(GetRef<Expr>(kv.first), storage_info);
     }
     // Either all or none of the nodes should be annotated.
@@ -249,7 +247,7 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
                     "or none of the expressions are expected to be annotated.";
     }
 
-    return backend::StaticMemoryPlan(smap);
+    return StaticMemoryPlan(smap);
   }
 
  protected:

@@ -42,7 +42,7 @@
 namespace tvm {
 namespace relay {
 // TODO(@jroesch, @csullivan): declare directly elsewhere
-backend::StaticMemoryPlan GraphPlanMemory(const Function& func);
+StaticMemoryPlan GraphPlanMemory(const Function& func);
 namespace backend {
 
 class GraphNode;
@@ -184,7 +184,7 @@ class GraphOpNode : public GraphNode {
 // targets is passed in here
 class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<GraphNodeRef>> {
  public:
-  GraphExecutorCodegen(runtime::Module* mod, const tec::TargetMap& targets) : mod_(mod) {
+  GraphExecutorCodegen(runtime::Module* mod, const TargetMap& targets) : mod_(mod) {
     targets_ = targets;
   }
 
@@ -210,7 +210,7 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     IRModule mod = IRModule::FromExpr(func);
 
     // Build a map from each operation to device.
-    tec::DeviceMap device_context_map;
+    DeviceMap device_context_map;
     for (const auto& it : memory_plan_->expr_to_storage_info) {
       auto expr = it.first;
       auto storage_info = it.second;
@@ -580,7 +580,7 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
   /*! \brief variable map */
   std::unordered_map<const Object*, std::vector<GraphNodeRef>> var_map_;
   /*! \brief target device */
-  tec::TargetMap targets_;
+  TargetMap targets_;
   /*!
    * \brief parameters (i.e. ConstantNodes found in the graph).
    * These are take as inputs to the GraphExecutor.
@@ -610,7 +610,7 @@ class GraphExecutorCodegenModule : public runtime::ModuleNode {
         void* mod = args[0];
         // this is built in python
         Map<Integer, tvm::Target> tmp = args[1];
-        tec::TargetMap targets;
+        TargetMap targets;
         // copying target map here
         for (const auto& it : tmp) {
           auto dev_type = it.first.as<tir::IntImmNode>();

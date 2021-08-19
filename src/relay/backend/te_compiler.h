@@ -58,22 +58,6 @@ namespace tvm {
 namespace relay {
 namespace tec {
 
-// This class is needed to avoid a GCC 5 bug that prevents maps containing enums
-// from being compiled. If i386 GCC version is increased, we can remove it.
-struct EnumClassHash {
-  template <typename T>
-  std::size_t operator()(T t) const {
-    return static_cast<std::size_t>(t);
-  }
-};
-
-// TODO(@jroesch, @chrisS) these should be a tvm::Map for uniformity sake
-// we should a version of context which works in Map
-using TargetMap = std::unordered_map<DLDeviceType, Target, EnumClassHash>;
-using DeviceMap =
-    std::unordered_map<Expr, tvm::Device, runtime::ObjectPtrHash, runtime::ObjectPtrEqual>;
-using ProcessFn = std::function<void(Function)>;
-
 /*!
  * \brief A compiler which lowers primitive Relay functions to tensor expressions
  * and schedules them into TIR functions.
@@ -191,7 +175,7 @@ Target GetTargetFromInteger(DLDeviceType dev_type, TargetMap targets);
  */
 LoweredModule LowerTE(
     const IRModule& module, TargetMap targets, DeviceMap device_map,
-    backend::StaticMemoryPlan memory_plan, const String& module_name,
+    StaticMemoryPlan memory_plan, const String& module_name,
     ProcessFn process_fn = [](Function f) {});
 
 }  // namespace tec

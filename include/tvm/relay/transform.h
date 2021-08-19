@@ -26,6 +26,7 @@
 
 #include <tvm/ir/transform.h>
 #include <tvm/relay/attrs/transform.h>
+#include <tvm/relay/analysis.h>
 #include <tvm/relay/expr.h>
 #include <tvm/relay/function.h>
 #include <tvm/relay/op.h>
@@ -33,7 +34,7 @@
 #include <tvm/target/target.h>
 
 #include <string>
-//#include "../../../src/relay/backend/te_compiler.h"
+#include "../../../src/relay/transforms/pass_utils.h"
 
 namespace tvm {
 namespace relay {
@@ -438,16 +439,7 @@ TVM_DLL Pass SimplifyExpr();
  */
 TVM_DLL Pass ManifestAlloc(Target target_host, Map<tvm::Integer, tvm::Target> targets);
 
-// Putting the forward-declaration of TargetMap, DeviceMap and ProcessFn
-// is not ideal, but the alternative is creating header file that is shared between
-// te_compiler.h and transform.h. Since we are removing these
-struct EnumClassHash;
-using TargetMap = std::unordered_map<DLDeviceType, Target, EnumClassHash>;
-using DeviceMap =
-    std::unordered_map<Expr, tvm::Device, runtime::ObjectPtrHash, runtime::ObjectPtrEqual>;
-using ProcessFn = std::function<void(Function)>;
 class StaticMemoryPlan;
-
 // TODO(@electriclilies): documentation
 TVM_DLL Pass LowerTEPass(TargetMap targets, DeviceMap device_context_map, StaticMemoryPlan memory_plan,
               const String& module_name, std::function<void(Function)> process_fn);

@@ -53,7 +53,11 @@ namespace {
 struct PairHash {
   template <typename T1, typename T2>
   std::size_t operator()(const std::pair<T1, T2>& k) const {
-    return std::hash<T1>()(k.first) ^ std::hash<T2>()(k.second);
+    return dmlc::HashCombine(std::hash<T1>()(k.first), std::hash<T2>()(k.second));
+  }
+  template <typename T2>
+  std::size_t operator()(const std::pair<Target, T2>& k) const {
+    return dmlc::HashCombine(ObjectHash()(k.first), std::hash<T2>()(k.second));
   }
 };
 

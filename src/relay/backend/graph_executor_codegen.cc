@@ -240,7 +240,10 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     ICHECK(main_func_info) << "The attribute \"main_func_info\" should be set at this point.";
     function_metadata_.Set(runtime::symbol::tvm_module_main, main_func_info.value());
 
+    // TODO(@electriclilies): seems like error is coming from here
+    std::cout << "Trying to infer type on: " << lowered_mod << std::endl;
     auto main_module = relay::transform::InferType()(lowered_mod);
+    std::cout << "Infered type" << std::endl;
     relay::Function main_func = Downcast<relay::Function>(main_module->Lookup("main"));
 
     // Now that we have lowered all operators to TIR code, we can proceed with compilation.

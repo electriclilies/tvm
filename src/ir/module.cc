@@ -258,6 +258,11 @@ void IRModuleNode::Remove(const GlobalVar& var) {
 
 BaseFunc IRModuleNode::Lookup(const GlobalVar& var) const {
   auto it = functions.find(var);
+  for (auto kv: functions) {
+    if (kv.first->name_hint == var->name_hint) {
+      ICHECK(it != functions.end()) << "The global var " << var->name_hint << " is in there but pointers got F'd up, we found " << kv.first->name_hint;
+    }
+  }
   ICHECK(it != functions.end()) << "There is no definition of " << var->name_hint;
   return (*it).second;
 }

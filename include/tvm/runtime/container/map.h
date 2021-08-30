@@ -1335,6 +1335,7 @@ class Map : public ObjectRef {
    * \param value The value to be setted.
    */
   void Set(const K& key, const V& value) {
+    // TODO(@electriclilies): I think this COW is causing my problem. ugh
     CopyOnWrite();
     MapNode::InsertMaybeReHash(MapNode::KVType(key, value), &data_);
   }
@@ -1353,7 +1354,7 @@ class Map : public ObjectRef {
    *  Otherwise make a new copy of the array to ensure the current handle
    *  hold a unique copy.
    *
-   * \return Handle to the internal node container(which ganrantees to be unique)
+   * \return Handle to the internal node container (which guarantees to be unique)
    */
   MapNode* CopyOnWrite() {
     if (data_.get() == nullptr) {

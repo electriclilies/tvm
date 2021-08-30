@@ -206,15 +206,8 @@ class TypeInferencer : private ExprFunctor<Type(const Expr&)>,
                                                   << "without a module");
     }
 
-    std::cout << "Trying to look up global var!" << std::endl;
     if (mod_->ContainGlobalVar(var->name_hint)) {
-      std::cout << "Found global var" << std::endl;
-      // TODO(@electriclilies): This could cause problems downstream!
-      auto func = mod_->Lookup(var->name_hint);
-      std::cout << "successfully looked up var" << std::endl;
-      std::cout << "Type of func is: " << func->GetTypeKey() << std::endl;
-      relay::Function e = Downcast<Function>(func);
-      std::cout << "Downcasted correctly" << std::endl;
+      relay::Function e = Downcast<Function>(mod_->Lookup(var));
       return e->checked_type();
     } else {
       return op->checked_type_;

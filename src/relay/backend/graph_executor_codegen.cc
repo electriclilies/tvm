@@ -236,16 +236,13 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
           tec::UpdateFunctionMetadata(func, this->function_metadata_);
         })(mod);
 
-    Optional<backend::FunctionInfo> main_func_info = lowered_mod->GetAttr<backend::FunctionInfo>("main_func_info");
+    Optional<backend::FunctionInfo> main_func_info =
+        lowered_mod->GetAttr<backend::FunctionInfo>("main_func_info");
     ICHECK(main_func_info) << "The attribute \"main_func_info\" should be set at this point.";
     function_metadata_.Set(runtime::symbol::tvm_module_main, main_func_info.value());
 
-    // TODO(@electriclilies): Here, we shouldn't have prim funcs in the module we pass to InferType. This
-    // used to be 
     IRModule main_module = tec::GetMainModule(lowered_mod);
-    std::cout << "Trying to infer type on: " << lowered_mod << std::endl;
     main_module = relay::transform::InferType()(main_module);
-    std::cout << "Infered type" << std::endl;
     relay::Function main_func = Downcast<relay::Function>(main_module->Lookup("main"));
 
     // Now that we have lowered all operators to TIR code, we can proceed with compilation.
@@ -277,9 +274,10 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     }
     ret.function_metadata = std::move(function_metadata_);
 
-    Optional<Array<tvm::runtime::Module>> external_modules = lowered_mod->GetAttr<Array<tvm::runtime::Module>>("external_mods");
+    Optional<Array<tvm::runtime::Module>> external_modules =
+        lowered_mod->GetAttr<Array<tvm::runtime::Module>>("external_mods");
     ICHECK(external_modules) << "External module attribute should be set at this point.";
-    
+
     // This is the point where we separate the functions in the module by target
     ret.lowered_funcs = tec::GetPerTargetModules(lowered_mod);
     ret.external_mods = external_modules.value();

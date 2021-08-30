@@ -835,7 +835,6 @@ LoweredModule LowerTE(const IRModule& module, TargetMap targets, DeviceMap devic
   DLOG(INFO) << "lowering module:\n" << PrettyPrint(module);
 
   TECompiler compiler;
-  std::cout << "LowerTE called" << std::endl;
   backend::FunctionInfo func_info;
   if (memory_plan.defined()) {
     // TODO(@electriclilies, @jroesch): remove UpdateMainWorkspaceSize
@@ -873,7 +872,7 @@ LoweredModule LowerTE(const IRModule& module, TargetMap targets, DeviceMap devic
 
 IRModule GetMainModule(IRModule mod) {
   IRModule main_module;
-  for (auto kv: mod->functions) {
+  for (auto kv : mod->functions) {
     const GlobalVar& var = kv.first;
     const BaseFunc& func = kv.second;
     if (func->IsInstance<tvm::relay::FunctionNode>()) {
@@ -884,7 +883,6 @@ IRModule GetMainModule(IRModule mod) {
 }
 
 Map<Target, IRModule> GetPerTargetModules(IRModule mod) {
-  std::cout << "GetPerTargetModules called" << std::endl;
   std::unordered_map<Target, IRModule, TargetStrHash, TargetStrEqual> per_target_modules;
   for (const auto& kv : mod->functions) {
     const GlobalVar& var = kv.first;
@@ -915,12 +913,11 @@ Map<Target, IRModule> GetPerTargetModules(IRModule mod) {
 }
 
 IRModule LoweredModuleToIRModule(LoweredModule mod) {
-  std::cout << "LoweredToIRMOdule called" << std::endl;
   IRModule unified_module;
 
   // Copy the main module and its typedefs
   for (const auto& kv : mod.main_module->functions) {
-    unified_module->Add(std::move(kv.first), kv.second);
+    unified_module->Add(kv.first, kv.second);
   }
   for (const auto& kv : mod.main_module->type_definitions) {
     unified_module->AddTypeDef(kv.first, kv.second);
@@ -975,7 +972,7 @@ LoweredModule IRModuleToLoweredModule(IRModule mod) {
     const BaseFunc& func = kv.second;
     if (func->IsInstance<relay::FunctionNode>()) {
       main_mod->Add(var, func);
-    } 
+    }
   }
 
   // Extract per_target_modules

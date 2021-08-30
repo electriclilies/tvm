@@ -240,7 +240,8 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     ICHECK(main_func_info) << "The attribute \"main_func_info\" should be set at this point.";
     function_metadata_.Set(runtime::symbol::tvm_module_main, main_func_info.value());
 
-    auto main_module = relay::transform::InferType()(lowered_mod);
+    IRModule main_module = tec::GetMainModule(mod);
+    main_module = relay::transform::InferType()(main_module);
     relay::Function main_func = Downcast<relay::Function>(main_module->Lookup("main"));
 
     // Now that we have lowered all operators to TIR code, we can proceed with compilation.

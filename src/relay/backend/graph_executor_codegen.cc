@@ -240,9 +240,11 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     ICHECK(main_func_info) << "The attribute \"main_func_info\" should be set at this point.";
     function_metadata_.Set(runtime::symbol::tvm_module_main, main_func_info.value());
 
-    // TODO(@electriclilies): seems like error is coming from here
+    // TODO(@electriclilies): Here, we shouldn't have prim funcs in the module we pass to InferType. This
+    // used to be 
+    IRModule main_module = tec::GetMainModule(lowered_mod);
     std::cout << "Trying to infer type on: " << lowered_mod << std::endl;
-    auto main_module = relay::transform::InferType()(lowered_mod);
+    main_module = relay::transform::InferType()(main_module);
     std::cout << "Infered type" << std::endl;
     relay::Function main_func = Downcast<relay::Function>(main_module->Lookup("main"));
 

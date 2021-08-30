@@ -871,6 +871,18 @@ LoweredModule LowerTE(const IRModule& module, TargetMap targets, DeviceMap devic
   return lowered_module;
 }
 
+IRModule GetMainModule(IRModule mod) {
+  IRModule main_module;
+  for (auto kv: mod->functions) {
+    const GlobalVar& var = kv.first;
+    const BaseFunc& func = kv.second;
+    if (func->IsInstance<tvm::relay::FunctionNode>()) {
+      main_module->Add(var, func);
+    }
+  }
+  return main_module;
+}
+
 Map<Target, IRModule> GetPerTargetModules(IRModule mod) {
   std::cout << "GetPerTargetModules called" << std::endl;
   std::unordered_map<Target, IRModule, TargetStrHash, TargetStrEqual> per_target_modules;

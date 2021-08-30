@@ -901,6 +901,18 @@ Map<Target, IRModule> GetPerTargetModules(IRModule mod) {
   return per_target_modules;
 }
 
+IRModule GetMainModule(IRModule mod) {
+  IRModule main_module;
+  for (auto kv: mod->functions) {
+    const GlobalVar& var = kv.first;
+    const BaseFunc& func = kv.second;
+    if (func->IsInstance<tvm::relay::FunctionNode>()) {
+      main_module->Add(var, func);
+    }
+  }
+  return main_module;
+}
+
 IRModule LoweredModuleToIRModule(LoweredModule mod) {
   IRModule unified_module;
 

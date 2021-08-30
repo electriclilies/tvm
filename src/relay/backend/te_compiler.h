@@ -181,6 +181,13 @@ Target GetTargetFromInteger(DLDeviceType dev_type, TargetMap targets);
  */
 Map<Target, IRModule> GetPerTargetModules(IRModule mod);
 
+/*!
+ * \brief Utility to extract all the Relay functions from an IRModule, with no PrimFuncs.
+ * \param mod The IRModule to extract the Relay functions from
+ * \return An IRModule containing only the Relay functions that are in the input mod (no PrimFuncs)
+ */
+IRModule GetMainModule(IRModule mod);
+
 /*! \brief Utility to convert a LoweredModule to an IRModule.
  *
  * This function takes all the target specific modules in LoweredModule and

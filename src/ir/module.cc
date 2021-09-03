@@ -43,7 +43,8 @@ namespace tvm {
 
 IRModule::IRModule(tvm::Map<GlobalVar, BaseFunc> functions,
                    tvm::Map<GlobalTypeVar, TypeData> type_definitions,
-                   std::unordered_set<String> import_set, parser::SourceMap source_map) {
+                   std::unordered_set<String> import_set, parser::SourceMap source_map,
+                   DictAttrs attrs) {
   auto n = make_object<IRModuleNode>();
   n->functions = std::move(functions);
   n->type_definitions = std::move(type_definitions);
@@ -52,6 +53,7 @@ IRModule::IRModule(tvm::Map<GlobalVar, BaseFunc> functions,
   n->constructor_tag_map_ = {};
   n->import_set_ = std::move(import_set);
   n->source_map = source_map;
+  n->attrs = std::move(attrs);
 
   for (const auto& kv : n->functions) {
     // set global var map

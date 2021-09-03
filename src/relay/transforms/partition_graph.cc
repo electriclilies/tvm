@@ -509,7 +509,8 @@ class NameMangleExtFuncs : public MixedModeMutator {
 
     // Walk the tree and mangle the functions. Then replace compiler functions
     // with mangled functions in the module
-    IRModule new_module = IRModule({}, module_->type_definitions, module_->Imports());
+    IRModule new_module = IRModule({}, module_->type_definitions, module_->Imports(),
+                                   module_->source_map, module_->attrs);
     for (const auto& pair : glob_funcs) {
       if (auto* fn = pair.second.as<FunctionNode>()) {
         auto func = GetRef<Function>(fn);

@@ -122,6 +122,7 @@ class IRModuleNode : public Object {
     v->Visit("global_var_map_", &global_var_map_);
     v->Visit("global_type_var_map_", &global_type_var_map_);
     v->Visit("source_map", &source_map);
+    v->Visit("attrs", &attrs);
   }
 
   TVM_DLL bool SEqualReduce(const IRModuleNode* other, SEqualReducer equal) const;
@@ -348,12 +349,14 @@ class IRModule : public ObjectRef {
    * \brief constructor
    * \param functions Functions in the module.
    * \param type_definitions Type definitions in the module.
-   * \param import_set Set of imported files in the module
+   * \param import_set Set of imported files in the module.
    * \param map The module source map.
+   * \param attrs The module attributes.
    */
   TVM_DLL explicit IRModule(Map<GlobalVar, BaseFunc> functions,
                             Map<GlobalTypeVar, TypeData> type_definitions = {},
-                            std::unordered_set<String> import_set = {}, parser::SourceMap map = {});
+                            std::unordered_set<String> import_set = {}, parser::SourceMap map = {},
+                            DictAttrs attrs = {});
 
   /*! \brief default constructor */
   IRModule() : IRModule(Map<GlobalVar, BaseFunc>({})) {}

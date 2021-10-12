@@ -34,19 +34,23 @@ bool CallDPSRel(const Array<Type>& types, int num_inputs, const Attrs& attrs, co
 
     // TODO: Can we check that the func is a primfunc here as well as just a PrimExpr?
 
-    // const auto* func = types[0].as<PrimExpr>();
-    // ICHECK(func) << "call_dps: expect first input type to be PrimExpr but get " << types[0];
+    const auto* func = types[0].as<FuncTypeNode>();
+    if (func == nullptr) {
+        ICHECK(types[0].as<IncompleteTypeNode>())
+        << "call_dps: expect second input type to be TupleType but get " << types[0];
+        return false;
+    }
 
     const auto* args = types[1].as<TupleTypeNode>();
     if (args == nullptr) {
-        ICHECK(args.as<IncompleteTypeNode>())
+        ICHECK(types[1].as<IncompleteTypeNode>())
         << "call_dps: expect second input type to be TupleType but get " << types[1];
-    return false;
+        return false;
     }
 
     const auto* outs = types[2].as<TupleTypeNode>();
-        if (args == nullptr) {
-        ICHECK(outs.as<IncompleteTypeNode>())
+    if (outs == nullptr) {
+        ICHECK(types[2].as<IncompleteTypeNode>())
         << "call_dps: expect third type to be TupleType but get " << types[2];
     return false;
     }

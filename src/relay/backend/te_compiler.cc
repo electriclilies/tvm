@@ -585,15 +585,20 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
     for (const auto& arg : call_node->args) {
       args.push_back(VisitExpr(arg));
     }
-    // TODO: consolidate IsDynamic logic with IsDynamic logic in LowerFunction
+
+    // Op call_tir = Op::Get("call_tir");
+    // return Call(call_tir, {pair.first, Tuple(args)}, Attrs(pair.second), {});
+    
     if (IsDynamic(func->ret_type)) { // Original code
       // Replace with direct call to lowered primitive, and attach annotations to record calling
       // convention.
-
+      std::cout << "Returning old call_tir" << std::endl;
       return Call(pair.first, args, pair.second);
 
     } else { // Changed to call_tir (I think this should work in static case as well)
+      std::cout << "Returning call_tir" << std::endl;
       Op call_tir = Op::Get("call_tir");
+      std::cout << "Got TIR Call" << std::endl;
       return Call(call_tir, {pair.first, Tuple(args)}, Attrs(pair.second), {});
     }
   }

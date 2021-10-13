@@ -111,8 +111,15 @@ bool CallTIRRel(const Array<Type>& types, int num_inputs, const Attrs& attrs, co
 
 Expr MakeCallTIR(Expr func, Expr args, Attrs attrs) {
     // attrs are always call_tir attrs.
-    // Might be able to do the is dynamic check here... though is departure from the separation of dyn and static ops that matt and I did
-    return Call(func, {args}, attrs);
+    // Relay ops can't have variable numbers of inputs, so I need to wrap args in a Tuple then put those in. This makes things a little confusing..
+    // I don't think this is right?
+    Tuple args_tuple = Downcast<Tuple>(args);
+    Array<Expr> args_arr;
+    for (auto arg : args_tuple->fields) {
+      args_arr.push_back(arg);
+    }
+
+    return Call(func, args_arr, attrs);
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.call_tir").set_body_typed(MakeCallDPS);

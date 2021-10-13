@@ -40,31 +40,6 @@ constexpr size_t mix(size_t h1, size_t h2) {
   return h1 ^ (h1 + 0x9e3779b9 + (h2 << 6) + (h2 >> 2));
 }
 
-/*!
- * \brief As for GetDeviceCopyProps, but for the call to the lowered TIR primitives rather
- * than the original "device_copy" operator.
- *
- * See te_compiler.cc for where this rewriting occurs.
- */
-DeviceCopyProps GetPrimitiveDeviceCopyProps(const CallNode* call_node) {
-  if (!(call_node->op == Op::Get("vm.call_tir"))) {
-    return {};
-  }
-
-  auto tir_call_attrs = call_node->attrs.as<TIRCallAttrs>();
-
-  if (tir_call_attrs->metadata.count("source_device") != 1 ||
-      tir_call_attrs->metadata.count("dst_device") != 1) {
-    return {};
-  }
-  ICHECK_EQ(call_node->args.size(), 1) << "device_copy is of arity 1";
-  return {
-      call_node->args[0],
-      static_cast<DLDeviceType>(
-          Downcast<Integer>(tir_call_attrs->metadata["source_device"])->value),
-      static_cast<DLDeviceType>(Downcast<Integer>(tir_call_attrs->metadata["dst_device"])->value)};
-}
-
 }  // namespace
 
 // The following hash and equality helpers give each free first-order domain pointer its own
@@ -219,9 +194,6 @@ DeviceDomainPtr DeviceDomains::DomainForCallee(const Call& call) {
 
   auto on_device_props = GetOnDeviceProps(call.get());
   auto device_copy_props = GetDeviceCopyProps(call.get());
-  if (!device_copy_props.body.defined()) {
-    device_copy_props = GetPrimitiveDeviceCopyProps(call.get());
-  }
 
   if (on_device_props.body.defined()) {
     // on_device(expr, device_type=<t>, is_fixed=false)
@@ -288,6 +260,9 @@ DeviceDomainPtr DeviceDomains::DomainForCallee(const Call& call) {
     args_and_result.emplace_back(free_domain);
     args_and_result.emplace_back(free_domain);
     args_and_result.emplace_back(free_domain);
+  } else if (call->op == call_tir) {
+    // Return domain for the function in call_tir
+    return DomainFor(call->args[0]);
   } else if (call->op == reshape_tensor_op) {
     ICHECK_EQ(call->args.size(), 2U);
     // reshape_tensor(data, shape)

@@ -30,6 +30,7 @@
 #include <tvm/relay/op_attr_types.h>
 #include <tvm/topi/elemwise.h>
 
+#include "../annotation/annotation.h"
 #include "../../transforms/infer_layout_utils.h"
 #include "../type_relations.h"
 
@@ -103,6 +104,20 @@ DeviceCopyProps GetDeviceCopyProps(const CallNode* call_node) {
     } else {
       return {call_node->args[0], src_dev_type, dst_dev_type};
     }
+  } else if (call_node->op == Op::Get("vm.call_tir")) {
+    /* Get device props for a TIR function */
+    auto tir_call_attrs = call_node->attrs.as<TIRCallAttrs>();
+
+    if (tir_call_attrs->metadata.count("source_device") != 1 ||
+      tir_call_attrs->metadata.count("dst_device") != 1) {
+      return {};
+    }
+    ICHECK_EQ(call_node->args.size(), 1) << "device_copy is of arity 1";
+    return {
+      call_node->args[0],
+      static_cast<DLDeviceType>(
+          Downcast<Integer>(tir_call_attrs->metadata["source_device"])->value),
+      static_cast<DLDeviceType>(Downcast<Integer>(tir_call_attrs->metadata["dst_device"])->value)};
   }
   return {};
 }

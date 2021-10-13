@@ -275,6 +275,7 @@ class DeviceDomains {
   const Op& alloc_tensor_op = Op::Get("memory.alloc_tensor");
   const Op& shape_of_op = Op::Get("vm.shape_of");
   const Op& invoke_tvm_op = Op::Get("vm.invoke_tvm_op");
+  const Op& call_tir = Op::Get("vm.call_tir");
   const Op& shape_func_op = Op::Get("vm.shape_func");
   const Op& reshape_tensor_op = Op::Get("vm.reshape_tensor");
   /*! \brief The CPU device type for special operators such as dynamic shape functions. */

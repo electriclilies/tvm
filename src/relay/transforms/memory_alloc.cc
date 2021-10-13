@@ -73,12 +73,11 @@ bool IsReshapeOnly(const Expr& expr) {
     return func->HasNonzeroAttr(attr::kReshapeOnly);
   }
   if (const CallNode* call = expr.as<CallNode>()) {
-    if (call->attrs.defined()) {
-      if (auto tir_call_attrs = call->attrs.as<TIRCallAttrs>()) {
+    if (call->op == Op::Get("vm.call_tir")) {
+        auto tir_call_attrs = call->attrs.as<TIRCallAttrs>();
         Map<String, ObjectRef> metadata = tir_call_attrs->metadata;
         return metadata.count(attr::kReshapeOnly) &&
                (Downcast<tvm::Integer>(metadata[attr::kReshapeOnly])->value == 1);
-      }
     }
   }
   return false;

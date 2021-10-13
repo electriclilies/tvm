@@ -403,10 +403,10 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     return lhs_storage_id == rhs_storage_id;
   }
 
-  std::vector<GraphNodeRef> GraphAddCallNode(const CallNode* op, const std::string& func_name,
+  std::vector<GraphNodeRef> GraphAddCallNode(const CallNode* call, const std::string& func_name,
                                              GraphAttrs attrs) {
     std::vector<GraphNodeRef> inputs;
-    for (auto arg : op->args) {
+    for (auto arg : call->args) {
       auto res = VisitExpr(arg);
       for (auto nr : res) {
         inputs.push_back(nr);
@@ -415,33 +415,35 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
 
     /// An adapted version of the storage optimization for the time being.
     bool reshape_only = false;
-    if (op->attrs.defined()) {
-      if (auto tir_call_attrs = op->attrs.as<TIRCallAttrs>()) {
-        Map<String, ObjectRef> metadata = tir_call_attrs->metadata;
-        if (metadata.count(attr::kReshapeOnly) &&
-            Downcast<tvm::Integer>(metadata[attr::kReshapeOnly])->value == 1) {
-          reshape_only = true;
-        }
 
-        auto relay_attrs = Downcast<DictAttrs>(tir_call_attrs->metadata["relay_attrs"]);
+    if(call->op == Op::Get("vm.call_tir")) {
+      auto tir_call_attrs = call->attrs.as<TIRCallAttrs>();
+      Map<String, ObjectRef> metadata = tir_call_attrs->metadata;
+      if (metadata.count(attr::kReshapeOnly) &&
+          Downcast<tvm::Integer>(metadata[attr::kReshapeOnly])->value == 1) {
+        reshape_only = true;
+      }
 
-        for (auto p : relay_attrs->dict) {
-          if (p.second.as<StringObj>()) {
-            attrs[p.first] = std::string(Downcast<String>(p.second));
-          }
+      auto relay_attrs = Downcast<DictAttrs>(tir_call_attrs->metadata["relay_attrs"]);
+
+      for (auto p : relay_attrs->dict) {
+        if (p.second.as<StringObj>()) {
+          attrs[p.first] = std::string(Downcast<String>(p.second));
         }
       }
     }
+    Tuple tuple_args = Downcast<Tuple>(call->args[1]); // call->args = [func, tuple_args]
+    Expr first_arg = tuple_args->fields[0];
 
-    if (reshape_only && ShareSameStorage(GetRef<Expr>(op), op->args[0])) {
+    if (reshape_only && ShareSameStorage(GetRef<Expr>(call), first_arg)) {
       auto node = GraphOpNode::make_node_ptr("reshape_nop", GraphAttrs(), "__nop", inputs, attrs);
-      return AddNode(node, GetRef<Expr>(op));
+      return AddNode(node, GetRef<Expr>(call));
     }
 
     // Compute the operator name, because we used the get unique name when generating the kernel.
     auto op_name = _GetUniqueName(func_name);
     auto node = GraphOpNode::make_node_ptr(op_name, GraphAttrs(), func_name, inputs, attrs);
-    return AddNode(node, GetRef<Expr>(op));
+    return AddNode(node, GetRef<Expr>(call));
   }
 
   std::vector<GraphNodeRef> VisitExpr_(const CallNode* call_node) override {

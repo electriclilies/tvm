@@ -47,10 +47,12 @@ constexpr size_t mix(size_t h1, size_t h2) {
  * See te_compiler.cc for where this rewriting occurs.
  */
 DeviceCopyProps GetPrimitiveDeviceCopyProps(const CallNode* call_node) {
-  auto tir_call_attrs = call_node->attrs.as<TIRCallAttrs>();
-  if (tir_call_attrs == nullptr) {
+  if (!(call_node->op == Op::Get("vm.call_tir"))) {
     return {};
   }
+
+  auto tir_call_attrs = call_node->attrs.as<TIRCallAttrs>();
+
   if (tir_call_attrs->metadata.count("source_device") != 1 ||
       tir_call_attrs->metadata.count("dst_device") != 1) {
     return {};

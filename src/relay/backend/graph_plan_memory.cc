@@ -377,12 +377,11 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
       return fn->HasNonzeroAttr(attr::kReshapeOnly);
     }
 
-    if (call->attrs.defined()) {
-      if (auto tir_call_attrs = call->attrs.as<TIRCallAttrs>()) {
-        Map<String, ObjectRef> metadata = tir_call_attrs->metadata;
+    if (call->op == Op::Get("vm.call_tir")) {
+      auto tir_call_attrs = call->attrs.as<TIRCallAttrs>();
+      Map<String, ObjectRef> metadata = tir_call_attrs->metadata;
         return metadata.count(attr::kReshapeOnly) &&
                (Downcast<tvm::Integer>(metadata[attr::kReshapeOnly])->value == 1);
-      }
     }
 
     return false;

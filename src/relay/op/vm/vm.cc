@@ -195,6 +195,55 @@ RELAY_REGISTER_OP("vm.invoke_tvm_op")
                              return {topi::identity(inputs[0])};
                            });
 
+// vm.call_tir
+bool CallTIRRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
+                    const TypeReporter& reporter) {
+  // Types = [func, args, ret_type]
+  ICHECK_EQ(types.size(), 3u);
+  auto func_type = types[0].as<FuncTypeNode>();
+  ICHECK(func_type != nullptr) << "input must be operator with known type";
+  auto input_type = types[1].as<TupleTypeNode>();
+  ICHECK(input_type != nullptr)
+      << "internal invariant violated: invoke_tvm_op inputs must be a tuple";
+  Type ex_output;
+  if (func_type->ret_type.as<TensorTypeNode>()) {
+    ex_output = TupleType({func_type->ret_type});
+  } else {
+    ICHECK(func_type->ret_type.as<TupleTypeNode>()) << "should be tuple type";
+    ex_output = func_type->ret_type;
+  }
+  auto ex_input = TupleType(func_type->arg_types);
+  reporter->Assign(ex_input, GetRef<Type>(input_type));
+
+  reporter->Assign(types[2], ex_output); // TODO(@electriclilies): I think this follows the correct calling convention WRT tuples, but not totally sure.
+  return true;
+}
+
+Expr CallTIR(Expr func, Expr inputs) {
+  return Call(Op::Get("vm.call_tir"), {func, inputs}, Attrs());
+}
+
+TVM_REGISTER_GLOBAL("relay.op.vm.call_tir").set_body_typed(CallTIR);
+
+RELAY_REGISTER_OP("vm.call_tir")
+    .describe(R"code(Invoke an operation compiled by TVM.)code" TVM_ADD_FILELINE)
+    .set_num_inputs(2)
+    .add_argument("op", "Function", "The operation to call")
+    .add_argument("ins", "Tuple", "The input tensors.")
+    .add_type_rel("CallTIRRel", CallTIRRel)
+    .set_support_level(10)
+    .set_attr<TOpPattern>("TOpPattern", kOpaque)
+    .set_attr<TOpIsStateful>("TOpIsStateful", false)
+    .set_attr<TNonComputational>("TNonComputational", true)
+    .set_attr<FInferCorrectLayout>("FInferCorrectLayout", ElemwiseArbitraryLayout)
+    .set_attr<FTVMCompute>("FTVMCompute",
+                           [](const Attrs& attrs, const Array<te::Tensor>& inputs,
+                              const Type& out_dtype) -> Array<te::Tensor> {
+                             return {topi::identity(inputs[0])};
+                           });
+
+// TODO(@electriclilies): What should the FTVMCompute be? I am not sure why it is the identity if the op is non computational.
+
 // vm.reshape
 TVM_REGISTER_NODE_TYPE(ReshapeTensorAttrs);
 

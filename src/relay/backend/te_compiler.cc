@@ -578,9 +578,7 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
 
     Op call_tir = Op::Get("vm.call_tir");
 
-    // Construct attributes to pass to call_tir, which is [func, *visited_args]  
     Array<Expr> args;
-    args.push_back(lowered_func);
     for (const auto& arg : call_node->args) {
       args.push_back(VisitExpr(arg));
     }
@@ -589,7 +587,7 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
     // TODO(@electriclilies): What do we do if we are not in the VM? I think it still makes sense
     // to have call_tir, but the other backends will need to treat it differently...
     // Could also just add dynamic call_tir for VM and leave this as Call(func, args, attrs) for the rest of the backends..
-    return Call(call_tir, args, Attrs(tir_call_attrs), {});
+    return Call(call_tir, {func, Tuple(args)}, Attrs(tir_call_attrs), {});
   }
 
   IRModule module_;

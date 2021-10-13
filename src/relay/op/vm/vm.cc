@@ -204,8 +204,9 @@ bool CallTIRRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   ICHECK(func_type != nullptr) << "input must be operator with known type";
   auto input_type = types[1].as<TupleTypeNode>();
   ICHECK(input_type != nullptr)
-      << "internal invariant violated: invoke_tvm_op inputs must be a tuple";
-  Type ex_output;
+      << "internal invariant violated: call_tir inputs must be a tuple";
+  
+  /*Type ex_output;
   if (func_type->ret_type.as<TensorTypeNode>()) {
     ex_output = TupleType({func_type->ret_type});
   } else {
@@ -214,8 +215,11 @@ bool CallTIRRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   }
   auto ex_input = TupleType(func_type->arg_types);
   reporter->Assign(ex_input, GetRef<Type>(input_type));
-
-  reporter->Assign(types[2], ex_output); // TODO(@electriclilies): I think this follows the correct calling convention WRT tuples, but not totally sure.
+  */
+  // Current calling conv is that Call(PrimFunc, ...) can return either a tuple or Tensor. Going to not
+  // wrap the ret type in a tuple for now and see what happens
+  // reporter->Assign(types[2], ex_output); // TODO(@electriclilies): I think this follows the correct calling convention WRT tuples, but not totally sure.
+  reporter->Assign(types[2], func_type->ret_type);
   return true;
 }
 

@@ -416,6 +416,7 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
    * to the TIR implementation, and attributes to attach to the call to identify it as
    * a TIR call.
    */
+  // TODO: Replace with GlobalVar with Function?
   std::pair<GlobalVar, Attrs> LowerFunction(Function func, Target target) {
     if (func->GetAttr<String>(attr::kCompiler).defined()) {
       // BYOC flow.
@@ -436,6 +437,7 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
 
       // TODO(mbs): Need TIRCallAttrs or equiv so targets know this is an extern.
       // TODO(mbs): Dynamic shapes?
+      // Cached func only has the GlobalVar right now, not the function itself.
       return {ext_func->prim_fn_var, Attrs()};
     }
 
@@ -483,6 +485,7 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
     tir_call_attrs->metadata.Set("relay_attrs", func->attrs);
     tir_call_attrs->metadata.Set("all_prim_fn_vars", all_prim_fn_vars);
 
+
     if (IsDynamic(func->ret_type)) {
       // Also lower the dynamic shape function.
       // Shape function keys use the underlying primitive function as their 'function',
@@ -512,6 +515,8 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
         all_prim_shape_fn_vars.push_back(prim_shape_fn.first);
       }
       tir_call_attrs->metadata.Set("all_prim_shape_fn_vars", all_prim_shape_fn_vars);
+      return {lowered_func->prim_fn_var, Attrs(tir_call_attrs)};
+
     }
 
     return {lowered_func->prim_fn_var, Attrs(tir_call_attrs)};
@@ -571,17 +576,26 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
 
     // Lower the primitive function for that target.
     Function func = Downcast<Function>(prim_func);
-    std::pair<GlobalVar, Attrs> pair = LowerFunction(func, target);
 
+    std::pair<GlobalVar, Attrs> pair = LowerFunction(func, target);
+    
     // Similarly transform arguments.
     Array<Expr> args;
+
     for (const auto& arg : call_node->args) {
       args.push_back(VisitExpr(arg));
     }
+    // TODO: consolidate IsDynamic logic with IsDynamic logic in LowerFunction
+    if (IsDynamic(func->ret_type)) { // Original code
+      // Replace with direct call to lowered primitive, and attach annotations to record calling
+      // convention.
 
-    // Replace with direct call to lowered primitive, and attach annotations to record calling
-    // convention.
-    return Call(pair.first, args, pair.second);
+      return Call(pair.first, args, pair.second);
+
+    } else { // Changed to call_tir (I think this should work in static case as well)
+      Op call_tir = Op::Get("call_tir");
+      return Call(call_tir, {pair.first, Tuple(args)}, Attrs(pair.second), {});
+    }
   }
 
   IRModule module_;

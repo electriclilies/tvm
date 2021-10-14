@@ -178,7 +178,7 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
         }
         Tuple output(outs);
         // TODO(mbs): Capture device in attributes.
-        Expr invoke = Call(Op::Get("vm.invoke_op"), {cn->op, ins, output}, Attrs(), {});
+        Expr invoke = Call(Op::Get("vm.invoke_tvm_op"), {cn->op, ins, output}, Attrs(), {});
         scope.Push(OnDevice(invoke, device_type, /*is_fixed=*/true));
         return ToTupleType(ret_type,
                            std::vector<Expr>(output->fields.begin(), output->fields.end()));

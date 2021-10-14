@@ -572,7 +572,6 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
     // Lower the primitive function for that target.
     Function func = Downcast<Function>(prim_func);
     std::pair<GlobalVar, Attrs> pair = LowerFunction(func, target);
-
     GlobalVar lowered_func = pair.first;
     Attrs tir_call_attrs = pair.second;
 
@@ -582,12 +581,7 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
     for (const auto& arg : call_node->args) {
       args.push_back(VisitExpr(arg));
     }
-
-    // Return call_tir op here. The memory allocator will convert this into vm.invoke_tvm_op (aka call_dps) after allocating memory.
-    // TODO(@electriclilies): What do we do if we are not in the VM? I think it still makes sense
-    // to have call_tir, but the other backends will need to treat it differently...
-    // Could also just add dynamic call_tir for VM and leave this as Call(func, args, attrs) for the rest of the backends..
-    return Call(call_tir, {func, Tuple(args)}, Attrs(tir_call_attrs), {});
+    return Call(call_tir, {pair.first, Tuple(args)}, Attrs(tir_call_attrs), {});
   }
 
   IRModule module_;

@@ -223,8 +223,9 @@ bool CallTIRRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
   return true;
 }
 
-Expr CallTIR(Expr func, Expr inputs) {
-  return Call(Op::Get("vm.call_tir"), {func, inputs}, Attrs());
+Expr CallTIR(Expr func, Expr inputs, Attrs attrs) {
+  ICHECK(func.as<GlobalVarNode>()) << "Function to call should be GlobalVarNode, but got " << func->GetTypeKey();
+  return Call(Op::Get("vm.call_tir"), {func, inputs}, attrs);
 }
 
 TVM_REGISTER_GLOBAL("relay.op.vm.call_tir").set_body_typed(CallTIR);

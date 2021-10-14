@@ -46,6 +46,7 @@
 #include "../transforms/device_aware_visitors.h"
 #include "./te_compiler_cache.h"
 #include "./utils.h"
+#include "../op/vm/vm.h"
 
 namespace tvm {
 namespace relay {
@@ -581,7 +582,7 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
     for (const auto& arg : call_node->args) {
       args.push_back(VisitExpr(arg));
     }
-    return Call(call_tir, {pair.first, Tuple(args)}, Attrs(tir_call_attrs), {});
+    return CallTIR(pair.first, Tuple(args), Attrs(tir_call_attrs)); 
   }
 
   IRModule module_;

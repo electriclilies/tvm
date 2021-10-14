@@ -178,7 +178,7 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
         }
         Tuple output(outs);
         // TODO(mbs): Capture device in attributes.
-        Expr invoke = Call(Op::Get("vm.invoke_tvm_op"), {cn->op, ins, output}, Attrs(), {});
+        Expr invoke = InvokeTVMOp(cn->op, ins, output);
         scope.Push(OnDevice(invoke, device_type, /*is_fixed=*/true));
         return ToTupleType(ret_type,
                            std::vector<Expr>(output->fields.begin(), output->fields.end()));
@@ -373,7 +373,7 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
     }
 
     Tuple tuple_outs(outs);
-    auto call = Call(Op::Get("vm.invoke_tvm_op"), {func, ins, tuple_outs}, Attrs(), {});
+    auto call = InvokeTVMOp(func, ins, tuple_outs);
     auto invoke = OnDevice(call, dev.device_type, /*is_fixed=*/true);
     scope->Push(invoke);
     return ToTupleType(ret_type,

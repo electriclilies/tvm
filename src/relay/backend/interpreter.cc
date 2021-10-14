@@ -677,82 +677,105 @@ class Interpreter : public ExprFunctor<ObjectRef(const Expr& n)>,
   }
 
   ObjectRef VisitExpr_(const CallNode* call_node) final {
-    std::vector<ObjectRef> args;
-    for (auto arg : call_node->args) {
-      args.push_back(Eval(arg));
-    }
 
-    if (call_node->op == OnDeviceOp()) {
-      // Special case: The call 'on_device(expr)' denotes that expr should be executed on
-      // a particular device. We can ignore this during interpretation.
-      ICHECK_EQ(call_node->args.size(), 1UL);
-      return args[0];
-    }
+    if (call_node->op == Op::Get("vm.call_tir")) {
+      // Special case: Call a lowered TIR function.
+  
+      // Evaluate only the arguments stored in the tuple
+      std::vector<ObjectRef> args;
+      for (auto arg : call_node->args[1].as<TupleNode>()->fields) {
+        args.push_back(Eval(arg));
+      }
+      // Get GlobalVar for function
+      const GlobalVarNode* gvn = call_node->args[0].as<GlobalVarNode>();
+      // For some reason, there are Relay funcs here.
+      // Two potential reasons:
+      // 1. Wrong thing is getting passed in construction of call_tir node
+      // 2. Actually need to deal with Relay stuff
+      ICHECK(gvn) << "Expected vm.call_tir to be calling a GlobalVarNode, but got " << call_node->args[0]->GetTypeKey(); // TODO(@electriclilies): Not sure if this could just be a primfunc?
 
-    // We should not find calls to operators after running fusion and lowering.
-    if (const OpNode* op_node = call_node->op.as<OpNode>()) {
-      LOG(FATAL) << "found " << op_node->name
-                 << "; operators should have been removed by previous passes; try "
-                    "fusing and lowering";
-    }
 
-    if (const ConstructorNode* con = call_node->op.as<ConstructorNode>()) {
-      // Special case: ADT constructor
-      return ConstructorValue(con->tag, args, GetRef<Constructor>(con));
-    }
+      const TIRCallAttrs* attrs = call_node->attrs.as<TIRCallAttrs>();
+      ICHECK(attrs) << "vm.call_tir should have TIRCallAttrs attached";
 
-    if (const GlobalVarNode* gvn = call_node->op.as<GlobalVarNode>()) {
-      if (const TIRCallAttrs* attrs = call_node->attrs.as<TIRCallAttrs>()) {
-        // Special case: Call a lowered TIR function.
-        // TODO(mbs): Make calling convention first-class in Relay.
-        Array<GlobalVar> all_prim_fn_vars;
-        if (attrs->metadata.count("all_prim_fn_vars")) {
-          all_prim_fn_vars = Downcast<Array<GlobalVar>>(attrs->metadata.at("all_prim_fn_vars"));
-        }
-        GlobalVar prim_shape_fn_var;
-        if (attrs->metadata.count("prim_shape_fn_var")) {
-          prim_shape_fn_var = Downcast<GlobalVar>(attrs->metadata.at("prim_shape_fn_var"));
-        }
-        Array<GlobalVar> all_prim_shape_fn_vars;
-        if (attrs->metadata.count("all_prim_shape_fn_vars")) {
-          all_prim_shape_fn_vars =
-              Downcast<Array<GlobalVar>>(attrs->metadata.at("all_prim_shape_fn_vars"));
-        }
-        Array<Integer> prim_shape_fn_states;
-        if (attrs->metadata.count("prim_shape_fn_states")) {
-          prim_shape_fn_states =
-              Downcast<Array<Integer>>(attrs->metadata.at("prim_shape_fn_states"));
-        }
-        size_t num_shape_inputs = 0;
-        if (attrs->metadata.count("prim_shape_fn_num_inputs")) {
-          num_shape_inputs = static_cast<size_t>(
-              Downcast<Integer>(attrs->metadata.at("prim_shape_fn_num_inputs"))->value);
-        }
-        size_t num_shape_outputs = 0;
-        if (attrs->metadata.count("prim_shape_fn_num_outputs")) {
-          num_shape_outputs = static_cast<size_t>(
-              Downcast<Integer>(attrs->metadata.at("prim_shape_fn_num_outputs"))->value);
-        }
+      // Special case: Call a lowered TIR function.
+      // TODO(mbs): Make calling convention first-class in Relay.
+      Array<GlobalVar> all_prim_fn_vars;
+      if (attrs->metadata.count("all_prim_fn_vars")) {
+        all_prim_fn_vars = Downcast<Array<GlobalVar>>(attrs->metadata.at("all_prim_fn_vars"));
+      }
+      GlobalVar prim_shape_fn_var;
+      if (attrs->metadata.count("prim_shape_fn_var")) {
+        prim_shape_fn_var = Downcast<GlobalVar>(attrs->metadata.at("prim_shape_fn_var"));
+      }
+      Array<GlobalVar> all_prim_shape_fn_vars;
+      if (attrs->metadata.count("all_prim_shape_fn_vars")) {
+        all_prim_shape_fn_vars =
+            Downcast<Array<GlobalVar>>(attrs->metadata.at("all_prim_shape_fn_vars"));
+      }
+      Array<Integer> prim_shape_fn_states;
+      if (attrs->metadata.count("prim_shape_fn_states")) {
+        prim_shape_fn_states = 
+          Downcast<Array<Integer>>(attrs->metadata.at("prim_shape_fn_states"));
+      }
 
-        return InvokePrimitiveOp(GetRef<GlobalVar>(gvn), all_prim_fn_vars, target_,
-                                 prim_shape_fn_var, all_prim_shape_fn_vars, prim_shape_fn_states,
-                                 num_shape_inputs, num_shape_outputs, cpu_target_, args);
+      size_t num_shape_inputs = 0;
+      if (attrs->metadata.count("prim_shape_fn_num_inputs")) {
+        num_shape_inputs = static_cast<size_t>(
+            Downcast<Integer>(attrs->metadata.at("prim_shape_fn_num_inputs"))->value);
+      }
+      size_t num_shape_outputs = 0;
+      if (attrs->metadata.count("prim_shape_fn_num_outputs")) {
+        num_shape_outputs = static_cast<size_t>(
+            Downcast<Integer>(attrs->metadata.at("prim_shape_fn_num_outputs"))->value);
+      }
+
+      return InvokePrimitiveOp(GetRef<GlobalVar>(gvn), all_prim_fn_vars, target_,
+                                prim_shape_fn_var, all_prim_shape_fn_vars, prim_shape_fn_states,
+                                num_shape_inputs, num_shape_outputs, cpu_target_, args);
+
+    } else {
+      // Evaluate all arguments
+      std::vector<ObjectRef> args;
+      for (auto arg : call_node->args) {
+        args.push_back(Eval(arg));
+      }
+      
+      if (call_node->op == OnDeviceOp()) {
+            // Special case: The call 'on_device(expr)' denotes that expr should be executed on
+            // a particular device. We can ignore this during interpretation.
+            ICHECK_EQ(call_node->args.size(), 1UL);
+            return args[0];
+      }
+      if (const ConstructorNode* con = call_node->op.as<ConstructorNode>()) {
+        // Special case: ADT constructor
+
+        return ConstructorValue(con->tag, args, GetRef<Constructor>(con));
+      }
+    
+      if (const OpNode* op_node = call_node->op.as<OpNode>()) {
+        // Except for call_tir and on_device, we should not find calls to operators after running fusion and lowering.
+        LOG(FATAL) << "found " << op_node->name
+                  << "; operators should have been removed by previous passes; try "
+                      "fusing and lowering";
+      }
+
+      // Now we just evaluate and expect to find a closure.
+      // TODO(@electriclilies): How should call_tir behave with closures?
+      ObjectRef fn_val = Eval(call_node->op);
+      if (const InterpreterClosureObj* closure_node = fn_val.as<InterpreterClosureObj>()) {
+        auto closure = GetRef<InterpreterClosure>(closure_node);
+        return Invoke(closure, args);
+      } else if (const RecClosureObj* closure_node = fn_val.as<RecClosureObj>()) {
+        return Invoke(closure_node->clos, args, closure_node->bind);
+      } else {
+        LOG(FATAL) << "internal error: type error, expected function value in the call "
+                  << "position";
+        return ObjectRef();
       }
     }
-
-    // Now we just evaluate and expect to find a closure.
-    ObjectRef fn_val = Eval(call_node->op);
-    if (const InterpreterClosureObj* closure_node = fn_val.as<InterpreterClosureObj>()) {
-      auto closure = GetRef<InterpreterClosure>(closure_node);
-      return Invoke(closure, args);
-    } else if (const RecClosureObj* closure_node = fn_val.as<RecClosureObj>()) {
-      return Invoke(closure_node->clos, args, closure_node->bind);
-    } else {
-      LOG(FATAL) << "internal error: type error, expected function value in the call "
-                 << "position";
-      return ObjectRef();
-    }
   }
+  
 
   ObjectRef VisitExpr_(const LetNode* let) final {
     if (auto func = let->value.as<FunctionNode>()) {

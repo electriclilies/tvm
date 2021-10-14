@@ -161,6 +161,7 @@ class StorageAllocaBaseVisitor : public transform::DeviceAwareExprVisitor {
    * the result of evaluating \p op.
    */
   void CreateToken(const ExprNode* op, bool can_realloc) {
+    // TODO(@electriclilies): This might not be right
     return CreateTokenOnDevice(op, GetInScopeDeviceType(GetRef<Expr>(op)), can_realloc);
   }
 
@@ -204,15 +205,22 @@ class StorageAllocaInit : protected StorageAllocaBaseVisitor {
 
   using StorageAllocaBaseVisitor::DeviceAwareVisitExpr_;
 
-  void DeviceAwareVisitExpr_(const CallNode* op) final {
+  void DeviceAwareVisitExpr_(const CallNode* call_node) final { // Maybe this should take in a GlobalVar?
     // create token for the call node.
-    CreateToken(op, true);
+    ICHECK(call_node->op == Op::Get("vm.call_tir")) << "Expected call_tir but got " << call_node->op << " \n Type is: " << call_node->op->GetTypeKey();
+
+    CreateToken(call_node, true);
 
     // for each input, visit argument token.
-    for (Expr arg : op->args) {
+    std::cout << "Op is: " << call_node->op << std::endl;
+
+    // Should there be call_tir here?
+    for (Expr arg : call_node->args[1].as<TupleNode>()->fields) {
+      std::cout << "About to call get token for " << arg << std::endl;
       for (StorageToken* tok : GetToken(arg)) {
         tok->ref_counter += 1;
       }
+      std::cout << "Get token successful" << std::endl;
     }
   }
 
@@ -321,10 +329,12 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
   using StorageAllocaBaseVisitor::DeviceAwareVisitExpr_;
 
   // The call map
-  void DeviceAwareVisitExpr_(const CallNode* op) final {
+  void DeviceAwareVisitExpr_(const CallNode* call_node) final {
+    ICHECK(call_node->op == Op::Get("vm.call_tir")) << "Expected call_tir but got " << call_node->op;
+
     std::vector<StorageToken*> args;
     // for each input, visit argument token.
-    for (Expr arg : op->args) {
+    for (Expr arg : call_node->args[1].as<TupleNode>()->fields) {
       for (StorageToken* tok : GetToken(arg)) {
         args.push_back(tok);
       }
@@ -338,20 +348,16 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
     //
     // TODO(tvm-team) Update checks of flat memory enablement when we support
     // opaque-nd memory planning to skip this path.
-    if (IsReshape(op)) {
-      // TODO(@electriclilies, jroesch): This check is failing because the size of args is 3
-      // I can't figure out where the extra args are coming from, I assume it must be related
-      // to the relay_attrs field we added to the TIRCallArgs, but I don't know where / how
-      // that's happening...
+    if (IsReshape(call_node)) {
       ICHECK_EQ(args.size(), 1U);
-      ReuseInputToken(op, args[0]);
+      ReuseInputToken(call_node, args[0]);
     } else {
       // create token for the call node.
-      CreateToken(op, true);
+      CreateToken(call_node, true);
     }
 
     // check if there is orphaned output that can be released immediately.
-    for (StorageToken* tok : token_map_.at(op)) {
+    for (StorageToken* tok : token_map_.at(call_node)) {
       CheckForRelease(tok);
     }
     for (StorageToken* tok : args) {

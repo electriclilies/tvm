@@ -146,7 +146,15 @@ class StorageAllocaBaseVisitor : public transform::DeviceAwareExprVisitor {
    * \return The corresponding token.
    */
   const std::vector<StorageToken*>& GetToken(const Expr& expr) {
+    std::cout << "GetToken called" << std::endl;
     this->VisitExpr(expr);
+    // Return empty if called on a Function
+    if (expr->checked_type().as<FuncTypeNode>()) {
+      std::cout << "Returning empty" << std::endl;
+      static const std::vector<StorageToken*> empty;
+      return empty;
+
+    }
     // See through on_device calls.
     auto props = GetOnDeviceProps(expr);
     Expr real_expr = props.body.defined() ? props.body : expr;
@@ -207,17 +215,18 @@ class StorageAllocaInit : protected StorageAllocaBaseVisitor {
 
   void DeviceAwareVisitExpr_(const CallNode* call_node) final { // Maybe this should take in a GlobalVar?
     // create token for the call node.
-    ICHECK(call_node->op == Op::Get("vm.call_tir")) << "Expected call_tir but got " << call_node->op << " \n Type is: " << call_node->op->GetTypeKey();
-
     CreateToken(call_node, true);
 
     // for each input, visit argument token.
     std::cout << "Op is: " << call_node->op << std::endl;
 
-    // Should there be call_tir here?
-    for (Expr arg : call_node->args[1].as<TupleNode>()->fields) {
+    for (Expr arg : call_node->args) {
       std::cout << "About to call get token for " << arg << std::endl;
+      auto toks = GetToken(arg);
+      // auto toks = GetToken(arg) segfaults but GetToken(arg) doesn't
+      std::cout << "Called GetToken successfully" << std::endl;
       for (StorageToken* tok : GetToken(arg)) {
+        std::cout << "incrementing" << std::endl;
         tok->ref_counter += 1;
       }
       std::cout << "Get token successful" << std::endl;
@@ -330,11 +339,10 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
 
   // The call map
   void DeviceAwareVisitExpr_(const CallNode* call_node) final {
-    ICHECK(call_node->op == Op::Get("vm.call_tir")) << "Expected call_tir but got " << call_node->op;
 
     std::vector<StorageToken*> args;
     // for each input, visit argument token.
-    for (Expr arg : call_node->args[1].as<TupleNode>()->fields) {
+    for (Expr arg : call_node->args) {
       for (StorageToken* tok : GetToken(arg)) {
         args.push_back(tok);
       }

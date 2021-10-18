@@ -199,6 +199,7 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
   }
 
   LoweredOutput Codegen(relay::Function func, String mod_name) {
+    std::cout << "Codegen in graph executor codegen"<< std::endl;
     mod_name_ = mod_name;
     VLOG_CONTEXT << "GraphExecutorCodegen";
     VLOG(1) << "compiling:" << std::endl << PrettyPrint(func);
@@ -212,8 +213,9 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     IRModule mod = IRModule::FromExpr(func);
 
     // TODO(mbs): Why plan memory and update workspace sizes before lowering?
+    std::cout << "Graph plan memory about to be called" << std::endl;
     memory_plan_ = GraphPlanMemory(func);
-
+    std::cout << "Graph plan memory done" << std::endl;
     backend::FunctionInfo func_info;
 
     if (memory_plan_.defined()) {
@@ -222,6 +224,8 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
           relay::tec::UpdateMainWorkspaceSize(mod, targets_, memory_plan_->expr_to_storage_info);
       mod = WithAttr(mod, "main_func_info", func_info);
     }
+
+    std::cout << "workspace size done" << std::endl;
 
     IRModule lowered_mod = tec::LowerTEPass(targets_, mod_name_, [this](Function func) {
       // We need to maintain the constant map for external
@@ -236,6 +240,7 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
       // lowering process directly.
       tec::UpdateFunctionMetadata(func, this->function_metadata_);
     })(mod);
+    std::cout << "lower te pass done" << std::endl;
 
     Optional<backend::FunctionInfo> main_func_info =
         lowered_mod->GetAttr<backend::FunctionInfo>("main_func_info");
@@ -248,7 +253,9 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     //
     // We need to unfortunately re-plan as the previous results have been invalidated by lowering
     // we will fix this in future refactors.
+    std::cout << "REPLANNING from Codegen" << std::endl;
     memory_plan_ = GraphPlanMemory(lowered_main_func);
+    std::cout << "Replan done" << std::endl;
 
     // The graph planner also can not handle planning calls to global variables to we must remap
 
@@ -258,7 +265,13 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
       var_map_[param.get()] = AddNode(node_ptr, param);
     }
 
+    std::cout << "Converted params into input nodes" << std::endl;
+
+    std::cout << "lowered main body: " << lowered_main_func->body << std::endl;
+
+    // What visit expr is this?
     heads_ = VisitExpr(lowered_main_func->body);
+    std::cout << "Visiting lowered_main worked" << std::endl;
     std::ostringstream os;
 
     dmlc::JSONWriter writer(&os);
@@ -271,15 +284,18 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
           param.first,
           std::make_pair(static_cast<int>(param_storage_ids_[param.first]), param.second)));
     }
+    std::cout << "LoweredOutput stuff done" << std::endl;
     ret.function_metadata = std::move(function_metadata_);
 
     Optional<Array<tvm::runtime::Module>> external_modules =
         lowered_mod->GetAttr<Array<tvm::runtime::Module>>("external_mods");
     ICHECK(external_modules) << "Attribute \"external_mods\" should be set at this point.";
-
+    std::cout << "Get external modules from runtime module" << std::endl;
     // This is the point where we separate the functions in the module by target
     ret.lowered_funcs = tec::GetPerTargetModules(lowered_mod);
+    std::cout << "GetPerTargetModules done" << std::endl;
     ret.external_mods = external_modules.value();
+    std::cout << "DONE" << std::endl;
     return ret;
   }
 
@@ -403,22 +419,35 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
     return lhs_storage_id == rhs_storage_id;
   }
 
-  std::vector<GraphNodeRef> GraphAddCallNode(const CallNode* call, const std::string& func_name,
-                                             GraphAttrs attrs) {
+  std::vector<GraphNodeRef> GraphAddCallNode(const CallNode* call_node, GraphAttrs attrs) {
+    
+    relay::Call call = GetRef<Call>(call_node);
+    ICHECK(call->op == Op::Get("vm.call_tir"))
+        << "Non-primitive-call nodes should have been transformed away.\n"
+        << "The graph executor code generator expects all calls to be call_tir, "
+        << "but found: "
+        << std::endl
+        << PrettyPrint(call);
+    // TODO: probably should allow normal calls here too..
+
+    // Get global var node
+    const GlobalVarNode* global_node = call_node->args[0].as<GlobalVarNode>();
+    ICHECK(global_node) << "At this point the graph exectutor expects all primitives to be stored in GlobalVars";
+    
+    std::string func_name = global_node->name_hint;
+
     std::vector<GraphNodeRef> inputs;
-    for (auto arg : call->args) {
-      auto res = VisitExpr(arg);
-      for (auto nr : res) {
-        inputs.push_back(nr);
+    for (int i = 1; i < call_node->args.size(); i++) { // First arg is a GV, which we don't want to visit
+      for (auto n: VisitExpr(call_node->args[i])) {
+        inputs.push_back(n);
       }
     }
 
     /// An adapted version of the storage optimization for the time being.
     bool reshape_only = false;
 
-    if(call->op == Op::Get("vm.call_tir")) {
-      auto tir_call_attrs = call->attrs.as<TIRCallAttrs>();
-      Map<String, ObjectRef> metadata = tir_call_attrs->metadata;
+    auto tir_call_attrs = call_node->attrs.as<TIRCallAttrs>();
+    Map<String, ObjectRef> metadata = tir_call_attrs->metadata;
       if (metadata.count(attr::kReshapeOnly) &&
           Downcast<tvm::Integer>(metadata[attr::kReshapeOnly])->value == 1) {
         reshape_only = true;
@@ -431,38 +460,29 @@ class GraphExecutorCodegen : public backend::MemoizedExprTranslator<std::vector<
           attrs[p.first] = std::string(Downcast<String>(p.second));
         }
       }
-    }
-    Tuple tuple_args = Downcast<Tuple>(call->args[1]); // call->args = [func, tuple_args]
+    
+    Tuple tuple_args = Downcast<Tuple>(call_node->args[1]); // call->args = [func, tuple_args]
     Expr first_arg = tuple_args->fields[0];
 
-    if (reshape_only && ShareSameStorage(GetRef<Expr>(call), first_arg)) {
+    if (reshape_only && ShareSameStorage(GetRef<Expr>(call_node), first_arg)) {
       auto node = GraphOpNode::make_node_ptr("reshape_nop", GraphAttrs(), "__nop", inputs, attrs);
-      return AddNode(node, GetRef<Expr>(call));
+      return AddNode(node, call);
     }
 
     // Compute the operator name, because we used the get unique name when generating the kernel.
     auto op_name = _GetUniqueName(func_name);
     auto node = GraphOpNode::make_node_ptr(op_name, GraphAttrs(), func_name, inputs, attrs);
-    return AddNode(node, GetRef<Expr>(call));
+    return AddNode(node, call);
   }
 
   std::vector<GraphNodeRef> VisitExpr_(const CallNode* call_node) override {
-    relay::Call call = GetRef<Call>(call_node);
     auto props = GetOnDeviceProps(call_node);
     if (props.body.defined()) {
       // See through "on_device" calls.
       return VisitExpr(props.body);
     }
-
-    const auto* global_node = call->op.as<GlobalVarNode>();
-    ICHECK(global_node)
-        << "Non-primitive-call nodes should have been transformed away.\n"
-        << "The graph executor code generator expects all calls to have their callee "
-           "normalized to a GlobalVar, but found:"
-        << std::endl
-        << PrettyPrint(call);
-    auto prim_fn_name = global_node->name_hint;
-    return GraphAddCallNode(call_node, prim_fn_name, GraphAttrs());
+    
+    return GraphAddCallNode(call_node, GraphAttrs());
   }
 
   std::vector<GraphNodeRef> VisitExpr_(const LetNode* op) override {
@@ -632,6 +652,7 @@ class GraphExecutorCodegenModule : public runtime::ModuleNode {
                                                           targets);
       });
     } else if (name == "codegen") {
+      std::cout << "Calling codegen" << std::endl;
       return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
         Function func = args[0];
         String mod_name = args[1];

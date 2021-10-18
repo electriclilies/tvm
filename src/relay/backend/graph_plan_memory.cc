@@ -79,13 +79,14 @@ class StorageAllocaBaseVisitor : public transform::DeviceAwareExprVisitor {
 
   using transform::DeviceAwareExprVisitor::VisitExpr_;
 
-  void VisitExpr_(const ConstantNode* op) final { this->CreateToken(op, false); }
+  void VisitExpr_(const ConstantNode* op) final { std::cout << "const node visit expr" << std::endl; this->CreateToken(op, false); std::cout << "CreateToken done" << std::endl;}
 
   void VisitExpr_(const VarNode* op) final {
     // Do nothing.
   }
 
   void DeviceAwareVisitExpr_(const FunctionNode* func_node) final {
+    std::cout << "visiting function node" << std::endl;
     if (function_nesting() > 1) {
       // do not recurse into sub functions.
       return;
@@ -101,6 +102,7 @@ class StorageAllocaBaseVisitor : public transform::DeviceAwareExprVisitor {
     for (StorageToken* tok : GetToken(func_node->body)) {
       tok->ref_counter += 1;
     }
+    std::cout << "Done visiting func node" << std::endl;
   }
 
   void VisitExpr_(const GlobalVarNode* op) final {
@@ -146,14 +148,15 @@ class StorageAllocaBaseVisitor : public transform::DeviceAwareExprVisitor {
    * \return The corresponding token.
    */
   const std::vector<StorageToken*>& GetToken(const Expr& expr) {
-    std::cout << "GetToken called" << std::endl;
+    // std::cout << "\n\n\nGetToken called on " << expr->GetTypeKey() << "\n\n\n" << std::endl;
     this->VisitExpr(expr);
     // Return empty if called on a Function
+    // OK actually looks like we do want to do stuff for function nodes?
+    // std::cout << "Done visiting " << expr->GetTypeKey() << std::endl;
     if (expr->checked_type().as<FuncTypeNode>()) {
-      std::cout << "Returning empty" << std::endl;
+      // std::cout << "Returning empty" << std::endl;
       static const std::vector<StorageToken*> empty;
       return empty;
-
     }
     // See through on_device calls.
     auto props = GetOnDeviceProps(expr);
@@ -161,6 +164,7 @@ class StorageAllocaBaseVisitor : public transform::DeviceAwareExprVisitor {
     auto it = token_map_.find(real_expr.get());
     ICHECK(it != token_map_.end()) << "Expression not found in storage map:" << std::endl
                                    << PrettyPrint(real_expr);
+    // std::cout << "Returning from GetToken \n\n\n" << std::endl;
     return it->second;
   }
 
@@ -214,6 +218,7 @@ class StorageAllocaInit : protected StorageAllocaBaseVisitor {
   using StorageAllocaBaseVisitor::DeviceAwareVisitExpr_;
 
   void DeviceAwareVisitExpr_(const CallNode* call_node) final { // Maybe this should take in a GlobalVar?
+
     // create token for the call node.
     CreateToken(call_node, true);
 
@@ -222,15 +227,11 @@ class StorageAllocaInit : protected StorageAllocaBaseVisitor {
 
     for (Expr arg : call_node->args) {
       std::cout << "About to call get token for " << arg << std::endl;
-      auto toks = GetToken(arg);
-      // auto toks = GetToken(arg) segfaults but GetToken(arg) doesn't
-      std::cout << "Called GetToken successfully" << std::endl;
       for (StorageToken* tok : GetToken(arg)) {
-        std::cout << "incrementing" << std::endl;
         tok->ref_counter += 1;
       }
-      std::cout << "Get token successful" << std::endl;
     }
+    std::cout << "All done with GetTokens" << std::endl;
   }
 
  private:
@@ -256,10 +257,14 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
 
   // Run storage allocation for a function.
   StaticMemoryPlan Plan(const Function& func) {
+    std::cout << "static memory plan storage allocator" << std::endl;
     VLOG_CONTEXT << "StorageAllocator";
     VLOG(1) << "planning:" << std::endl << PrettyPrint(func);
+    // Failing somewhere in here..
     prototype_ = StorageAllocaInit(&arena_).GetInitTokenMap(func);
+    std::cout << "Initialization done" << std::endl;
     this->Run(func);
+    std::cout << "Ran the func" << std::endl;
 
     // The value of smap contains two integer arrays where the first array
     // contains the planned storage ids and the second holds the device types.
@@ -291,8 +296,10 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
                  << "expressions are assigned with virtual device types. Either all "
                     "or none of the expressions are expected to be annotated.";
     }
-
-    return backend::StaticMemoryPlan(smap);
+    std::cout << "At bottom of Plan, about to do static memory plan again" << std::endl;
+    auto new_plan = backend::StaticMemoryPlan(smap);
+    std::cout << "Second planning done "<< std::endl;
+    return new_plan;
   }
 
  protected:
@@ -356,6 +363,8 @@ class StorageAllocator : public StorageAllocaBaseVisitor {
     //
     // TODO(tvm-team) Update checks of flat memory enablement when we support
     // opaque-nd memory planning to skip this path.
+    
+    // TODO(@electriclilies): rewrite to take call_tir into account... 
     if (IsReshape(call_node)) {
       ICHECK_EQ(args.size(), 1U);
       ReuseInputToken(call_node, args[0]);

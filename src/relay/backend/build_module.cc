@@ -169,6 +169,7 @@ class RelayBuildModule : public runtime::ModuleNode {
    * \return The corresponding member function.
    */
   PackedFunc GetFunction(const std::string& name, const ObjectPtr<Object>& sptr_to_self) final {
+    std::cout << "GetFunction called" << std::endl;
     if (name == "get_graph_json") {
       return PackedFunc(
           [sptr_to_self, this](TVMArgs args, TVMRetValue* rv) { *rv = this->GetGraphJSON(); });
@@ -176,6 +177,7 @@ class RelayBuildModule : public runtime::ModuleNode {
       return PackedFunc(
           [sptr_to_self, this](TVMArgs args, TVMRetValue* rv) { *rv = this->GetModule(); });
     } else if (name == "build") {
+      std::cout << "RelayBuildModule->GetFunction[\"build\"] called, returning PackedFunc wrapping this->Build" << std::endl;
       return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
         ICHECK_EQ(args.num_args, 5);
         this->Build(args[0], args[1], args[2], args[3], args[4]);
@@ -280,6 +282,7 @@ class RelayBuildModule : public runtime::ModuleNode {
    */
   void Build(IRModule mod, const TargetsMap& targets, const tvm::Target& target_host,
              const String executor, const String mod_name) {
+    std::cout << "BUILD!" << std::endl;
     for (const auto& pair : targets) {
       VLOG(0) << "Build target " << pair.first << " = " << pair.second->str();
     }
@@ -294,7 +297,9 @@ class RelayBuildModule : public runtime::ModuleNode {
     target_host_ = target_host;
     executor_ = executor;
     CheckAndUpdateHostConsistency(&targets_, &target_host_);
+    std::cout << "About to build relay" << std::endl;
     BuildRelay(mod, params_, mod_name);
+    std::cout << "BuildRelay successful" << std::endl;
     // Clear compile engine so that tuning schedules can be changed between runs. See issue #6096.
     CompileEngine::Global()->Clear();
   }
@@ -440,6 +445,7 @@ class RelayBuildModule : public runtime::ModuleNode {
   void BuildRelay(IRModule relay_module,
                   const std::unordered_map<std::string, tvm::runtime::NDArray>& params,
                   const String mod_name) {
+    
     Target target_host = GetTargetHost();
     // If no target_host has been set, we choose a default one, which is
     // llvm if "codegen.LLVMModuleCreate" is accessible.
@@ -450,25 +456,36 @@ class RelayBuildModule : public runtime::ModuleNode {
     CheckAndUpdateHostConsistency(&targets_, &target_host);
 
     // Relay IRModule -> IRModule optimizations.
+    std::cout << "OptimizeImpl about to be called" << std::endl;
     relay_module = OptimizeImpl(relay_module, params);
+    std::cout << "OptimizeImpl successful" << std::endl;
 
     // Get the updated function.
     auto func = Downcast<Function>(relay_module->Lookup("main"));
-
+    std::cout << "Looked up main" << std::endl;
     // Generate code for the updated function.
     executor_codegen_ = MakeExecutorCodegen(executor_);
+    std::cout << "make exec codegen done" << std::endl;
     executor_codegen_->Init(nullptr, targets_);
-    executor_codegen_->Codegen(func, mod_name);
-    executor_codegen_->UpdateOutput(&ret_);
-    ret_.params = executor_codegen_->GetParams();
+    std::cout << "init done" << std::endl;
 
+    executor_codegen_->Codegen(func, mod_name);
+    std::cout << "codegen done" << std::endl;
+
+    executor_codegen_->UpdateOutput(&ret_);
+    std::cout << "update output done" << std::endl;
+
+    ret_.params = executor_codegen_->GetParams();
+    std::cout << "get params done" << std::endl;
     auto lowered_funcs = executor_codegen_->GetIRModule();
 
+    std::cout << "Point 1" << std::endl;
     // No need to build for external functions.
     Target ext_dev("ext_dev");
     if (lowered_funcs.find(ext_dev) != lowered_funcs.end()) {
       lowered_funcs.Set(ext_dev, IRModule());
     }
+    std::cout << "Point 2" << std::endl;
 
     // Generate a placeholder function that attaches linked params as its arguments.
     if (target_host->GetAttr<Bool>("link-params").value_or(Bool(false))) {
@@ -491,6 +508,7 @@ class RelayBuildModule : public runtime::ModuleNode {
       lowered_funcs[target_host]->Add(GlobalVar(::tvm::runtime::symbol::tvm_lookup_linked_param),
                                       prim);
     }
+    std::cout << "Point 3" << std::endl;
 
     // When there is no lowered_funcs due to reasons such as optimization.
     if (lowered_funcs.size() == 0) {
@@ -506,6 +524,7 @@ class RelayBuildModule : public runtime::ModuleNode {
     } else {
       ret_.mod = tvm::build(lowered_funcs, target_host_);
     }
+    std::cout << "Point 4" << std::endl;
 
     auto ext_mods = executor_codegen_->GetExternalModules();
     ret_.mod = tvm::codegen::CreateMetadataModule(ret_.params, ret_.mod, ext_mods, GetTargetHost(),
@@ -523,6 +542,8 @@ class RelayBuildModule : public runtime::ModuleNode {
         }
       }
     }
+    std::cout << "Point 5" << std::endl;
+
   }
 
  private:

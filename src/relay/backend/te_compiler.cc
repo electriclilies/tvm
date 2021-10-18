@@ -541,6 +541,7 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
   }
 
   Expr DeviceAwareVisitExpr_(const CallNode* call_node) override {
+    ICHECK(call_node->op != Op::Get("vm.call_tir")) << "Found call_tir";
     Call call = GetRef<Call>(call_node);
     // Look for (indirect) calls to primitives.
     BaseFunc prim_func = ResolveToPrimitive(call_node->op);
@@ -580,8 +581,11 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
 
     Array<Expr> args;
     for (const auto& arg : call_node->args) {
+      std::cout << "Visiting arg: " << arg << std::endl;
       args.push_back(VisitExpr(arg));
+      std::cout << "done" << std::endl;
     }
+    std::cout << "done visiting args" << std::endl;
     return CallTIR(pair.first, Tuple(args), Attrs(tir_call_attrs)); 
   }
 

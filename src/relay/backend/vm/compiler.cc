@@ -493,31 +493,30 @@ class VMFunctionCompiler : DeviceAwareExprFunctor<void(const Expr& n)> {
                                    argument_registers));
   }
 
-  void EmitInvokeTVMOp(const Function& func, const Expr& inputs, const Expr& outputs) {
+  void EmitInvokeTVMOp(const Function& func, const Expr& inputs_and_outputs, int num_inputs) {
     std::vector<Index> argument_registers;
 
     ICHECK(func->HasNonzeroAttr(attr::kPrimitive))
-        << "internal error: invoke_tvm_op requires the first argument to be a primitive "
-           "relay::Function";
+        << "internal error: Function to emit should be a primitive function";
 
-    auto input_tuple = inputs.as<TupleNode>();
-    ICHECK(input_tuple) << "internal error: invoke_tvm_op inputs must be a tuple,"
+    auto ins_and_outs_tuple = inputs_and_outputs.as<TupleNode>();
+    ICHECK(ins_and_outs_tuple) << "internal error: inputs and outputs must be stored together in a tuple"
                         << "please file a bug in the memory manifestation pass";
 
-    auto output_tuple = outputs.as<TupleNode>();
-    ICHECK(output_tuple) << "internal error: invoke_tvm_op outputs must be a tuple,"
-                         << "please file a bug in the memory manifestation pass";
+    int num_ins_outs = ins_and_outs_tuple->fields.size();
+    int num_outs = num_ins_outs - num_inputs;
 
-    for (auto input : input_tuple->fields) {
-      VisitExpr(input);
-      argument_registers.push_back(last_register_);
-    }
-
-    for (auto output : output_tuple->fields) {
-      auto reg = var_register_map_.find(Downcast<Var>(output));
-      ICHECK(reg != var_register_map_.end())
+    for (int i = 0; i < num_ins_outs; i++) {
+      Expr expr = ins_and_outs_tuple->fields[i];
+      if (i < num_inputs) { // Process fn input
+        VisitExpr(expr);
+        argument_registers.push_back(last_register_);
+      } else { // Process fn output
+        auto reg = var_register_map_.find(Downcast<Var>(expr));
+        ICHECK(reg != var_register_map_.end())
           << "internal error: all variables should be in the register mapping";
-      argument_registers.push_back(reg->second);
+        argument_registers.push_back(reg->second);
+      }
     }
 
     Target target;
@@ -558,7 +557,7 @@ class VMFunctionCompiler : DeviceAwareExprFunctor<void(const Expr& n)> {
     // Extract functions attrs
     op_attrs[op_index] = func->attrs->dict;
 
-    Emit(Instruction::InvokePacked(op_index, argument_registers.size(), output_tuple->fields.size(),
+    Emit(Instruction::InvokePacked(op_index, argument_registers.size(), num_outs,
                                    argument_registers));
   }
 
@@ -568,14 +567,25 @@ class VMFunctionCompiler : DeviceAwareExprFunctor<void(const Expr& n)> {
     // First we handle the case in which we are using an opaque
     // operator used to define a sub-dialect, such as memory
     // allocation operations.
+    std::cout << "Device aware visit expr"<< std::endl;
+    if (const TIRCallAttrs* tir_call_attrs = call_node->attrs.as<TIRCallAttrs>()) {
+      if (tir_call_attrs->metadata.count("call_dps") && 
+          (Downcast<Integer>(tir_call_attrs->metadata["dps_call"])->value == 1)) {
+          ICHECK_EQ(call_node->args.size(), 3);
+          ICHECK(tir_call_attrs->metadata.count("num_inputs")) << "Call with destination passing style calling convention should contain the number of inputs in its attributes.";
+          
+          int num_ins = Downcast<Integer>(tir_call_attrs->metadata["num_inputs"])->value;
+
+          std::cout << "call node type: " << call_node->checked_type() << std::endl;
+          std::cout << "call node func type: " << call_node->args[0]->checked_type() << std::endl;
+          EmitInvokeTVMOp(Downcast<Function>(call_node->args[0]), call_node->args[1], num_ins);
+          return;
+      }
+    }
+
     if (op.as<OpNode>()) {
       OpMatch<void> matcher;
       matcher
-          .Match("vm.invoke_tvm_op",
-                 [this](const Array<Expr>& args, const Attrs& attrs, const Array<Type>& type_arg) {
-                   ICHECK_EQ(args.size(), 3);
-                   EmitInvokeTVMOp(Downcast<Function>(args[0]), args[1], args[2]);
-                 })
           .Match("memory.alloc_tensor",
                  [this](const Array<Expr>& args, const Attrs& attrs, const Array<Type>& type_arg) {
                    ICHECK_EQ(args.size(), 3);

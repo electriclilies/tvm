@@ -221,6 +221,12 @@ DeviceDomainPtr DeviceDomains::DomainForCallee(const Call& call) {
     device_copy_props = GetPrimitiveDeviceCopyProps(call.get());
   }
 
+  // Check if the attrs are TIRCallAttrs
+  const TIRCallAttrs* tir_call_attrs;
+  if (call->attrs.defined()) {
+   tir_call_attrs = call->attrs.as<TIRCallAttrs>();
+  }
+
   if (on_device_props.body.defined()) {
     // on_device(expr, device_type=<t>, is_fixed=false)
     // on_device : fn(<t>):?x?
@@ -276,11 +282,9 @@ DeviceDomainPtr DeviceDomains::DomainForCallee(const Call& call) {
     // shape_of: fn(?x?):<cpu>
     args_and_result.emplace_back(Free(call->args[0]->checked_type()));
     args_and_result.emplace_back(cpu_domain_);
-  } else if (call->op == invoke_tvm_op) {
-    ICHECK_EQ(call->args.size(), 3U);
-    // invoke_tvm_op(op, inputs, outputs)
-    // invoke_tvm_op: fn(..., ?x?, ?x?):?x?
-    // where ... is a free domain appropriate for op's type
+  } else if (tir_call_attrs && (Downcast<Integer> (tir_call_attrs->metadata["dps_call"])->value)) {
+    ICHECK_EQ(call->args.size(), 1U);
+    // Call(func, inputs_and_outputs)
     auto free_domain = Free(call->checked_type());
     args_and_result.emplace_back(Free(call->args[0]->checked_type()));
     args_and_result.emplace_back(free_domain);

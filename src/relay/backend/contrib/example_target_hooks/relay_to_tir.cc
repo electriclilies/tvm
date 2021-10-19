@@ -38,6 +38,7 @@ class ConvertAddToSubtract : public MixedModeMutator {
         custom_target_(Target("example_target_hook")) {}
 
   IRModule Mutate() {
+    std::cout << "Mutating" << std::endl;
     GlobalVar main_global_var = ir_module_->GetGlobalVar("main");
     BaseFunc main = ir_module_->Lookup(main_global_var);
     Function main_func = GetRef<Function>(main.as<FunctionNode>());

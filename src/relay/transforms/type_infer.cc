@@ -825,6 +825,7 @@ Pass InferType() {
   auto pass_info = PassInfo(0, "InferType", {});
   return tvm::transform::CreateModulePass(
       [=](IRModule mod, const PassContext& pass_ctx) {
+        std::cout << "Type inference running" << std::endl;
         // Execute the pass function and return a new module.
         IRModule updated_mod = mod->ShallowCopy();
 

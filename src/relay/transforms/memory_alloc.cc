@@ -89,7 +89,7 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
   DialectRewriter(IRModule mod, const Target& target_host)
       : transform::DeviceAwareExprMutator(std::move(mod)), target_host_(target_host) {}
 
-  Function Rewrite(const Function& expr) { return Downcast<Function>(Mutate(expr)); }
+  Function Rewrite(const Function& expr) { std::cout << "Rewrite" << std::endl; return Downcast<Function>(Mutate(expr)); }
 
   Expr VisitExpr_(const TupleNode* tn) final {
     LetList& scope = scopes_.back();
@@ -170,17 +170,28 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
       } else {
         // Handle the static case
         Array<Expr> outs;
+        int num_ins = new_args.size();
+        Array<Expr> ins_and_outs = new_args; // Array to hold combined inputs and outputs (this could get messy with nested tuples)
         for (size_t i = 0; i < out_types.size(); ++i) {
           DLDeviceType device_type = GetInScopeDeviceType(GetRef<Call>(cn));
           // TODO(mbs): Device id is always zero.
           Device device{device_type, /*device_id=*/0};
           auto out = MakeStaticAllocation(&scope, out_types[i], device, std::to_string(i));
           outs.push_back(out);
+          ins_and_outs.push_back(out);
         }
         Tuple output(outs);
+        Tuple ins_and_outs_tuple(ins_and_outs);
         // TODO(mbs): Capture device in attributes.
-        Expr invoke = InvokeTVMOp(cn->op, ins, output);
-        scope.Push(OnDevice(invoke, device_type, /*is_fixed=*/true));
+        // Now we can capture the device in the TIRCallAttrs..
+        auto tir_call_attrs = make_object<TIRCallAttrs>();
+        tir_call_attrs->metadata.Set("dps_call", tvm::Integer(1));
+        tir_call_attrs->metadata.Set("num_inputs", tvm::Integer(num_ins));
+
+        Expr call = Call(cn->op, {ins_and_outs_tuple}, Attrs(tir_call_attrs));
+        scope.Push(OnDevice(call, device_type, /*is_fixed=*/true));
+        std::cout << "ret_type: " << ret_type << std::endl;
+        std::cout << cn->op->checked_type() << std::endl;
         return ToTupleType(ret_type,
                            std::vector<Expr>(output->fields.begin(), output->fields.end()));
       }
@@ -363,6 +374,8 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
     }
 
     Array<Expr> outs;
+    int num_ins = new_args.size();
+    Array<Expr> ins_and_outs = new_args;
     for (size_t i = 0; i < storages.size(); ++i) {
       auto out_shape = out_shapes[i];
       auto out_type = out_types[i];
@@ -370,11 +383,19 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
       auto alloc = OnDevice(AllocTensor(storage, out_shape, out_type->dtype, out_type->shape),
                             dev.device_type, /*is_fixed=*/true);
       Var out_var("out_" + std::to_string(i), Type(nullptr));
-      outs.push_back(scope->Push(out_var, alloc));
+      auto out = scope->Push(out_var, alloc);
+      outs.push_back(out);
+      ins_and_outs.push_back(out);
+
     }
 
     Tuple tuple_outs(outs);
-    auto invoke = OnDevice(InvokeTVMOp(func, ins, tuple_outs), dev.device_type, /*is_fixed=*/true);
+    Tuple ins_and_outs_tuple(ins_and_outs);
+    auto tir_call_attrs = make_object<TIRCallAttrs>();
+    tir_call_attrs->metadata.Set("dps_call", tvm::Integer(1));
+    tir_call_attrs->metadata.Set("num_inputs", tvm::Integer(num_ins));
+    Expr call = Call(func, {ins_and_outs_tuple}, Attrs(tir_call_attrs));
+    auto invoke = OnDevice(call, dev.device_type, /*is_fixed=*/true);
     scope->Push(invoke);
     return ToTupleType(ret_type,
                        std::vector<Expr>(tuple_outs->fields.begin(), tuple_outs->fields.end()));
@@ -421,6 +442,7 @@ Pass ManifestAlloc(Target target_host, Map<tvm::Integer, tvm::Target> targets) {
         mod->ImportFromStd("core.rly");
         mod = relay::transform::InferType()(mod);
 
+
         auto glob_funcs = mod->functions;
         for (const auto& it : glob_funcs) {
           if (auto* func_node = it.second.as<FunctionNode>()) {
@@ -432,7 +454,9 @@ Pass ManifestAlloc(Target target_host, Map<tvm::Integer, tvm::Target> targets) {
           }
         }
 
+        std::cout << "Final manifest alloc type check" << std::endl;
         mod = relay::transform::InferType()(mod);
+        std::cout << "manifest alloc done" << std::endl;
         return mod;
       },
       0, "ManifestAlloc", {});

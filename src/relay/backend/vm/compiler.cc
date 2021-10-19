@@ -569,7 +569,7 @@ class VMFunctionCompiler : DeviceAwareExprFunctor<void(const Expr& n)> {
     // allocation operations.
     std::cout << "Device aware visit expr"<< std::endl;
     if (const TIRCallAttrs* tir_call_attrs = call_node->attrs.as<TIRCallAttrs>()) {
-      if (tir_call_attrs->metadata.count("call_dps") && 
+      if (tir_call_attrs->metadata.count("dps_call") && 
           (Downcast<Integer>(tir_call_attrs->metadata["dps_call"])->value == 1)) {
           ICHECK_EQ(call_node->args.size(), 3);
           ICHECK(tir_call_attrs->metadata.count("num_inputs")) << "Call with destination passing style calling convention should contain the number of inputs in its attributes.";

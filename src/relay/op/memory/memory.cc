@@ -61,6 +61,7 @@ TVM_REGISTER_GLOBAL("relay.op.memory._make.alloc_storage").set_body_typed(AllocS
 
 bool AllocStorageRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                      const TypeReporter& reporter) {
+  std::cout << "alloc storage rel" << std::endl;
   ICHECK_EQ(types.size(), 3u);
   auto size_type = types[0];
   auto tensor_type = size_type.as<TensorTypeNode>();
@@ -76,6 +77,7 @@ bool AllocStorageRel(const Array<Type>& types, int num_inputs, const Attrs& attr
   ICHECK(mod.defined());
   auto storage_name = mod->GetGlobalTypeVar("Storage");
   auto storage = TypeCall(storage_name, {});
+  std::cout << "storage: " << storage << std::endl;
   reporter->Assign(types[2], storage);
   return true;
 }

@@ -192,8 +192,13 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
         scope.Push(OnDevice(call, device_type, /*is_fixed=*/true));
         std::cout << "ret_type: " << ret_type << std::endl;
         std::cout << cn->op->checked_type() << std::endl;
-        return ToTupleType(ret_type,
+        auto tuple_type = ToTupleType(ret_type,
                            std::vector<Expr>(output->fields.begin(), output->fields.end()));
+        std::cout << "Tuple type is: " << tuple_type << std::endl;
+        /*for (auto expr : Downcast<Tuple>(tuple_type)->fields) {
+          std::cout << "Type of " << expr << " is: " << expr->checked_type() << std::endl;
+        }*/
+        return tuple_type;
       }
     } else {
       return transform::DeviceAwareExprMutator::DeviceAwareVisitExpr_(cn);
@@ -442,7 +447,7 @@ Pass ManifestAlloc(Target target_host, Map<tvm::Integer, tvm::Target> targets) {
         mod->ImportFromStd("core.rly");
         mod = relay::transform::InferType()(mod);
 
-
+        std::cout << "Mod before rewriting: \n\n\n" << mod << "\n\n\n" << std::endl;
         auto glob_funcs = mod->functions;
         for (const auto& it : glob_funcs) {
           if (auto* func_node = it.second.as<FunctionNode>()) {
@@ -453,7 +458,7 @@ Pass ManifestAlloc(Target target_host, Map<tvm::Integer, tvm::Target> targets) {
             mod->Update(it.first, updated_func);
           }
         }
-
+        std::cout << "Mod before final type check: \n\n\n" << mod << "\n\n\n" << std::endl;
         std::cout << "Final manifest alloc type check" << std::endl;
         mod = relay::transform::InferType()(mod);
         std::cout << "manifest alloc done" << std::endl;

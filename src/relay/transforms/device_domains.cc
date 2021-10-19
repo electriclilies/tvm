@@ -208,6 +208,17 @@ DeviceDomainPtr DeviceDomains::DomainFor(const Expr& expr) {
   return domain;
 }
 
+bool CallIsDPS(const Call& call) {
+  if (call->attrs.defined()) {
+    if (auto tir_call_attrs = call->attrs.as<TIRCallAttrs>()) {
+      if (tir_call_attrs->metadata.count("dps_call")) {
+        return Downcast<Integer>(tir_call_attrs->metadata["dps_call"])->value;
+      }
+    }
+  }
+  return false;
+}
+
 DeviceDomainPtr DeviceDomains::DomainForCallee(const Call& call) {
   auto itr = call_to_callee_domain_.find(call.get());
   if (itr != call_to_callee_domain_.end()) {
@@ -219,12 +230,6 @@ DeviceDomainPtr DeviceDomains::DomainForCallee(const Call& call) {
   auto device_copy_props = GetDeviceCopyProps(call.get());
   if (!device_copy_props.body.defined()) {
     device_copy_props = GetPrimitiveDeviceCopyProps(call.get());
-  }
-
-  // Check if the attrs are TIRCallAttrs
-  const TIRCallAttrs* tir_call_attrs;
-  if (call->attrs.defined()) {
-   tir_call_attrs = call->attrs.as<TIRCallAttrs>();
   }
 
   if (on_device_props.body.defined()) {
@@ -282,7 +287,7 @@ DeviceDomainPtr DeviceDomains::DomainForCallee(const Call& call) {
     // shape_of: fn(?x?):<cpu>
     args_and_result.emplace_back(Free(call->args[0]->checked_type()));
     args_and_result.emplace_back(cpu_domain_);
-  } else if (tir_call_attrs && (Downcast<Integer> (tir_call_attrs->metadata["dps_call"])->value)) {
+  } else if (CallIsDPS(call)) {
     ICHECK_EQ(call->args.size(), 1U);
     // Call(func, inputs_and_outputs)
     auto free_domain = Free(call->checked_type());

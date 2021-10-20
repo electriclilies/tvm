@@ -189,9 +189,10 @@ bool AllocTensorRel(const Array<Type>& types, int num_inputs, const Attrs& attrs
     ICHECK(alloc_attrs->assert_shape.defined())
         << "the assert_shape must be set when const_shape is not";
     alloc_type = TensorType(alloc_attrs->assert_shape, alloc_attrs->dtype);
-    return true;
+    //return true;
   }
 
+  std::cout << "alloc_type in alloc_tensor: " << alloc_type << std::endl;
   reporter->Assign(types[3], alloc_type);
   return true;
 }

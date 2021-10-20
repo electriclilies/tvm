@@ -188,16 +188,24 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
         tir_call_attrs->metadata.Set("dps_call", tvm::Integer(1));
         tir_call_attrs->metadata.Set("num_inputs", tvm::Integer(num_ins));
 
-        Expr call = Call(cn->op, {ins_and_outs_tuple}, Attrs(tir_call_attrs));
+        // Rewrite the signature of the function so that it matches what we are going to pass in
+        const FunctionNode* func = cn->op.as<FunctionNode>();
+
+
+        Array<Var> params = func->params;
+        // Pad the params with variables for the outputs
+        for (int i = 0; i < outs.size(); i++) {
+          // TODO(@electriclilies): This is not great because what if there is a var called out0 in the func body?
+          // Should I put the type in here?
+          params.push_back(Var("out" + i, relay::Type(), {}));
+        }
+        // THIS NEEDS TO BE A TUPLE NOT JUST ALL THE PARAMS.
+        Function dps_func = Function(Tuple(params), func->body, ret_type, {});
+
+        Expr call = Call(dps_func, {ins_and_outs_tuple}, Attrs(tir_call_attrs));
         scope.Push(OnDevice(call, device_type, /*is_fixed=*/true));
-        std::cout << "ret_type: " << ret_type << std::endl;
-        std::cout << cn->op->checked_type() << std::endl;
         auto tuple_type = ToTupleType(ret_type,
                            std::vector<Expr>(output->fields.begin(), output->fields.end()));
-        std::cout << "Tuple type is: " << tuple_type << std::endl;
-        /*for (auto expr : Downcast<Tuple>(tuple_type)->fields) {
-          std::cout << "Type of " << expr << " is: " << expr->checked_type() << std::endl;
-        }*/
         return tuple_type;
       }
     } else {

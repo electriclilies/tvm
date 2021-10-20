@@ -1144,7 +1144,7 @@ inline const MapNode::mapped_type& MapNode::at(const MapNode::key_type& key) con
 }
 
 inline MapNode::mapped_type& MapNode::at(const MapNode::key_type& key) {
-  TVM_DISPATCH_MAP(this, p, { return p->at(key); });
+  TVM_DISPATCH_MAP(this, p, { return p->at(key); }); 
 }
 
 inline MapNode::iterator MapNode::begin() const {

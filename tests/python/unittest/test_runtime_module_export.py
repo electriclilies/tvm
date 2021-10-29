@@ -20,6 +20,8 @@ import tvm
 from tvm import te
 
 import tvm.testing
+import sys
+import pytest
 
 from tvm.contrib import utils
 
@@ -65,10 +67,8 @@ def generate_engine_module():
 @tvm.testing.uses_gpu
 def test_mod_export():
     def verify_gpu_mod_export(obj_format):
-        for device in ["llvm", "cuda"]:
-            if not tvm.testing.device_enabled(device):
-                print("skip because %s is not enabled..." % device)
-                return
+        if not tvm.testing.device_enabled("cuda") or not tvm.runtime.enabled("llvm"):
+            raise pytest.skip("skip because llvm & cuda are not jointly enabled...")
 
         synthetic_mod, synthetic_params = relay.testing.synthetic.get_workload()
         synthetic_llvm_mod, synthetic_llvm_params = relay.testing.synthetic.get_workload()
@@ -226,4 +226,4 @@ def test_mod_export():
 
 
 if __name__ == "__main__":
-    test_mod_export()
+    sys.exit(pytest.main([__file__] + sys.argv[1:]))

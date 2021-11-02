@@ -305,7 +305,7 @@ class Interpreter : public ExprFunctor<ObjectRef(const Expr& n)>,
 
   ObjectRef Lookup(const Var& local) { return stack_.Lookup(local); }
 
-  ObjectRef Eval(const Expr& expr) { return VisitExpr(expr); }
+  ObjectRef Eval(const Expr& expr) { ICHECK(false) << "testy testy"; VLOG_CONTEXT << "Interpreter is evaluating: " << expr; return VisitExpr(expr); }
 
   ObjectRef VisitExpr_(const VarNode* var_node) final { return Lookup(GetRef<Var>(var_node)); }
 
@@ -905,6 +905,7 @@ class Interpreter : public ExprFunctor<ObjectRef(const Expr& n)>,
 IRModule Prepare(IRModule mod, Device device, Target target) {
   // Things to initialize to pass into tec::LowerTEPass
   // We only have one device-specific target.
+  VLOG(1) << "Preparing IRModule: " << mod;
   tec::TargetMap targets = {{device.device_type, target}};
   if (device.device_type != kDLCPU) {
     // However some primitives (eg dynamic shape functions) must always execute on the CPU,
@@ -931,7 +932,7 @@ IRModule Prepare(IRModule mod, Device device, Target target) {
   transform::PassContext pass_ctx = transform::PassContext::Current();
   With<transform::PassContext> ctx(pass_ctx);
   mod = seq(mod);
-
+  VLOG(1) << "Prepared IRModule: " << mod;
   return mod;
 }
 
@@ -1067,17 +1068,21 @@ ObjectRef Eval(Expr expr, Map<GlobalTypeVar, TypeData> type_definitions,
                std::unordered_set<String> import_set, Device device, Target target) {
   std::pair<IRModule, GlobalVar> mod_and_global =
       IRModule::FromExprInContext(expr, /*global_funcs=*/{}, type_definitions, import_set);
-
+  VLOG(1) << "Preparing IRModule: " << mod_and_global.first;
   IRModule mod = Prepare(mod_and_global.first, device, target);
-
+  VLOG(1) << "Prepared module: " << mod;
   Interpreter intrp(mod, device, target);
+  VLOG(1) << "Constructed interpreter";
   Expr expr_to_eval = mod->GetGlobalVar(mod_and_global.second->name_hint);
+  // TODO(@electriclilies): Does this need to be changed? I am not sure that we want the interpreter to
+  // secretly be evaling a Call(fn, ..)
   if (expr.as<BaseFuncNode>() == nullptr) {
     // TODO(mbs): IRModule::FromExpr will implicitly close over the free vars of expr
     // unless it is a function, so we must reverse that in the expression to eval.
     // This should done more systematically.
     expr_to_eval = Call(expr_to_eval, {});
   }
+  VLOG(1) << "Calling Eval";
   return intrp.Eval(expr_to_eval);
 }
 

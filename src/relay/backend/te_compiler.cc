@@ -425,6 +425,8 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
    *  nullptr if none.
    */
   BaseFunc ResolveToPrimitive(Expr expr) {
+    // if is call_lowered:
+      // return Function();
     if (const GlobalVarNode* gvn = expr.as<GlobalVarNode>()) {
       BaseFunc base_func = module_->Lookup(GetRef<GlobalVar>(gvn));
       return ResolveToPrimitive(base_func);
@@ -580,14 +582,30 @@ class LowerTensorExprMutator : public DeviceAwareExprMutator {
 
   Expr DeviceAwareVisitExpr_(const CallNode* call_node) override {
     Call call = GetRef<Call>(call_node);
+    ICHECK(!call_node->op.as<OpNode>()) << "Didn't expect to find an op node here";
+    std::cout << "\ncall node op: " << call_node->op;
+    // Do we expect there to be any ops left in here? I don't think so..
+    //ICHECK(!call_node->op.as<OpNode>()) << "Found op: " << call_node->op;
+    if (call_node->op.as<OpNode>()) {
+      return GetRef<Call>(call_node);
+      std::cout << "CALL NODE IS AN OP!" << std::endl;
+    }
     // Look for (indirect) calls to primitives.
     BaseFunc prim_func = ResolveToPrimitive(call_node->op);
+
     if (!prim_func.defined()) {
+      std::cout << "Not a primitive" << std::endl;
       // Not a call_node to a primitive function.
       if (const FunctionNode* fn = call_node->op.as<FunctionNode>()) {
+        std::cout << "Is a fn node" << std::endl;
         this->process_fn_(GetRef<Function>(fn));
       }
-      return ExprMutator::VisitExpr_(call_node);
+      std::cout << "Visiting expr of call node: " << GetRef<Call>(call_node) << std::endl;
+      auto expr = ExprMutator::VisitExpr_(call_node);
+      std::cout << "mutated expr is: " << GetRef<Call>(call_node) << std::endl;
+      return expr;
+      // Seems like this isn't doing anything??
+      // Where are relay ops actually turned into functions?
     }
 
     // Already lowered by other means so we don't need to mutate
@@ -897,9 +915,9 @@ void UpdateFunctionMetadata(Function relay_func,
 IRModule LowerTE(const IRModule& module, TargetMap targets, const String& module_name,
                  std::function<void(Function)> process_fn) {
   TECompiler compiler;
-
+  VLOG(1) << "Input module: \n" << module;
   auto updated_module = LowerTensorExpr(targets, module_name, compiler, process_fn)(module);
-
+  VLOG(1) << "Updated module: \n" << updated_module;
   backend::UpdateAutoSchedulerOpWeights(compiler);
 
   // Copy the lowered functions into the return module

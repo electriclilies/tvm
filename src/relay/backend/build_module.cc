@@ -448,8 +448,9 @@ class RelayBuildModule : public runtime::ModuleNode {
     CheckAndUpdateHostConsistency(&targets_, &target_host);
 
     // Relay IRModule -> IRModule optimizations.
+    VLOG(1) << "Optimizing...";
     relay_module = OptimizeImpl(relay_module, params);
-
+    VLOG(1) << "Optimized module: " << relay_module;
     // Get the updated function.
     auto func = Downcast<Function>(relay_module->Lookup("main"));
 

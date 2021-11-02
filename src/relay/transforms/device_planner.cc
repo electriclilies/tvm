@@ -847,18 +847,25 @@ class DeviceCapturer : public ExprMutator {
   }
 
   Expr VisitExpr_(const CallNode* call_node) final {
+    VLOG(1) << "VisitExpr_(CallNode*) in device planner";
+    // IS THIS SUPPOSED TO BE CALLED DURING MUTATE?
     auto call = GetRef<Call>(call_node);
     DLDeviceType call_device_type = GetDeviceType(call);
 
+    // This seems a bit weird.
+    VLOG(1) << "Getting on device props for " << call;
     auto on_device_props = GetOnDeviceProps(call_node);
+    VLOG(1) << "Got on device props";
     if (on_device_props.body.defined()) {
       // We're done with the original "on_device" calls and can pinch them out.
       // Note that this step has already been simulated by GetDeviceType.
+      VLOG(1) << "Visiting on_device_props.body: " << on_device_props.body;
       return VisitExpr(on_device_props.body);
     }
-
+    // Is this supposed to be called 2x? what was the other GetDeviceCopyProps 
     auto device_copy_props = GetDeviceCopyProps(call_node);
     if (device_copy_props.body.defined()) {
+      VLOG(1) << "device_copy_props.body: " << device_copy_props.body;
       DLDeviceType src_device_type = device_copy_props.src_dev_type;
       ICHECK_EQ(call_device_type, device_copy_props.dst_dev_type);
       if (call_device_type == src_device_type) {
@@ -866,6 +873,7 @@ class DeviceCapturer : public ExprMutator {
         // match.
         return VisitExpr(device_copy_props.body);
       }
+      VLOG(1) << "device_copy_props.body is not defined";
       // else: handle as for any other call.
     }
 
@@ -878,11 +886,12 @@ class DeviceCapturer : public ExprMutator {
     ICHECK_NE(result_device_type, kInvalidDeviceType);
 
     // The callee is on the current device.
+    VLOG(1) << "VisitChild about to be called for: " << call_node->op;
     Expr op = VisitChild(
         /*lexical_device_type=*/call_device_type,
         /*expected_device_type=*/call_device_type,
         /*child_device_type=*/result_device_type, call_node->op);
-
+    VLOG(1) << "VisitChild complete";
     // Each argument can be on the device for the corresponding function parameter. However if
     // any of those differ from the overall call device then wrap them in an "on_device" to
     // help downstream transforms track devices lexically.
@@ -894,11 +903,13 @@ class DeviceCapturer : public ExprMutator {
       ICHECK_NE(param_device_type, kInvalidDeviceType)
           << "for parameter " << i << " for call:" << std::endl
           << PrettyPrint(call);
+      VLOG(1) << "VisitChild about to be called on arg: " << call_node->args[i];
       args.push_back(VisitChild(/*lexical_device_type=*/call_device_type,
                                 /*expected_device_type=*/param_device_type,
                                 /*child_device_type=*/GetDeviceType(call_node->args[i]),
                                 call_node->args[i]));
     }
+    VLOG(1) << "Processed call args";
     // TODO(mbs): Avoid copy
     return Call(std::move(op), std::move(args), call_node->attrs, call_node->type_args,
                 call_node->span);

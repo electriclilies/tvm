@@ -245,7 +245,7 @@ class ConstantFolder : public MixedModeMutator {
   // Constant evaluate an expression.
   Expr ConstEvaluate(const Expr& expr) {
     VLOG_CONTEXT << "ConstEvaluate";
-    VLOG(1) << "Evaluating :" << std::endl << PrettyPrint(expr);
+    VLOG(1) << "Evaluating: " << std::endl << PrettyPrint(expr);
 
     // We'll invoke the interpreter using the generic CPU device and target. Technically there's
     // no guarantee the results we bitwise equal what we'd get on the true device, however to
@@ -259,8 +259,10 @@ class ConstantFolder : public MixedModeMutator {
     // needed for both execution and creation(due to JIT)
     With<transform::PassContext> fresh_build_ctx(transform::PassContext::Create());
 
+    auto obj = Eval(expr, module_->type_definitions, module_->Imports(), dev, target);
+    VLOG(1) << "Evaluated to object: " << obj;
     Expr result =
-        ObjectToExpr(Eval(expr, module_->type_definitions, module_->Imports(), dev, target));
+        ObjectToExpr(obj);
     VLOG(1) << "Evaluated to constant:" << std::endl << PrettyPrint(result);
     return result;
   }

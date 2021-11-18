@@ -92,7 +92,7 @@ Array<te::Tensor> ReshapeCompute(const Attrs& attrs, const Array<te::Tensor>& in
 Expr MakeReshape(Expr data, Expr newshape) {
   auto attrs = make_object<ReshapeAttrs>();
   static const Op& op = Op::Get("dyn.reshape");
-  return Call(op, {data, newshape}, Attrs(attrs), {});
+  return MyCall(op, {data, newshape}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.reshape").set_body_typed(MakeReshape);
@@ -188,7 +188,7 @@ Array<te::Tensor> TileCompute(const Attrs& attrs, const Array<te::Tensor>& input
 Expr MakeTile(Expr data, Expr reps) {
   auto attrs = make_object<TileAttrs>();
   static const Op& op = Op::Get("dyn.tile");
-  return Call(op, {data, reps}, Attrs(attrs), {});
+  return MyCall(op, {data, reps}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.tile").set_body_typed(MakeTile);
@@ -242,7 +242,7 @@ bool BroadCastToRel(const Array<Type>& types, int num_inputs, const Attrs& attrs
 Expr MakeBroadCastTo(Expr data, Expr shape) {
   static const Op& op = Op::Get("dyn.broadcast_to");
   auto attrs = make_object<InitOpAttrs>();
-  return Call(op, {data, shape}, Attrs(attrs), {});
+  return MyCall(op, {data, shape}, Attrs(attrs), {});
 }
 
 Array<te::Tensor> BroadCastToCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
@@ -289,7 +289,7 @@ Expr MakeZeros(Expr shape, DataType dtype) {
   auto attrs = make_object<InitOpAttrs>();
   attrs->dtype = std::move(dtype);
   static const Op& op = Op::Get("dyn.zeros");
-  return Call(op, {shape}, Attrs(attrs), {});
+  return MyCall(op, {shape}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.zeros").set_body_typed(MakeZeros);
@@ -308,7 +308,7 @@ Expr MakeOnes(Expr shape, DataType dtype) {
   auto attrs = make_object<InitOpAttrs>();
   attrs->dtype = std::move(dtype);
   static const Op& op = Op::Get("dyn.ones");
-  return Call(op, {shape}, Attrs(attrs), {});
+  return MyCall(op, {shape}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.ones").set_body_typed(MakeOnes);
@@ -362,7 +362,7 @@ Expr MakeOneHot(Expr indices, Expr on_value, Expr off_value, Expr depth, int axi
   attrs->axis = axis;
   attrs->dtype = dtype;
   static const Op& op = Op::Get("dyn.one_hot");
-  return Call(op, {indices, on_value, off_value, depth}, Attrs(attrs), {});
+  return MyCall(op, {indices, on_value, off_value, depth}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.one_hot").set_body_typed(MakeOneHot);
@@ -429,7 +429,7 @@ Expr MakeFull(Expr fill_value, Expr shape, DataType dtype) {
   auto attrs = make_object<InitOpAttrs>();
   attrs->dtype = std::move(dtype);
   static const Op& op = Op::Get("dyn.full");
-  return Call(op, {fill_value, shape}, Attrs(attrs), {});
+  return MyCall(op, {fill_value, shape}, Attrs(attrs), {});
 }
 Array<te::Tensor> FullCompute(const Attrs& attrs, const Array<te::Tensor>& inputs,
                               const Type& out_type) {
@@ -505,7 +505,7 @@ Expr MakeStridedSlice(Expr data, Expr begin, Expr end, Expr strides, String slic
   auto attrs = make_object<StridedSliceAttrs>();
   attrs->slice_mode = slice_mode;
   static const Op& op = Op::Get("dyn.strided_slice");
-  return Call(op, {data, begin, end, strides}, Attrs(attrs), {});
+  return MyCall(op, {data, begin, end, strides}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.strided_slice").set_body_typed(MakeStridedSlice);
@@ -588,7 +588,7 @@ Array<te::Tensor> SparseToDenseCompute(const Attrs& attrs, const Array<te::Tenso
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.sparse_to_dense")
     .set_body_typed([](Expr indices, Expr output_shape, Expr values, Expr default_value) {
       static const Op& op = Op::Get("dyn.sparse_to_dense");
-      return Call(op, {indices, values, default_value, output_shape});
+      return MyCall(op, {indices, values, default_value, output_shape});
     });
 
 RELAY_REGISTER_OP("dyn.sparse_to_dense")
@@ -672,7 +672,7 @@ Expr MakeExpandDims(Expr data, Expr axis_tensor, int num_newaxis) {
   auto attrs = make_object<DynExpandDimsAttrs>();
   attrs->num_newaxis = num_newaxis;
   static const Op& op = Op::Get("dyn.expand_dims");
-  return Call(op, {data, axis_tensor}, Attrs(attrs), {});
+  return MyCall(op, {data, axis_tensor}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.expand_dims").set_body_typed(MakeExpandDims);
@@ -727,7 +727,7 @@ Array<te::Tensor> SqueezeCompute(const Attrs& attrs, const Array<te::Tensor>& in
 Expr MakeDynSqueeze(Expr data, Expr axes) {
   auto attrs = make_object<SqueezeAttrs>();
   static const Op& op = Op::Get("dyn.squeeze");
-  return Call(op, {data, axes}, Attrs(attrs), {});
+  return MyCall(op, {data, axes}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn._make.squeeze").set_body_typed(MakeDynSqueeze);

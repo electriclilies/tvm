@@ -273,7 +273,7 @@ Expr MakeEthosuBinaryElementwise(Expr ifm, Expr ifm2, Expr lut, String operator_
   attrs->ofm_dtype = std::move(ofm_dtype);
 
   static const Op& op = Op::Get("contrib.ethosu.binary_elementwise");
-  return Call(op, {ifm, ifm2, lut}, Attrs(attrs), {});
+  return MyCall(op, {ifm, ifm2, lut}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.ethosu_binary_elementwise")

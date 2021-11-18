@@ -100,7 +100,7 @@ Expr MakePad(Expr data, Expr pad_width, Expr pad_value, String pad_mode) {
   auto attrs = make_object<PadAttrs>();
   attrs->pad_mode = std::move(pad_mode);
   static const Op& op = Op::Get("dyn.nn.pad");
-  return Call(op, {data, pad_width, pad_value}, Attrs(attrs), {});
+  return MyCall(op, {data, pad_width, pad_value}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn.nn._make.pad").set_body_typed(MakePad);

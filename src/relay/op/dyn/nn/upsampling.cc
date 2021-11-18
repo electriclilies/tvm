@@ -82,7 +82,7 @@ Expr MakeUpSampling(Expr data, Expr scale_h, Expr scale_w, String layout, String
   attrs->align_corners = align_corners;
 
   static const Op& op = Op::Get("dyn.nn.upsampling");
-  return Call(op, {data, scale_h, scale_w}, Attrs(attrs), {});
+  return MyCall(op, {data, scale_h, scale_w}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn.nn._make.upsampling").set_body_typed(MakeUpSampling);
@@ -157,7 +157,7 @@ Expr MakeUpSampling3D(Expr data, Expr scale_d, Expr scale_h, Expr scale_w, Strin
   attrs->coordinate_transformation_mode = coordinate_transformation_mode;
 
   static const Op& op = Op::Get("dyn.nn.upsampling3d");
-  return Call(op, {data, scale_d, scale_h, scale_w}, Attrs(attrs), {});
+  return MyCall(op, {data, scale_d, scale_h, scale_w}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn.nn._make.upsampling3d").set_body_typed(MakeUpSampling3D);

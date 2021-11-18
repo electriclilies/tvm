@@ -52,7 +52,7 @@ namespace relay {
 #define RELAY_REGISTER_UNARY_OP(OpName)                                        \
   TVM_REGISTER_GLOBAL("relay.op._make." OpName).set_body_typed([](Expr data) { \
     static const Op& op = Op::Get(OpName);                                     \
-    return Call(op, {data}, Attrs(), {});                                      \
+    return MyCall(op, {data}, Attrs(), {});                                      \
   });                                                                          \
   RELAY_REGISTER_OP(OpName)                                                    \
       .set_num_inputs(1)                                                       \
@@ -75,7 +75,7 @@ namespace relay {
 #define RELAY_REGISTER_BINARY_OP(OpName)                                                \
   TVM_REGISTER_GLOBAL("relay.op._make." OpName).set_body_typed([](Expr lhs, Expr rhs) { \
     static const Op& op = Op::Get(OpName);                                              \
-    return Call(op, {lhs, rhs}, Attrs(), {});                                           \
+    return MyCall(op, {lhs, rhs}, Attrs(), {});                                           \
   });                                                                                   \
   RELAY_REGISTER_OP(OpName)                                                             \
       .set_num_inputs(2)                                                                \
@@ -90,7 +90,7 @@ namespace relay {
 #define RELAY_REGISTER_CMP_OP(OpName)                                                   \
   TVM_REGISTER_GLOBAL("relay.op._make." OpName).set_body_typed([](Expr lhs, Expr rhs) { \
     static const Op& op = Op::Get(OpName);                                              \
-    return Call(op, {lhs, rhs}, Attrs(), {});                                           \
+    return MyCall(op, {lhs, rhs}, Attrs(), {});                                           \
   });                                                                                   \
   RELAY_REGISTER_OP(OpName)                                                             \
       .set_num_inputs(2)                                                                \
@@ -124,9 +124,10 @@ class OpMatch {
    * \param call The call to rewrite.
    * \return The result of rewriting.
    */
-  inline R operator()(const Call& call) {
-    auto it = match_map_.find(Downcast<Op>(call->op));
+  inline R operator()(const MyCall& call) {
+    auto it = match_map_.find(Downcast<Op>(call->op)); // What populates this map?
     if (it != match_map_.end()) {
+      // This calls MatchFunc for that operator, not sure where that is defined.
       return it->second(call->args, call->attrs, call->type_args);
     } else {
       if (default_ != nullptr) {

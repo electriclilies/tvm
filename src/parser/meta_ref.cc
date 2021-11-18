@@ -60,7 +60,7 @@ Expr MetaRef(std::string type_key, uint64_t node_index) {
   auto attrs = make_object<MetaRefAttrs>();
   attrs->node_type_key = tvm::String(type_key);
   attrs->node_index = node_index;
-  return Call(op, {}, Attrs(attrs), {});
+  return MyCall(op, {}, Attrs(attrs), {});
 }
 
 struct MetaRefExpander : public ExprMutator {

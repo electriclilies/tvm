@@ -78,7 +78,7 @@ Expr MakeTopK(Expr data, int k, int axis, String ret_type, bool is_ascend, DataT
   attrs->is_ascend = is_ascend;
   attrs->dtype = dtype;
   static const Op& op = Op::Get("topk");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.topk").set_body_typed(MakeTopK);

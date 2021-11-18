@@ -58,7 +58,7 @@ Expr MakeCorrelation(Expr data1, Expr data2, int kernel_size, int max_displaceme
   attrs->is_multiply = is_multiply;
   attrs->layout = std::move(layout);
   static const Op& op = Op::Get("nn.correlation");
-  return Call(op, {data1, data2}, Attrs(attrs), {});
+  return MyCall(op, {data1, data2}, Attrs(attrs), {});
 }
 
 bool CorrelationRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,

@@ -40,7 +40,7 @@ Expr MakeConvWinogradWeightTransform(Expr weight, int tile_size, std::string op_
   auto attrs = make_object<ConvWinogradWeightTransformAttrs>();
   attrs->tile_size = tile_size;
   const Op& op = Op::Get(op_name);
-  return Call(op, {weight}, Attrs(attrs), {});
+  return MyCall(op, {weight}, Attrs(attrs), {});
 }
 
 Expr MakeConvGemmWeightTransform(Expr weight, int tile_rows, int tile_cols, std::string op_name) {
@@ -48,7 +48,7 @@ Expr MakeConvGemmWeightTransform(Expr weight, int tile_rows, int tile_cols, std:
   attrs->tile_rows = tile_rows;
   attrs->tile_cols = tile_cols;
   const Op& op = Op::Get(op_name);
-  return Call(op, {weight}, Attrs(attrs), {});
+  return MyCall(op, {weight}, Attrs(attrs), {});
 }
 
 // relay.nn.conv1d
@@ -407,7 +407,7 @@ Expr MakeConv2DWinogradNNPACKWeightTransform(Expr weight, int convolution_algori
   attrs->convolution_algorithm = convolution_algorithm;
   attrs->out_dtype = std::move(out_dtype);
   static const Op& op = Op::Get("nn.contrib_conv2d_winograd_nnpack_weight_transform");
-  return Call(op, {weight}, Attrs(attrs), {});
+  return MyCall(op, {weight}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.contrib_conv2d_winograd_nnpack_weight_transform")

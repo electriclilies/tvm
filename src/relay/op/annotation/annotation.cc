@@ -40,7 +40,7 @@ namespace relay {
 
 Expr StopFusion(Expr data) {
   static const Op& op = Op::Get("annotation.stop_fusion");
-  return Call(op, {data}, Attrs{}, {});
+  return MyCall(op, {data}, Attrs{}, {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.annotation._make.stop_fusion").set_body_typed([](Expr data) {
@@ -70,7 +70,7 @@ Expr CastHint(Expr data, DataType dtype) {
   auto attrs = make_object<CastHintAttrs>();
   attrs->dtype = dtype;
   static const Op& op = Op::Get("annotation.cast_hint");
-  return Call(op, {data}, Attrs{attrs}, {});
+  return MyCall(op, {data}, Attrs{attrs}, {});
 }
 
 RELAY_REGISTER_OP("annotation.cast_hint")
@@ -125,7 +125,7 @@ Mark the end of bitpacking.
 
 TVM_REGISTER_GLOBAL("relay.op.annotation._make.checkpoint").set_body_typed([](Expr data) {
   static const Op& op = Op::Get("annotation.checkpoint");
-  return Call(op, {data}, Attrs{}, {});
+  return MyCall(op, {data}, Attrs{}, {});
 });
 
 RELAY_REGISTER_OP("annotation.checkpoint")
@@ -173,7 +173,7 @@ TVM_REGISTER_GLOBAL("relay.op.annotation._make.compiler_begin")
       auto attrs = make_object<CompilerAttrs>();
       attrs->compiler = compiler;
       static const Op& op = Op::Get("annotation.compiler_begin");
-      return Call(op, {expr}, Attrs(attrs), {});
+      return MyCall(op, {expr}, Attrs(attrs), {});
     });
 
 RELAY_REGISTER_OP("annotation.compiler_end")
@@ -198,7 +198,7 @@ TVM_REGISTER_GLOBAL("relay.op.annotation._make.compiler_end")
       auto attrs = make_object<CompilerAttrs>();
       attrs->compiler = compiler;
       static const Op& op = Op::Get("annotation.compiler_end");
-      return Call(op, {expr}, Attrs(attrs), {});
+      return MyCall(op, {expr}, Attrs(attrs), {});
     });
 
 }  // namespace relay

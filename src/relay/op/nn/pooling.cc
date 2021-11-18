@@ -314,7 +314,7 @@ Expr MakeGlobalAvgPool2D(Expr data, String layout, String out_layout) {
   attrs->layout = std::move(layout);
   attrs->out_layout = std::move(out_layout);
   static const Op& op = Op::Get("nn.global_avg_pool2d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.global_avg_pool2d").set_body_typed(MakeGlobalAvgPool2D);
@@ -343,7 +343,7 @@ Expr MakeGlobalMaxPool2D(Expr data, String layout, String out_layout) {
   attrs->layout = std::move(layout);
   attrs->out_layout = std::move(out_layout);
   static const Op& op = Op::Get("nn.global_max_pool2d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.global_max_pool2d").set_body_typed(MakeGlobalMaxPool2D);
@@ -438,7 +438,7 @@ Expr MakeAdaptiveAvgPool1D(Expr data, Array<IndexExpr> output_size, String layou
   attrs->layout = std::move(layout);
   attrs->out_layout = std::move(out_layout);
   static const Op& op = Op::Get("nn.adaptive_avg_pool1d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.adaptive_avg_pool1d").set_body_typed(MakeAdaptiveAvgPool1D);
@@ -473,7 +473,7 @@ Expr MakeAdaptiveMaxPool1D(Expr data, Array<IndexExpr> output_size, String layou
   attrs->layout = std::move(layout);
   attrs->out_layout = std::move(out_layout);
   static const Op& op = Op::Get("nn.adaptive_max_pool1d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.adaptive_max_pool1d").set_body_typed(MakeAdaptiveMaxPool1D);
@@ -590,7 +590,7 @@ Expr MakeAdaptiveAvgPool2D(Expr data, Array<IndexExpr> output_size, String layou
   attrs->layout = std::move(layout);
   attrs->out_layout = std::move(out_layout);
   static const Op& op = Op::Get("nn.adaptive_avg_pool2d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.adaptive_avg_pool2d").set_body_typed(MakeAdaptiveAvgPool2D);
@@ -627,7 +627,7 @@ Expr MakeAdaptiveMaxPool2D(Expr data, Array<IndexExpr> output_size, String layou
   attrs->layout = std::move(layout);
   attrs->out_layout = std::move(out_layout);
   static const Op& op = Op::Get("nn.adaptive_max_pool2d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.adaptive_max_pool2d").set_body_typed(MakeAdaptiveMaxPool2D);
@@ -761,7 +761,7 @@ Expr MakeAdaptiveMaxPool3D(Expr data, Array<IndexExpr> output_size, String layou
   attrs->layout = std::move(layout);
   attrs->out_layout = std::move(out_layout);
   static const Op& op = Op::Get("nn.adaptive_max_pool3d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.adaptive_max_pool3d").set_body_typed(MakeAdaptiveMaxPool3D);
@@ -798,7 +798,7 @@ Expr MakeAdaptiveAvgPool3D(Expr data, Array<IndexExpr> output_size, String layou
   attrs->layout = std::move(layout);
   attrs->out_layout = std::move(out_layout);
   static const Op& op = Op::Get("nn.adaptive_avg_pool3d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.adaptive_avg_pool3d").set_body_typed(MakeAdaptiveAvgPool3D);
@@ -896,7 +896,7 @@ Expr MakeMaxPool2DGrad(Expr out_grad, Expr data, Array<IndexExpr> pool_size,
   attrs->out_layout = std::move(out_layout);
   attrs->ceil_mode = ceil_mode;
   static const Op& op = Op::Get("nn.max_pool2d_grad");
-  return Call(op, {out_grad, data}, Attrs(attrs), {});
+  return MyCall(op, {out_grad, data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.max_pool2d_grad").set_body_typed(MakeMaxPool2DGrad);
@@ -945,7 +945,7 @@ Expr MakeAvgPool2DGrad(Expr out_grad, Expr data, Array<IndexExpr> pool_size,
   attrs->ceil_mode = ceil_mode;
   attrs->count_include_pad = count_include_pad;
   static const Op& op = Op::Get("nn.avg_pool2d_grad");
-  return Call(op, {out_grad, data}, Attrs(attrs), {});
+  return MyCall(op, {out_grad, data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.avg_pool2d_grad").set_body_typed(MakeAvgPool2DGrad);

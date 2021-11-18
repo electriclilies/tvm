@@ -51,7 +51,7 @@ Expr OnDevice(Expr expr, SEScope se_scope, bool is_fixed) {
   attrs->se_scope = std::move(se_scope);
   attrs->is_fixed = is_fixed;
   Span span = expr->span;
-  return Call(OnDeviceOp(), {std::move(expr)}, Attrs(std::move(attrs)), /*type_args=*/{},
+  return MyCall(OnDeviceOp(), {std::move(expr)}, Attrs(std::move(attrs)), /*type_args=*/{},
               std::move(span));
 }
 

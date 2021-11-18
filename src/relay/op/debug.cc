@@ -62,7 +62,7 @@ Expr MakeDebug(Expr expr, String name) {
     dattrs->debug_func = EnvFunc();
   }
   static const Op& op = Op::Get("debug");
-  return Call(op, {expr}, Attrs(dattrs), {});
+  return MyCall(op, {expr}, Attrs(dattrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.debug").set_body_typed(MakeDebug);

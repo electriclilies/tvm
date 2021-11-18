@@ -107,7 +107,7 @@ Expr MakeResize1D(Expr data, Array<IndexExpr> size, Array<FloatImm> roi, String 
   attrs->extrapolation_value = extrapolation_value;
   attrs->out_dtype = out_dtype;
   static const Op& op = Op::Get("image.resize1d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.image._make.resize1d").set_body_typed(MakeResize1D);
@@ -186,7 +186,7 @@ Expr MakeResize2D(Expr data, Array<IndexExpr> size, Array<FloatImm> roi, String 
   attrs->extrapolation_value = extrapolation_value;
   attrs->out_dtype = out_dtype;
   static const Op& op = Op::Get("image.resize2d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.image._make.resize2d").set_body_typed(MakeResize2D);
@@ -266,7 +266,7 @@ Expr MakeResize3D(Expr data, Array<IndexExpr> size, Array<FloatImm> roi, String 
   attrs->extrapolation_value = extrapolation_value;
   attrs->out_dtype = out_dtype;
   static const Op& op = Op::Get("image.resize3d");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.image._make.resize3d").set_body_typed(MakeResize3D);
@@ -336,7 +336,7 @@ Expr MakeCropAndResize(Expr data, Expr boxes, Expr box_indices, Array<IndexExpr>
   attrs->extrapolation_value = std::move(extrapolation_value);
   attrs->out_dtype = out_dtype;
   static const Op& op = Op::Get("image.crop_and_resize");
-  return Call(op, {data, boxes, box_indices}, Attrs(attrs), {});
+  return MyCall(op, {data, boxes, box_indices}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.image._make.crop_and_resize").set_body_typed(MakeCropAndResize);

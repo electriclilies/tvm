@@ -45,7 +45,7 @@ inline Expr MakeMaxPool(Expr data, Array<IndexExpr> pool_size, Array<IndexExpr> 
   attrs->out_layout = std::move(out_layout);
   attrs->ceil_mode = ceil_mode;
   static const Op& op = Op::Get(op_name);
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 template <typename T>
@@ -62,7 +62,7 @@ inline Expr MakeAvgPool(Expr data, Array<IndexExpr> pool_size, Array<IndexExpr> 
   attrs->ceil_mode = ceil_mode;
   attrs->count_include_pad = count_include_pad;
   static const Op& op = Op::Get(op_name);
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 }  // namespace relay

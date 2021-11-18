@@ -55,7 +55,7 @@ Expr AllocStorage(Expr size, Expr alignment, SEScope se_scope, DataType dtype_hi
   attrs->dtype = dtype_hint;
   attrs->se_scope = std::move(se_scope);
   static const Op& op = Op::Get("memory.alloc_storage");
-  return Call(op, {std::move(size), std::move(alignment)}, Attrs(std::move(attrs)), {});
+  return MyCall(op, {std::move(size), std::move(alignment)}, Attrs(std::move(attrs)), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.memory._make.alloc_storage").set_body_typed(AllocStorage);
@@ -107,7 +107,7 @@ Expr AllocTensor(Expr storage, Expr offset, Expr shape, DataType dtype,
     attrs->const_shape = GetRef<Constant>(constant_node);
   }
   static const Op& op = Op::Get("memory.alloc_tensor");
-  return Call(op, {storage, offset, shape}, Attrs(attrs), {});
+  return MyCall(op, {storage, offset, shape}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.memory._make.alloc_tensor").set_body_typed(AllocTensor);

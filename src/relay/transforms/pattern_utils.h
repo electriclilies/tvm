@@ -139,7 +139,7 @@ inline bool MatchBroadcastToLeftAxes(const TensorTypeNode* tlhs, const TensorTyp
   }
   if (rhs_value != nullptr && squeeze_attrs->axis.size() != 0) {
     static const Op& squeeze_op = Op::Get("squeeze");
-    *rhs_value = Call(squeeze_op, {rhs_value[0]}, Attrs(squeeze_attrs), {});
+    *rhs_value = MyCall(squeeze_op, {rhs_value[0]}, Attrs(squeeze_attrs), {});
   }
   return true;
 }
@@ -163,7 +163,7 @@ inline Expr ExpandBiasToMatchAxis(Expr bias, int target_ndim, const Array<Intege
         auto attrs = make_object<ExpandDimsAttrs>();
         attrs->axis = i;
         attrs->num_newaxis = static_cast<int>(num_pad_axis);
-        bias = Call(expand_dims, {bias}, Attrs(attrs), {});
+        bias = MyCall(expand_dims, {bias}, Attrs(attrs), {});
       }
     } else {
       int64_t diff = axes[i]->value - axes[i - 1]->value;
@@ -172,7 +172,7 @@ inline Expr ExpandBiasToMatchAxis(Expr bias, int target_ndim, const Array<Intege
         auto attrs = make_object<ExpandDimsAttrs>();
         attrs->axis = i;
         attrs->num_newaxis = static_cast<int>(diff);
-        bias = Call(expand_dims, {bias}, Attrs(attrs), {});
+        bias = MyCall(expand_dims, {bias}, Attrs(attrs), {});
       }
     }
   }
@@ -186,7 +186,7 @@ inline Expr ExpandBiasToMatchAxis(Expr bias, int target_ndim, const Array<Intege
  * \param param The conv2d attributes.
  * \return Whether it is depthwise_conv2d.
  */
-inline bool IsDepthwiseConv2D(const Call& call, const Conv2DAttrs* param,
+inline bool IsDepthwiseConv2D(const MyCall& call, const Conv2DAttrs* param,
                               const Layout& kernel_layout) {
   static const Layout kOIHW("OIHW");
   const auto bilayout = tir::BijectiveLayout(kernel_layout, kOIHW);
@@ -497,32 +497,32 @@ inline Expr Pair(Expr l, Expr r) { return Tuple({l, r}); }
 
 inline Expr Exp(Expr e) {
   static const Op& op = Op::Get("exp");
-  return Call(op, {e});
+  return MyCall(op, {e});
 }
 
 inline Expr FastExp(Expr e) {
   static const Op& op = Op::Get("fast_exp");
-  return Call(op, {e});
+  return MyCall(op, {e});
 }
 
 inline Expr FastErf(Expr e) {
   static const Op& op = Op::Get("fast_erf");
-  return Call(op, {e});
+  return MyCall(op, {e});
 }
 
 inline Expr FastTanh(Expr e) {
   static const Op& op = Op::Get("fast_tanh");
-  return Call(op, {e});
+  return MyCall(op, {e});
 }
 
 inline Expr FastSoftmax(Expr e, tvm::Attrs attr) {
   static const Op& op = Op::Get("nn.fast_softmax");
-  return Call(op, {e}, attr);
+  return MyCall(op, {e}, attr);
 }
 
 inline Expr Log(Expr e) {
   static const Op& op = Op::Get("log");
-  return Call(op, {e});
+  return MyCall(op, {e});
 }
 /*!
  * \brief Get an immediate scalar from a Constant expr.
@@ -542,22 +542,22 @@ inline Expr Cast(Expr x, DataType dtype) { return MakeCast(x, dtype); }
 
 inline Expr Negative(Expr x) {
   static const Op& op = Op::Get("negative");
-  return Call(op, {x}, Attrs(), {});
+  return MyCall(op, {x}, Attrs(), {});
 }
 
 inline Expr Sqrt(Expr x) {
   static const Op& op = Op::Get("sqrt");
-  return Call(op, {x}, Attrs(), {});
+  return MyCall(op, {x}, Attrs(), {});
 }
 
 inline Expr Relu(Expr x) {
   static const Op& op = Op::Get("nn.relu");
-  return Call(op, {x}, Attrs(), {});
+  return MyCall(op, {x}, Attrs(), {});
 }
 
 inline Expr Round(Expr x) {
   static const Op& op = Op::Get("round");
-  return Call(op, {x}, Attrs(), {});
+  return MyCall(op, {x}, Attrs(), {});
 }
 
 inline Expr Clip(Expr x, double a_min, double a_max) { return MakeClip(x, a_min, a_max); }
@@ -567,37 +567,37 @@ inline Expr FixedPointMultiply(Expr x, int32_t multiplier, int32_t shift) {
   auto attrs = make_object<FixedPointMultiplyAttrs>();
   attrs->multiplier = multiplier;
   attrs->shift = shift;
-  return Call(op, {x}, Attrs(attrs), {});
+  return MyCall(op, {x}, Attrs(attrs), {});
 }
 
 inline Expr Add(Expr lhs, Expr rhs) {
   static const Op& op = Op::Get("add");
-  return Call(op, {lhs, rhs}, Attrs(), {});
+  return MyCall(op, {lhs, rhs}, Attrs(), {});
 }
 
 inline Expr Subtract(Expr lhs, Expr rhs) {
   static const Op& op = Op::Get("subtract");
-  return Call(op, {lhs, rhs}, Attrs(), {});
+  return MyCall(op, {lhs, rhs}, Attrs(), {});
 }
 
 inline Expr Multiply(Expr lhs, Expr rhs) {
   static const Op& op = Op::Get("multiply");
-  return Call(op, {lhs, rhs}, Attrs(), {});
+  return MyCall(op, {lhs, rhs}, Attrs(), {});
 }
 
 inline Expr Divide(Expr lhs, Expr rhs) {
   static const Op& op = Op::Get("divide");
-  return Call(op, {lhs, rhs}, Attrs(), {});
+  return MyCall(op, {lhs, rhs}, Attrs(), {});
 }
 
 inline Expr Maximum(Expr lhs, Expr rhs) {
   static const Op& op = Op::Get("maximum");
-  return Call(op, {lhs, rhs}, Attrs(), {});
+  return MyCall(op, {lhs, rhs}, Attrs(), {});
 }
 
 inline Expr ZerosLike(Expr e) {
   static const Op& op = Op::Get("zeros_like");
-  return Call(op, {e});
+  return MyCall(op, {e});
 }
 
 inline Expr Zeros(Array<IndexExpr> shape, DataType dtype) {
@@ -606,7 +606,7 @@ inline Expr Zeros(Array<IndexExpr> shape, DataType dtype) {
 
 inline Expr OnesLike(Expr e) {
   static const Op& op = Op::Get("ones_like");
-  return Call(op, {e});
+  return MyCall(op, {e});
 }
 
 inline Expr Ones(Array<IndexExpr> shape, DataType dtype) {
@@ -615,22 +615,22 @@ inline Expr Ones(Array<IndexExpr> shape, DataType dtype) {
 
 inline Expr CollapseSumLike(Expr e) {
   static const Op& op = Op::Get("collapse_sum_like");
-  return Call(op, {e});
+  return MyCall(op, {e});
 }
 
 inline Expr Power(Expr lhs, Expr rhs) {
   static const Op& op = Op::Get("power");
-  return Call(op, {lhs, rhs}, Attrs(), {});
+  return MyCall(op, {lhs, rhs}, Attrs(), {});
 }
 
 inline Expr RightShift(Expr x, Expr nbit) {
   static const Op& op = Op::Get("right_shift");
-  return Call(op, {x, nbit}, Attrs(), {});
+  return MyCall(op, {x, nbit}, Attrs(), {});
 }
 
 inline Expr LeftShift(Expr x, Expr nbit) {
   static const Op& op = Op::Get("left_shift");
-  return Call(op, {x, nbit}, Attrs(), {});
+  return MyCall(op, {x, nbit}, Attrs(), {});
 }
 
 inline Expr ReshapeLike(Expr lhs, Expr rhs, int lhs_begin, Integer lhs_end, int rhs_begin,
@@ -640,7 +640,7 @@ inline Expr ReshapeLike(Expr lhs, Expr rhs, int lhs_begin, Integer lhs_end, int 
 
 inline Expr Copy(Expr data) {
   static const Op& op = Op::Get("copy");
-  return Call(op, {data}, Attrs(), {});
+  return MyCall(op, {data}, Attrs(), {});
 }
 
 inline Expr Mean(Expr data, Array<Integer> axis, bool keepdims, bool exclude) {
@@ -654,12 +654,12 @@ inline Expr Variance(Expr data, Expr mean, Array<Integer> axis, bool keepdims, b
 
 static inline Expr Where(const Expr& condition, const Expr& x, const Expr& y) {
   static const Op& op = Op::Get("where");
-  return Call(op, {condition, x, y});
+  return MyCall(op, {condition, x, y});
 }
 
 static inline Expr GreaterEqual(const Expr& lhs, const Expr& rhs) {
   static const Op& op = Op::Get("greater_equal");
-  return Call(op, {lhs, rhs}, Attrs(), {});
+  return MyCall(op, {lhs, rhs}, Attrs(), {});
 }
 
 static inline Expr Full(Expr fill_value, Array<IndexExpr> shape, DataType dtype) {

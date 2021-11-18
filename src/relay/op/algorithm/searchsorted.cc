@@ -63,7 +63,7 @@ Expr MakeSearchSorted(Expr sorted_sequence, Expr values, Bool right, DataType dt
   static const Op& op = Op::Get("searchsorted");
   attrs->dtype = dtype;
   attrs->right = right;
-  return Call(op, {sorted_sequence, values}, Attrs(attrs), {});
+  return MyCall(op, {sorted_sequence, values}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.searchsorted").set_body_typed(MakeSearchSorted);

@@ -272,7 +272,7 @@ Expr MakeClip(Expr a, double a_min, double a_max) {
   attrs->a_min = a_min;
   attrs->a_max = a_max;
   static const Op& op = Op::Get("clip");
-  return Call(op, {a}, Attrs(attrs), {});
+  return MyCall(op, {a}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.clip").set_body_typed(MakeClip);
@@ -299,7 +299,7 @@ TVM_REGISTER_GLOBAL("relay.op._make.fixed_point_multiply")
       attrs->multiplier = multiplier;
       attrs->shift = shift;
       static const Op& op = Op::Get("fixed_point_multiply");
-      return Call(op, {a}, Attrs(attrs), {});
+      return MyCall(op, {a}, Attrs(attrs), {});
     });
 
 RELAY_REGISTER_OP("fixed_point_multiply")
@@ -434,7 +434,7 @@ Expr MakeShapeOf(Expr data, DataType dtype) {
   auto attrs = make_object<ShapeOfAttrs>();
   attrs->dtype = dtype;
   static const Op& op = Op::Get("shape_of");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.shape_of").set_body_typed(MakeShapeOf);
@@ -483,7 +483,7 @@ TVM_REGISTER_GLOBAL("relay.op._make.ndarray_size").set_body_typed([](Expr data, 
   auto attrs = make_object<NdarraySizeAttrs>();
   attrs->dtype = dtype;
   static const Op& op = Op::Get("ndarray_size");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 });
 
 RELAY_REGISTER_OP("ndarray_size")

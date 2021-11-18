@@ -282,6 +282,7 @@ class MixedPrecisionPass : public MixedModeMutator {
 
   Expr Rewrite_(const CallNode* pre_call_node, const Expr& post) final {
     const CallNode* post_call_node = post.as<CallNode>();
+    MyCall pre_call = GetRef<MyCall>(pre_call_node);
     CHECK(post_call_node) << "Expected a CallNode, but got " << post;
 
     Expr cur_op = post_call_node->op;
@@ -310,7 +311,7 @@ class MixedPrecisionPass : public MixedModeMutator {
         // Calculate the conversion category and dtypes from registered attribute.
         FTVMMixedPrecisionConversionType func = attr_map[op];
         Array<ObjectRef> op_descriptor =
-            func(GetRef<Call>(pre_call_node), DLDataType2String(mixed_precision_type_));
+            func(pre_call, DLDataType2String(mixed_precision_type_));
         ICHECK(op_descriptor.size() == 3)
             << "got the wrong number of returned arguments (expected 3 got " << op_descriptor.size()
             << ") from FTVMMixedPrecisionConversionType for " << AsText(op, false);
@@ -371,14 +372,14 @@ class MixedPrecisionPass : public MixedModeMutator {
     // Finally create the new attributes.
     if (final_category == MIXED_PRECISION_ALWAYS) {
       Attrs new_attrs = GetNewAttrs(pre_call_node, accumulation_dtype);
-      Expr output = Call(cur_op, new_args, new_attrs, new_arg_types, pre_call_node->span);
+      Expr output = pre_call.CopyWith(cur_op, new_args, new_attrs, new_arg_types);
       if (accumulation_dtype != output_dtype) {
         output = CastArg(output, GetType(output), output_dtype);
       }
       return output;
     }
 
-    return Call(cur_op, new_args, pre_call_node->attrs, new_arg_types, pre_call_node->span);
+    return pre_call.CopyWith(cur_op, new_args, pre_call->attrs, new_arg_types, pre_call_node->span);
   }
 
   Expr VisitExpr_(const FunctionNode* func) final {

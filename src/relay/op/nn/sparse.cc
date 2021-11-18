@@ -99,7 +99,7 @@ Expr MakeSparseDense(Expr data, Expr weight_data, Expr weight_indices, Expr weig
   auto attrs = make_object<SparseDenseAttrs>();
   attrs->sparse_lhs = std::move(sparse_lhs);
   static const Op& op = Op::Get("nn.sparse_dense");
-  return Call(op, {data, weight_data, weight_indices, weight_indptr}, Attrs(attrs), {});
+  return MyCall(op, {data, weight_data, weight_indices, weight_indptr}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.sparse_dense").set_body_typed(MakeSparseDense);
@@ -125,7 +125,7 @@ RELAY_REGISTER_OP("nn.sparse_dense")
 Expr MakeSparseDensePadded(Expr data, Expr weight_data, Expr weight_indices, Expr weight_indptr) {
   auto attrs = make_object<SparseDenseAttrs>();
   static const Op& op = Op::Get("nn.internal.sparse_dense_padded");
-  return Call(op, {data, weight_data, weight_indices, weight_indptr}, Attrs(attrs), {});
+  return MyCall(op, {data, weight_data, weight_indices, weight_indptr}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.sparse_dense_padded").set_body_typed(MakeSparseDensePadded);
@@ -177,7 +177,7 @@ bool SparseTransposeRel(const Array<Type>& types, int num_inputs, const Attrs& a
 Expr MakeSparseTranspose(Expr sparse_data, Expr sparse_indices, Expr sparse_indptr) {
   auto attrs = make_object<SparseTransposeAttrs>();
   static const Op& op = Op::Get("nn.sparse_transpose");
-  return Call(op, {sparse_data, sparse_indices, sparse_indptr}, Attrs(attrs), {});
+  return MyCall(op, {sparse_data, sparse_indices, sparse_indptr}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.sparse_transpose").set_body_typed(MakeSparseTranspose);
@@ -216,7 +216,7 @@ bool SparseAddRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
 
 Expr MakeSparseAdd(Expr dense_data, Expr sparse_data, Expr sparse_indices, Expr sparse_indptr) {
   static const Op& op = Op::Get("nn.sparse_add");
-  return Call(op, {dense_data, sparse_data, sparse_indices, sparse_indptr}, Attrs(), {});
+  return MyCall(op, {dense_data, sparse_data, sparse_indices, sparse_indptr}, Attrs(), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.sparse_add").set_body_typed(MakeSparseAdd);
@@ -279,7 +279,7 @@ Expr MakeSparseConv2d(Expr data, Expr weight_data, Expr weight_indices, Expr wei
   auto attrs = make_object<SparseConv2DAttrs>();
   attrs->layout = std::move(layout);
   attrs->kernel_size = std::move(kernel_size);
-  return Call(op, {data, weight_data, weight_indices, weight_indptr}, Attrs(attrs), {});
+  return MyCall(op, {data, weight_data, weight_indices, weight_indptr}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.sparse_conv2d").set_body_typed(MakeSparseConv2d);

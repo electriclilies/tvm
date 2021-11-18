@@ -171,7 +171,7 @@ Expr MakeEthosuPooling(Expr ifm, Expr lut, String pooling_type, double ifm_scale
   attrs->ifm_layout = std::move(ifm_layout);
   attrs->ofm_layout = std::move(ofm_layout);
   static const Op& op = Op::Get("contrib.ethosu.pooling");
-  return Call(op, {ifm, lut}, Attrs(attrs), {});
+  return MyCall(op, {ifm, lut}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.ethosu_pooling").set_body_typed(MakeEthosuPooling);

@@ -60,6 +60,8 @@ def update_func(func):
         def visit_call(self, call):
             new_op = self.visit(call.op)
             new_args = [self.visit(arg) for arg in call.args]
+            # TODO(@electriclilies): Figure out if we want to use CopyWith in Python
+            # This would become return call.copy_with(new_op, new_args)
             return Call(new_op, new_args, call.attrs)
 
         def visit_global_var(self, gvar):

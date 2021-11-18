@@ -55,7 +55,7 @@ Expr MakeGetValidCounts(Expr data, Expr score_threshold, int id_index, int score
   attrs->id_index = id_index;
   attrs->score_index = score_index;
   static const Op& op = Op::Get("vision.get_valid_counts");
-  return Call(op, {data, score_threshold}, Attrs(attrs), {});
+  return MyCall(op, {data, score_threshold}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.vision._make.get_valid_counts").set_body_typed(MakeGetValidCounts);
@@ -113,7 +113,7 @@ Expr MakeNMS(Expr data, Expr valid_count, Expr indices, Expr max_output_size, Ex
   attrs->return_indices = return_indices;
   attrs->invalid_to_bottom = invalid_to_bottom;
   static const Op& op = Op::Get("vision.non_max_suppression");
-  return Call(op, {data, valid_count, indices, max_output_size, iou_threshold}, Attrs(attrs), {});
+  return MyCall(op, {data, valid_count, indices, max_output_size, iou_threshold}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.vision._make.non_max_suppression").set_body_typed(MakeNMS);
@@ -186,7 +186,7 @@ Expr MakeAllClassNMS(Expr boxes, Expr scores, Expr max_output_boxes_per_class, E
   auto attrs = make_object<AllClassNonMaximumSuppressionAttrs>();
   attrs->output_format = std::move(output_format);
   static const Op& op = Op::Get("vision.all_class_non_max_suppression");
-  return Call(op, {boxes, scores, max_output_boxes_per_class, iou_threshold, score_threshold},
+  return MyCall(op, {boxes, scores, max_output_boxes_per_class, iou_threshold, score_threshold},
               Attrs(attrs), {});
 }
 

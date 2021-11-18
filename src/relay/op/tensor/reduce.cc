@@ -381,7 +381,7 @@ Expr MakeReduce(Expr data, Array<Integer> axis, bool keepdims, bool exclude, Str
   attrs->axis = std::move(axis);
   attrs->keepdims = keepdims;
   attrs->exclude = exclude;
-  return Call(Op::Get(op_name), {data}, Attrs(attrs), {});
+  return MyCall(Op::Get(op_name), {data}, Attrs(attrs), {});
 }
 
 Expr MakeOneElementReduce(Expr data, Array<Integer> axis, bool keepdims, bool exclude,
@@ -391,7 +391,7 @@ Expr MakeOneElementReduce(Expr data, Array<Integer> axis, bool keepdims, bool ex
   attrs->keepdims = keepdims;
   attrs->exclude = exclude;
   attrs->select_last_index = select_last_index;
-  return Call(Op::Get(op_name), {data}, Attrs(attrs), {});
+  return MyCall(Op::Get(op_name), {data}, Attrs(attrs), {});
 }
 
 #define RELAY_REGISTER_REDUCE_OP(OpName)                                                \
@@ -700,7 +700,7 @@ Expr MakeVariance(Expr data, Expr mean, Array<Integer> axis, bool keepdims, bool
   attrs->exclude = exclude;
   attrs->unbiased = unbiased;
   static const Op& op = Op::Get("variance");
-  return Call(op, {data, mean}, Attrs(attrs), {});
+  return MyCall(op, {data, mean}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make._variance").set_body_typed(MakeVariance);

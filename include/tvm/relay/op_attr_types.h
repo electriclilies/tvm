@@ -203,7 +203,7 @@ using FTVMAnnotateTarget = runtime::TypedPackedFunc<bool(const Expr& expr)>;
  *       a different signature with ctx to be a specific node type.
  */
 using FForwardRewrite = runtime::TypedPackedFunc<Expr(
-    const Call& ref_call, const Array<Expr>& new_args, const ObjectRef& ctx)>;
+    const MyCall& ref_call, const Array<Expr>& new_args, const ObjectRef& ctx)>;
 
 /*!
  * \brief Gradient for a specific op.

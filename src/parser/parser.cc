@@ -623,7 +623,7 @@ class Parser {
   };
 
   MetaRef MetaRefFromToken(const Token& tok) {
-    Call ref = Downcast<Call>(tok->data);
+    MyCall ref = Downcast<MyCall>(tok->data);
     auto attrs = ref->attrs.as<MetaRefAttrs>();
     auto type_key = attrs->node_type_key;
     auto index = attrs->node_index;
@@ -1304,7 +1304,7 @@ class Parser {
           exprs.pop_back();
           ICHECK(new_op.op.defined()) << "a call op must be set " << new_op.op;
           exprs.push_back(
-              relay::Call(new_op.op, {left, right}, Attrs(), {}, left->span.Merge(right->span)));
+              relay::MyCall(new_op.op, {left, right}, Attrs(), {}, left->span.Merge(right->span)));
         }
 
         exprs.push_back(right);
@@ -1320,7 +1320,7 @@ class Parser {
         exprs.pop_back();
         ICHECK(new_op.op.defined()) << "a call op must be set " << new_op.op;
         exprs.push_back(
-            relay::Call(new_op.op, {left, right}, Attrs(), {}, left->span.Merge(right->span)));
+            relay::MyCall(new_op.op, {left, right}, Attrs(), {}, left->span.Merge(right->span)));
       }
 
       ICHECK_EQ(ops.size(), 0) << "No operations should be left on the operation stack.";
@@ -1462,7 +1462,7 @@ class Parser {
       }
 
       // TODO(@jroesch): in a secondary pass adjust spans.
-      return Expr(Call(op, args, attrs, {}));
+      return Expr(MyCall(op, args, attrs, {}));
     } else {
       return Expr();
     }
@@ -1491,7 +1491,7 @@ class Parser {
       // We need a zero-arity case for constructors.
       if (auto ctor_node = expr.as<ConstructorNode>()) {
         if (ctor_node->inputs.size() == 0) {
-          return Expr(Call(expr, {}));
+          return Expr(MyCall(expr, {}));
         }
       }
 

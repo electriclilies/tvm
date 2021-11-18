@@ -70,7 +70,7 @@ Expr CallLowered(Expr func, Array<Expr> inputs, Attrs attrs, Array<Type> type_ar
       << "Function to call should be GlobalVarNode, but got " << func->GetTypeKey();
   ICHECK(attrs.as<CallLoweredAttrs>())
       << "Expected attributes to be CallLoweredAttrs, but got " << attrs->GetTypeKey();
-  return Call(CallLoweredOp(), {std::move(func), Tuple(std::move(inputs))}, std::move(attrs),
+  return MyCall(CallLoweredOp(), {std::move(func), Tuple(std::move(inputs))}, std::move(attrs),
               std::move(type_args), std::move(span));
 }
 

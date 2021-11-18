@@ -56,7 +56,7 @@ Expr DeviceCopy(Expr expr, SEScope src_se_scope, SEScope dst_se_scope) {
   attrs->src_se_scope = std::move(src_se_scope);
   attrs->dst_se_scope = std::move(dst_se_scope);
   Span span = expr->span;
-  return Call(DeviceCopyOp(), {std::move(expr)}, Attrs(std::move(attrs)), /*type_args=*/{},
+  return MyCall(DeviceCopyOp(), {std::move(expr)}, Attrs(std::move(attrs)), /*type_args=*/{},
               std::move(span));
 }
 

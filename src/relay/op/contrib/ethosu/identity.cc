@@ -102,7 +102,7 @@ Expr MakeEthosuIdentity(Expr ifm, Expr lut, double ifm_scale, int ifm_zero_point
   attrs->ofm_zero_point = ofm_zero_point;
   attrs->activation = std::move(activation);
   static const Op& op = Op::Get("contrib.ethosu.identity");
-  return Call(op, {ifm, lut}, Attrs(attrs), {});
+  return MyCall(op, {ifm, lut}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.ethosu_identity").set_body_typed(MakeEthosuIdentity);

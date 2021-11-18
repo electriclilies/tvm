@@ -188,7 +188,7 @@ Expr MakePad(Expr data, Array<Array<Integer>> pad_width, Expr pad_value, String 
   attrs->pad_width = std::move(pad_width);
   attrs->pad_mode = std::move(pad_mode);
   static const Op& op = Op::Get("nn.pad");
-  return Call(op, {data, pad_value}, Attrs(attrs), {});
+  return MyCall(op, {data, pad_value}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.pad").set_body_typed(MakePad);
@@ -256,7 +256,7 @@ Expr MakeMirrorPad(Expr data, Array<Array<IndexExpr>> pad_width, String mode) {
   attrs->mode = mode;
   attrs->pad_width = std::move(pad_width);
   static const Op& op = Op::Get("nn.mirror_pad");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.nn._make.mirror_pad").set_body_typed(MakeMirrorPad);

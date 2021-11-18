@@ -195,7 +195,7 @@ Expr MakeEthosuConv2D(Expr ifm, Expr weight, Expr scale_bias, Expr lut, double i
   attrs->ifm_layout = std::move(ifm_layout);
   attrs->ofm_layout = std::move(ofm_layout);
   static const Op& op = Op::Get("contrib.ethosu.conv2d");
-  return Call(op, {ifm, weight, scale_bias, lut}, Attrs(attrs), {});
+  return MyCall(op, {ifm, weight, scale_bias, lut}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.ethosu_conv2d").set_body_typed(MakeEthosuConv2D);

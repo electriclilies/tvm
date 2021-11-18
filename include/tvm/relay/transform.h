@@ -488,7 +488,7 @@ TVM_DLL Expr Bind(const Expr& expr, const tvm::Map<Var, Expr>& binds);
  * \return The rewritten expression.
  */
 TVM_DLL Expr ForwardRewrite(const Expr& expr, const String& rewrite_map_attr_name,
-                            std::function<ObjectRef(const Call&)> fcontext = nullptr,
+                            std::function<ObjectRef(const MyCall&)> fcontext = nullptr,
                             std::function<Expr(const Expr&)> fmulti_ref_trigger = nullptr);
 
 /*!
@@ -504,7 +504,7 @@ TVM_DLL Expr ForwardRewrite(const Expr& expr, const String& rewrite_map_attr_nam
  * \return The rewritten expression.
  */
 TVM_DLL Expr ForwardRewrite(const Expr& expr, const FForwardRewrite& rewrite_func,
-                            std::function<ObjectRef(const Call&)> fcontext = nullptr,
+                            std::function<ObjectRef(const MyCall&)> fcontext = nullptr,
                             std::function<Expr(const Expr&)> fmulti_ref_trigger = nullptr);
 
 /*!

@@ -49,7 +49,7 @@ Expr MakeThreefryGenerate(Expr key, Array<Integer> out_shape) {
   auto attrs = make_object<ThreefryGenerateAttrs>();
   attrs->out_shape = out_shape;
   static const Op& op = Op::Get("random.threefry_generate");
-  return Call(op, {key}, Attrs(attrs), {});
+  return MyCall(op, {key}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.random._make.threefry_generate").set_body_typed(MakeThreefryGenerate);
@@ -74,7 +74,7 @@ bool ThreefrySplitRel(const Array<Type>& types, int num_inputs, const Attrs& att
 
 Expr MakeThreefrySplit(Expr key) {
   static const Op& op = Op::Get("random.threefry_split");
-  return Call(op, {key}, Attrs(), {});
+  return MyCall(op, {key}, Attrs(), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.random._make.threefry_split").set_body_typed(MakeThreefrySplit);
@@ -117,7 +117,7 @@ Expr MakeUniform(Expr key, Expr low, Expr high, Array<Integer> out_shape, DataTy
   attrs->out_shape = out_shape;
   attrs->out_dtype = out_dtype;
   static const Op& op = Op::Get("random.uniform");
-  return Call(op, {key, low, high}, Attrs(attrs), {});
+  return MyCall(op, {key, low, high}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.random._make.uniform").set_body_typed(MakeUniform);

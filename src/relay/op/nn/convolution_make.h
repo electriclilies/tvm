@@ -52,7 +52,7 @@ inline Expr MakeConv(Expr data, Expr weight, Array<IndexExpr> strides, Array<Ind
   attrs->out_layout = std::move(out_layout);
   attrs->out_dtype = std::move(out_dtype);
   const Op& op = Op::Get(op_name);
-  return Call(op, {data, weight}, Attrs(attrs), {});
+  return MyCall(op, {data, weight}, Attrs(attrs), {});
 }
 
 template <typename T>
@@ -74,7 +74,7 @@ inline Expr MakeConvWinograd(Expr data, Expr weight, int tile_size, Array<IndexE
   attrs->out_layout = std::move(out_layout);
   attrs->out_dtype = std::move(out_dtype);
   const Op& op = Op::Get(op_name);
-  return Call(op, {data, weight}, Attrs(attrs), {});
+  return MyCall(op, {data, weight}, Attrs(attrs), {});
 }
 
 template <typename T>
@@ -95,7 +95,7 @@ inline Expr MakeConvGemm(Expr data, Expr weight, Array<IndexExpr> strides, Array
   attrs->out_layout = std::move(out_layout);
   attrs->out_dtype = std::move(out_dtype);
   const Op& op = Op::Get(op_name);
-  return Call(op, {data, weight}, Attrs(attrs), {});
+  return MyCall(op, {data, weight}, Attrs(attrs), {});
 }
 
 template <typename T>
@@ -118,7 +118,7 @@ inline Expr MakeConvTranspose(Expr data, Expr weight, Array<IndexExpr> strides,
   attrs->output_padding = std::move(output_padding);
   attrs->out_dtype = std::move(out_dtype);
   const Op& op = Op::Get(op_name);
-  return Call(op, {data, weight}, Attrs(attrs), {});
+  return MyCall(op, {data, weight}, Attrs(attrs), {});
 }
 
 template <typename T>
@@ -141,7 +141,7 @@ inline Expr MakeDeformableConv(Expr data, Expr offset, Expr weight, Array<IndexE
   attrs->out_layout = out_layout;
   attrs->out_dtype = out_dtype;
   const Op& op = Op::Get(op_name);
-  return Call(op, {data, offset, weight}, Attrs{attrs}, {});
+  return MyCall(op, {data, offset, weight}, Attrs{attrs}, {});
 }
 
 }  // namespace relay

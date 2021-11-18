@@ -95,7 +95,7 @@ Expr MakeEinsum(Expr data, String equation) {
   auto attrs = make_object<EinsumAttrs>();
   attrs->equation = std::move(equation);
   static const Op& op = Op::Get("einsum");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.einsum").set_body_typed(MakeEinsum);

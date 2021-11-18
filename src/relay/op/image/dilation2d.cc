@@ -56,7 +56,7 @@ Expr MakeDilation2D(Expr data, Expr weight, Array<IndexExpr> strides, Array<Inde
   attrs->kernel_layout = std::move(kernel_layout);
   attrs->out_dtype = std::move(out_dtype);
   static const Op& op = Op::Get("image.dilation2d");
-  return Call(op, {data, weight}, Attrs(attrs), {});
+  return MyCall(op, {data, weight}, Attrs(attrs), {});
 }
 
 template <typename AttrType>

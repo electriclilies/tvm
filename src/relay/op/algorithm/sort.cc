@@ -46,7 +46,7 @@ Expr MakeSort(Expr data, int axis, bool is_ascend) {
   attrs->axis = axis;
   attrs->is_ascend = is_ascend;
   static const Op& op = Op::Get("sort");
-  return Call(op, {data}, Attrs(attrs), {});
+  return MyCall(op, {data}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op._make.sort").set_body_typed(MakeSort);

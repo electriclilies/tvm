@@ -79,7 +79,7 @@ Expr MakeResize2D(Expr data, Expr size, Expr roi, String layout, String method,
   attrs->extrapolation_value = extrapolation_value;
   attrs->out_dtype = out_dtype;
   static const Op& op = Op::Get("dyn.image.resize2d");
-  return Call(op, {data, size, roi}, Attrs(attrs), {});
+  return MyCall(op, {data, size, roi}, Attrs(attrs), {});
 }
 
 TVM_REGISTER_GLOBAL("relay.op.dyn.image._make.resize2d").set_body_typed(MakeResize2D);

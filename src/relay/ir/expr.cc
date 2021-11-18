@@ -108,7 +108,7 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
       p->stream << ")";
     });
 
-Call::Call(Expr op, Array<Expr> args, Attrs attrs, Array<Type> type_args, Span span) {
+MyCall::MyCall(Expr op, Array<Expr> args, Attrs attrs, Array<Type> type_args, Span span) {
   ObjectPtr<CallNode> n = make_object<CallNode>();
   n->op = std::move(op);
   n->args = std::move(args);
@@ -118,7 +118,7 @@ Call::Call(Expr op, Array<Expr> args, Attrs attrs, Array<Type> type_args, Span s
   data_ = std::move(n);
 }
 
-Call Call::CopyWith(Optional<Expr> opt_op, Optional<Array<Expr>> opt_args,
+MyCall MyCall::CopyWith(Optional<Expr> opt_op, Optional<Array<Expr>> opt_args,
                     Optional<Attrs> opt_attrs, Optional<Array<Type>> opt_type_args,
                     Optional<Span> opt_span) {
   Expr op = opt_op.value_or(get()->op);

@@ -224,7 +224,7 @@ class Var : public Expr {
  * \brief Call corresponds to operator invocation.
  *  Corresponds to the operator in computational graph terminology.
  */
-class Call;
+class MyCall;
 /*! \brief Call container. */
 class CallNode : public ExprNode {
  protected:
@@ -300,12 +300,12 @@ class CallNode : public ExprNode {
   friend class Call;
 };
 
-class Call : public Expr {
+class MyCall : public Expr {
  public:
   /*!
    * \brief The destructor
    */
-  ~Call();
+  ~MyCall();
 
   /*!
    * \brief The constructor
@@ -315,7 +315,7 @@ class Call : public Expr {
    * \param type_args The type arguments passed to a polymorphic function.
    * \param span The source span of the expression.
    */
-  TVM_DLL Call(Expr op, Array<Expr> args, Attrs attrs = Attrs(),
+  TVM_DLL MyCall(Expr op, Array<Expr> args, Attrs attrs = Attrs(),
                Array<Type> type_args = Array<Type>(), Span span = Span());
 
   /*!
@@ -323,13 +323,13 @@ class Call : public Expr {
    * Returns this if all properties are unchanged. Returns a modified this if this is the only
    * reference to the underlying node.
    */
-  Call CopyWith(Optional<Expr> opt_op = Optional<Expr>(),
+  MyCall CopyWith(Optional<Expr> opt_op = Optional<Expr>(),
                 Optional<Array<Expr>> opt_args = Optional<Array<Expr>>(nullptr),
                 Optional<Attrs> opt_attrs = Optional<Attrs>(nullptr),
                 Optional<Array<Type>> opt_type_args = Optional<Array<Type>>(nullptr),
                 Optional<Span> opt_span = Optional<Span>(nullptr));
 
-  TVM_DEFINE_OBJECT_REF_METHODS(Call, RelayExpr, CallNode);
+  TVM_DEFINE_OBJECT_REF_METHODS(MyCall, RelayExpr, CallNode);
   TVM_DEFINE_OBJECT_REF_COW_METHOD(CallNode);
 
 };

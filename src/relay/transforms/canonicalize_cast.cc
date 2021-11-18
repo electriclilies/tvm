@@ -65,13 +65,14 @@ class CastCanonicalizer : public ExprMutator {
  public:
   CastCanonicalizer() : cast_op_(Op::Get("cast")) {}
 
-  Expr VisitExpr_(const CallNode* call) {
+  Expr VisitExpr_(const CallNode* call_node) {
+    auto call = GetRef<MyCall>(call_node);
     static auto fpattern = Op::GetAttrMap<TOpPattern>("TOpPattern");
 
-    if (const OpNode* opnode = call->op.as<OpNode>()) {
+    if (const OpNode* opnode = call_node->op.as<OpNode>()) {
       auto pattern = fpattern[GetRef<Op>(opnode)];
       if (pattern <= kBroadcast) {
-        Array<Expr> call_args = call->args;
+        Array<Expr> call_args = call_node->args;
         bool unchanged = true;
         for (size_t i = 0; i < call_args.size(); ++i) {
           Expr arg = call_args[i];
@@ -82,13 +83,14 @@ class CastCanonicalizer : public ExprMutator {
           }
         }
         if (unchanged) {
-          return GetRef<Expr>(call);
+          return call;
         }
-        return Call(call->op, call_args, call->attrs, call->type_args);
+
+        return call.CopyWith({} /* keep original op */, call_args);
       }
     }
 
-    Expr new_expr = ExprMutator::VisitExpr_(call);
+    Expr new_expr = ExprMutator::VisitExpr_(call_node);
     return new_expr;
   }
 
@@ -110,10 +112,12 @@ class CastCanonicalizer : public ExprMutator {
 
         if (from_type->dtype.bits() < attrs->dtype.bits()) {
           if (++ref_counter_[call] > 1) {
+            // This is creating a clone, so don't want COW behavior
+            // TODO(@electriclilies): Make clone method on CallNode
             const CallNode* new_call = new_expr.as<CallNode>();
             ICHECK(new_call);
             ICHECK(new_call->op == cast_op_);
-            return Call(new_call->op, new_call->args, new_call->attrs, new_call->type_args);
+            return MyCall(new_call->op, new_call->args, new_call->attrs, new_call->type_args);
           }
         }
       }

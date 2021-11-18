@@ -885,10 +885,7 @@ class DeviceCapturer : public ExprMutator {
                                 /*child_se_scope=*/GetSEScope(call_node->args[i]),
                                 call_node->args[i]));
     }
-    // TODO(mbs): Avoid copy
     return call.CopyWith(std::move(op), std::move(args));
-    return Call(std::move(op), std::move(args), call_node->attrs, call_node->type_args,
-                call_node->span);
   }
 
   Expr VisitExpr_(const LetNode* let_node) final {

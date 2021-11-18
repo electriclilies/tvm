@@ -886,6 +886,7 @@ class DeviceCapturer : public ExprMutator {
                                 call_node->args[i]));
     }
     // TODO(mbs): Avoid copy
+    return call.CopyWith(std::move(op), std::move(args));
     return Call(std::move(op), std::move(args), call_node->attrs, call_node->type_args,
                 call_node->span);
   }

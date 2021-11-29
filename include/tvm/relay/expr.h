@@ -26,6 +26,7 @@
 
 #include <tvm/ir/attrs.h>
 #include <tvm/ir/expr.h>
+#include <tvm/target/se_scope.h>
 #include <tvm/ir/module.h>
 #include <tvm/ir/op.h>
 
@@ -154,7 +155,7 @@ class Tuple : public Expr {
  * \param opt_span The (optional) span for the copied tuple. If none, ret_tuple->span = tuple->span.
  */
 Tuple WithFields(Tuple tuple, Optional<Array<Expr>> opt_fields = Optional<Array<Expr>>(),
-                 Optional<Span> opt_span = Optional<Span>(nullptr));
+                 Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*!
  * \brief Local variables used in the let expression.
@@ -248,7 +249,7 @@ class Var : public Expr {
  */
 Var WithFields(Var var, Optional<Id> opt_vid = Optional<Id>(),
                Optional<Type> opt_type_annotation = Optional<Type>(),
-               Optional<Span> opt_span = Optional<Span>());
+               Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*!
  * \brief Call corresponds to operator invocation.
@@ -372,7 +373,7 @@ Call WithFields(Call call, Optional<Expr> opt_op = Optional<Expr>(),
                 Optional<Array<Expr>> opt_args = Optional<Array<Expr>>(),
                 Optional<Attrs> opt_attrs = Optional<Attrs>(),
                 Optional<Array<Type>> opt_type_args = Optional<Array<Type>>(),
-                Optional<Span> opt_span = Optional<Span>());
+                Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*!
  * \brief Let binding that binds a local var and optionally a type annotation.
@@ -465,7 +466,7 @@ class Let : public Expr {
 Let WithFields(Let let, Optional<Var> opt_var = Optional<Var>(),
                Optional<Expr> opt_value = Optional<Expr>(),
                Optional<Expr> opt_body = Optional<Expr>(),
-               Optional<Span> opt_span = Optional<Span>());
+               Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*!
  * \brief Condition expression
@@ -550,7 +551,7 @@ class If : public Expr {
 If WithFields(If if_expr, Optional<Expr> opt_cond = Optional<Expr>(),
               Optional<Expr> opt_true_branch = Optional<Expr>(),
               Optional<Expr> opt_false_branch = Optional<Expr>(),
-              Optional<Span> opt_span = Optional<Span>());
+              Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*! \brief Get index-th field out of a tuple. */
 class TupleGetItem;
@@ -614,7 +615,7 @@ class TupleGetItem : public Expr {
  */
 TupleGetItem WithFields(TupleGetItem tuple_get_item, Optional<Expr> opt_tuple = Optional<Expr>(),
                         Optional<Integer> opt_index = Optional<Integer>(),
-                        Optional<Span> opt_span = Optional<Span>());
+                        Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*! \brief Create a new Reference out of initial value. */
 class RefCreate;
@@ -672,7 +673,7 @@ class RefCreate : public Expr {
  * ret_ref_create->value = opt_value.value()).
  */
 RefCreate WithFields(RefCreate ref_create, Optional<Expr> opt_value = Optional<Expr>(),
-                     Optional<Span> opt_span = Optional<Span>());
+                     Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*! \brief Get value out of Reference. */
 class RefRead;
@@ -729,7 +730,7 @@ class RefRead : public Expr {
  * ret_ref_read->ref = opt_ref.value()).
  */
 RefRead WithFields(RefRead ref_read, Optional<Expr> opt_ref = Optional<Expr>(),
-                   Optional<Span> opt_span = Optional<Span>());
+                   Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*! \brief Set value of Reference. The whole expression evaluates to an Empty Tuple. */
 class RefWrite;
@@ -794,7 +795,7 @@ class RefWrite : public Expr {
  */
 RefWrite WithFields(RefWrite ref_write, Optional<Expr> opt_ref = Optional<Expr>(),
                     Optional<Expr> opt_value = Optional<Expr>(),
-                    Optional<Span> opt_span = Optional<Span>());
+                    Optional<Span> opt_span = Optional<Span>(), Optional<SEScope> opt_scope = Optional<SEScope>());
 
 /*!
  * \brief Base class of the temporary expression.

@@ -38,6 +38,7 @@
 namespace tvm {
 
 using tvm::runtime::String;
+class SEScope;
 
 /*!
  * \brief Base type of all the expressions.
@@ -162,6 +163,12 @@ class RelayExprNode : public BaseExprNode {
    * \return The corresponding TTypeNode pointer.
    * \tparam The specific TypeNode we look for.
    */
+
+  // Note: this needs to be objref to avoid circular import
+  mutable ObjectRef scope_;
+
+  SEScope scope() const;
+
   template <typename TTypeNode>
   inline const TTypeNode* type_as() const;
 

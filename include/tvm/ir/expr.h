@@ -163,14 +163,21 @@ class RelayExprNode : public BaseExprNode {
    * \return The corresponding TTypeNode pointer.
    * \tparam The specific TypeNode we look for.
    */
-
-  // Note: this needs to be objref to avoid circular import
-  mutable ObjectRef scope_;
-
-  SEScope scope() const;
-
   template <typename TTypeNode>
   inline const TTypeNode* type_as() const;
+  
+  /*!
+   * \brief The storage execution scope (SEScope) for this node (the result of device planning).
+   *
+   * \note Unfortunately, the type of scope_ needs to be ObjectRef to avoid a circular import.
+   *       We can forward-declare the SEScope type for the getter function, but not for the field itself. 
+   */
+  mutable ObjectRef scope_;
+
+  /*!
+   * \return The storage execution scope (SEScope)
+   */
+  SEScope scope() const;
 
   static constexpr const char* _type_key = "RelayExpr";
   static constexpr const uint32_t _type_child_slots = 22;

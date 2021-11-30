@@ -28,14 +28,14 @@
 namespace tvm {
 
 SEScope RelayExprNode::scope() const {
-  ICHECK(scope_.defined()) << "internal error: the scope field has not been populated for " << GetRef<RelayExpr>(this);
+  ICHECK(scope_.defined()) << "internal error: the scope field has not been populated for "
+                           << GetRef<RelayExpr>(this);
   return Downcast<SEScope>(this->scope_);
 }
 namespace relay {
 
 using tvm::ReprPrinter;
 using namespace tvm::runtime;
-
 
 Constant::Constant(runtime::NDArray data, Span span) {
   ObjectPtr<ConstantNode> n = make_object<ConstantNode>();
@@ -83,7 +83,8 @@ TVM_REGISTER_NODE_TYPE(TupleNode);
 TVM_REGISTER_GLOBAL("relay.ir.Tuple").set_body_typed([](tvm::Array<relay::Expr> fields, Span span) {
   return Tuple(fields, span);
 });
-Tuple WithFields(Tuple tuple, Optional<Array<Expr>> opt_fields, Optional<Span> opt_span, Optional<SEScope> opt_scope) {
+Tuple WithFields(Tuple tuple, Optional<Array<Expr>> opt_fields, Optional<Span> opt_span,
+                 Optional<SEScope> opt_scope) {
   Array<Expr> fields = opt_fields.value_or(tuple->fields);
   Span span = opt_span.value_or(tuple->span);
   SEScope scope = opt_scope.value_or(tuple->scope());
@@ -102,8 +103,6 @@ Tuple WithFields(Tuple tuple, Optional<Array<Expr>> opt_fields, Optional<Span> o
     TupleNode* cow_tuple_node = tuple.CopyOnWrite();
     cow_tuple_node->fields = fields;
     cow_tuple_node->span = span;
-    // Will this work with the downcast in tuple->scope()?
-    // Also scope_ needs to be public here, not sure if we want that in the long run?
     cow_tuple_node->scope_ = tuple->scope_;
   }
   return std::move(tuple);
@@ -130,7 +129,6 @@ Var WithFields(Var var, Optional<Id> opt_vid, Optional<Type> opt_type_annotation
   Span span = opt_span.value_or(var->span);
   SEScope scope = opt_scope.value_or(var->scope());
 
-
   bool unchanged = vid.same_as(var->vid) && type_annotation.same_as(var->type_annotation) &&
                    span.same_as(var->span);
 
@@ -140,7 +138,6 @@ Var WithFields(Var var, Optional<Id> opt_vid, Optional<Type> opt_type_annotation
     cow_var_node->type_annotation = type_annotation;
     cow_var_node->span = span;
     cow_var_node->scope_ = scope;
-
   }
   return std::move(var);
 }
@@ -181,7 +178,6 @@ Call WithFields(Call call, Optional<Expr> opt_op, Optional<Array<Expr>> opt_args
   Array<Type> type_args = opt_type_args.value_or(call->type_args);
   Span span = opt_span.value_or(call->span);
   SEScope scope = opt_scope.value_or(call->scope());
-
 
   bool unchanged = op.same_as(call->op) && attrs.same_as(call->attrs) && span.same_as(call->span);
 
@@ -291,7 +287,8 @@ If::If(Expr cond, Expr true_branch, Expr false_branch, Span span) {
 }
 
 If WithFields(If if_expr, Optional<Expr> opt_cond, Optional<Expr> opt_true_branch,
-              Optional<Expr> opt_false_branch, Optional<Span> opt_span, Optional<SEScope> opt_scope) {
+              Optional<Expr> opt_false_branch, Optional<Span> opt_span,
+              Optional<SEScope> opt_scope) {
   Expr cond = opt_cond.value_or(if_expr->cond);
   Expr true_branch = opt_true_branch.value_or(if_expr->true_branch);
   Expr false_branch = opt_false_branch.value_or(if_expr->false_branch);
@@ -306,7 +303,7 @@ If WithFields(If if_expr, Optional<Expr> opt_cond, Optional<Expr> opt_true_branc
     cow_if_node->cond = cond;
     cow_if_node->true_branch = true_branch;
     cow_if_node->false_branch = false_branch;
-    cow_if_node->span = span; // NOTE forgot span in the if_expr
+    cow_if_node->span = span;  // NOTE forgot span in the if_expr
     cow_if_node->scope_ = scope;
   }
   return std::move(if_expr);
@@ -335,7 +332,8 @@ TupleGetItem::TupleGetItem(Expr tuple, int index, Span span) {
 }
 
 TupleGetItem WithFields(TupleGetItem tuple_get_item, Optional<Expr> opt_tuple,
-                        Optional<Integer> opt_index, Optional<Span> opt_span, Optional<SEScope> opt_scope) {
+                        Optional<Integer> opt_index, Optional<Span> opt_span,
+                        Optional<SEScope> opt_scope) {
   Expr tuple = opt_tuple.value_or(tuple_get_item->tuple);
   Integer index = opt_index.value_or(tuple_get_item->index);
   Span span = opt_span.value_or(tuple_get_item->span);
@@ -372,7 +370,8 @@ RefCreate::RefCreate(Expr value, Span span) {
   data_ = std::move(n);
 }
 
-RefCreate WithFields(RefCreate ref_create, Optional<Expr> opt_value, Optional<Span> opt_span, Optional<SEScope> opt_scope) {
+RefCreate WithFields(RefCreate ref_create, Optional<Expr> opt_value, Optional<Span> opt_span,
+                     Optional<SEScope> opt_scope) {
   Expr value = opt_value.value_or(ref_create->value);
   Span span = opt_span.value_or(ref_create->span);
   SEScope scope = opt_scope.value_or(ref_create->scope());
@@ -406,7 +405,8 @@ RefRead::RefRead(Expr ref, Span span) {
   data_ = std::move(n);
 }
 
-RefRead WithFields(RefRead ref_read, Optional<Expr> opt_ref, Optional<Span> opt_span, Optional<SEScope> opt_scope) {
+RefRead WithFields(RefRead ref_read, Optional<Expr> opt_ref, Optional<Span> opt_span,
+                   Optional<SEScope> opt_scope) {
   Expr ref = opt_ref.value_or(ref_read->ref);
   Span span = opt_span.value_or(ref_read->span);
   SEScope scope = opt_scope.value_or(ref_read->scope());

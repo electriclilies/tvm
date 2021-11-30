@@ -165,12 +165,13 @@ class RelayExprNode : public BaseExprNode {
    */
   template <typename TTypeNode>
   inline const TTypeNode* type_as() const;
-  
+
   /*!
    * \brief The storage execution scope (SEScope) for this node (the result of device planning).
    *
    * \note Unfortunately, the type of scope_ needs to be ObjectRef to avoid a circular import.
-   *       We can forward-declare the SEScope type for the getter function, but not for the field itself. 
+   *       We can forward-declare the SEScope type for the getter function, but not for the field
+   * itself.
    */
   mutable ObjectRef scope_;
 

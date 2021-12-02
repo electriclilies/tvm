@@ -38,6 +38,8 @@
 namespace tvm {
 
 using tvm::runtime::String;
+
+// Forward-declare SEScope to avoid circular imports.
 class SEScope;
 
 /*!
@@ -167,18 +169,24 @@ class RelayExprNode : public BaseExprNode {
   inline const TTypeNode* type_as() const;
 
   /*!
-   * \brief The storage execution scope (SEScope) for this node (the result of device planning).
+   * \brief The virtual device (SEScope) for this node (the result of device planning).
+   * For first-order expressions (non functions), this describes where the result of evaluating the expression should be stored.
+   * Note that currently, all composite first-order values (tuples, references, ADTs) must be stored on the same virtual device. This means
+   * that it is not possible to store two tuple fields on different devices, so we only need one virtual device for these types.
+   * 
+   * For expressions that have the function type, the virtual device describes where the result of the call to the function or closure is stored
+   * (instead of where the function itself is stored). The SEScope's Target field describes how the body of the function should be compiled.
    *
-   * \note Unfortunately, the type of scope_ needs to be ObjectRef to avoid a circular import.
+   * \note Unfortunately, the type of virtual_device_ needs to be ObjectRef to avoid a circular import.
    *       We can forward-declare the SEScope type for the getter function, but not for the field
-   * itself.
+   *       itself.
    */
-  mutable ObjectRef scope_;
+  mutable ObjectRef virtual_device_;
 
   /*!
-   * \return The storage execution scope (SEScope)
+   * \return The virtual device (SEScope)
    */
-  SEScope scope() const;
+  SEScope virtual_device() const;
 
   static constexpr const char* _type_key = "RelayExpr";
   static constexpr const uint32_t _type_child_slots = 22;

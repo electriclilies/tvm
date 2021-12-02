@@ -156,7 +156,7 @@ class Tuple : public Expr {
  */
 Tuple WithFields(Tuple tuple, Optional<Array<Expr>> opt_fields = Optional<Array<Expr>>(),
                  Optional<Span> opt_span = Optional<Span>(),
-                 Optional<SEScope> opt_scope = Optional<SEScope>());
+                 Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*!
  * \brief Local variables used in the let expression.
@@ -251,7 +251,7 @@ class Var : public Expr {
 Var WithFields(Var var, Optional<Id> opt_vid = Optional<Id>(),
                Optional<Type> opt_type_annotation = Optional<Type>(),
                Optional<Span> opt_span = Optional<Span>(),
-               Optional<SEScope> opt_scope = Optional<SEScope>());
+               Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*!
  * \brief Call corresponds to operator invocation.
@@ -376,7 +376,7 @@ Call WithFields(Call call, Optional<Expr> opt_op = Optional<Expr>(),
                 Optional<Attrs> opt_attrs = Optional<Attrs>(),
                 Optional<Array<Type>> opt_type_args = Optional<Array<Type>>(),
                 Optional<Span> opt_span = Optional<Span>(),
-                Optional<SEScope> opt_scope = Optional<SEScope>());
+                Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*!
  * \brief Let binding that binds a local var and optionally a type annotation.
@@ -470,7 +470,7 @@ Let WithFields(Let let, Optional<Var> opt_var = Optional<Var>(),
                Optional<Expr> opt_value = Optional<Expr>(),
                Optional<Expr> opt_body = Optional<Expr>(),
                Optional<Span> opt_span = Optional<Span>(),
-               Optional<SEScope> opt_scope = Optional<SEScope>());
+               Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*!
  * \brief Condition expression
@@ -556,7 +556,7 @@ If WithFields(If if_expr, Optional<Expr> opt_cond = Optional<Expr>(),
               Optional<Expr> opt_true_branch = Optional<Expr>(),
               Optional<Expr> opt_false_branch = Optional<Expr>(),
               Optional<Span> opt_span = Optional<Span>(),
-              Optional<SEScope> opt_scope = Optional<SEScope>());
+              Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*! \brief Get index-th field out of a tuple. */
 class TupleGetItem;
@@ -621,7 +621,7 @@ class TupleGetItem : public Expr {
 TupleGetItem WithFields(TupleGetItem tuple_get_item, Optional<Expr> opt_tuple = Optional<Expr>(),
                         Optional<Integer> opt_index = Optional<Integer>(),
                         Optional<Span> opt_span = Optional<Span>(),
-                        Optional<SEScope> opt_scope = Optional<SEScope>());
+                        Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*! \brief Create a new Reference out of initial value. */
 class RefCreate;
@@ -680,7 +680,7 @@ class RefCreate : public Expr {
  */
 RefCreate WithFields(RefCreate ref_create, Optional<Expr> opt_value = Optional<Expr>(),
                      Optional<Span> opt_span = Optional<Span>(),
-                     Optional<SEScope> opt_scope = Optional<SEScope>());
+                     Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*! \brief Get value out of Reference. */
 class RefRead;
@@ -738,7 +738,7 @@ class RefRead : public Expr {
  */
 RefRead WithFields(RefRead ref_read, Optional<Expr> opt_ref = Optional<Expr>(),
                    Optional<Span> opt_span = Optional<Span>(),
-                   Optional<SEScope> opt_scope = Optional<SEScope>());
+                   Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*! \brief Set value of Reference. The whole expression evaluates to an Empty Tuple. */
 class RefWrite;
@@ -804,7 +804,7 @@ class RefWrite : public Expr {
 RefWrite WithFields(RefWrite ref_write, Optional<Expr> opt_ref = Optional<Expr>(),
                     Optional<Expr> opt_value = Optional<Expr>(),
                     Optional<Span> opt_span = Optional<Span>(),
-                    Optional<SEScope> opt_scope = Optional<SEScope>());
+                    Optional<SEScope> opt_virtual_device = Optional<SEScope>());
 
 /*!
  * \brief Base class of the temporary expression.

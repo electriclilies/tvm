@@ -378,12 +378,7 @@ class RewriteOnDevices : public ExprMutator {
               << "to be fixed to VirtualDevice " << props.virtual_device;
       body = MaybeOnDeviceFixed(props.body, props.virtual_device);
     }
-<<<<<<< HEAD
     return WithFields(GetRef<Function>(function_node), function_node->params, std::move(body));
-=======
-    return WithFields(GetRef<Function>(function_node), std::move(function_node->params),
-                      std::move(body));
->>>>>>> b58c83c4e... Implement WithFields for Relay exprs
   }
 
   Expr VisitExpr_(const CallNode* call_node) final {

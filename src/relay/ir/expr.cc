@@ -28,6 +28,10 @@
 namespace tvm {
 
 VirtualDevice RelayExprNode::virtual_device() const {
+  ICHECK(this->virtual_device_.defined())
+      << "Virtual device should always be defined for all RelayNodes except Match and Clause. "
+         "Found this relay expression without a virtual device: \n"
+      << PrettyPrint(GetRef<ObjectRef>(this));
   return Downcast<VirtualDevice>(this->virtual_device_);
 }
 

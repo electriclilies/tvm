@@ -54,7 +54,6 @@ def test_var():
                 "span": "0",
                 "type_annotation": "0",
                 "vid": "2",
-                "virtual_device_": "0",
             },
         },
         {"type_key": "relay.Id", "attrs": {"name_hint": "a3"}},
@@ -123,7 +122,7 @@ def test_global_var():
         {"type_key": ""},
         {
             "type_key": "relay.GlobalVar",
-            "attrs": {"_checked_type_": "0", "name_hint": "x", "span": "0", "virtual_device_": "0"},
+            "attrs": {"_checked_type_": "0", "name_hint": "x", "span": "0"},
         },
     ]
     data = {
@@ -138,7 +137,7 @@ def test_global_var():
         {"type_key": ""},
         {
             "type_key": "GlobalVar",
-            "attrs": {"_checked_type_": "0", "name_hint": "x", "span": "0", "virtual_device_": "0"},
+            "attrs": {"_checked_type_": "0", "name_hint": "x", "span": "0"},
         },
     ]
     data = {

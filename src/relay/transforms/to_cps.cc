@@ -315,7 +315,9 @@ Function UnCPS(const Function& f) {
   ICHECK_GT(f->params.size(), 0);
   Array<Var> new_params;
   for (const auto& p : f->params) {
-    new_params.push_back(Var(p->name_hint(), p->checked_type()));
+    // TODO(@electriclilies): Not sure if this is correct, it was copying before,
+    // but seems like we just need to make a copy to pop so should be fine?
+    new_params.push_back(WithFields(std::move(p)));
   }
   auto cont_type = Downcast<FuncType>(new_params.back()->type_annotation);
   new_params.pop_back();

@@ -68,6 +68,39 @@ def create_updater_08_to_09():
     """
 
     def _initialize_virtual_device(item, _):
+        if "virtual_device_" not in item["attrs"].keys():
+            item["attrs"]["virtual_device_"] = "0"
+        return item
+
+    node_map = {
+        # Base IR
+        "GlobalVar": _initialize_virtual_device,
+        "relay.Var": _initialize_virtual_device,
+        "relay.Function": _initialize_virtual_device,
+        "relay.Tuple": _initialize_virtual_device,
+        "relay.Call": _initialize_virtual_device,
+        "relay.Let": _initialize_virtual_device,
+        "relay.If": _initialize_virtual_device,
+        "relay.TupleGetItem": _initialize_virtual_device,
+        "relay.RefCreate": _initialize_virtual_device,
+        "relay.RefRead": _initialize_virtual_device,
+        "relay.RefWrite": _initialize_virtual_device,
+        "relay.Match": _initialize_virtual_device,
+    }
+
+    return create_updater(node_map, "0.8", "0.9")
+
+def create_updater_08_to_09():
+    """
+    Create an update to upgrade json from v0.8 to v0.9
+
+    Returns
+    -------
+    fupdater : function
+        The updater function
+    """
+
+    def _initialize_virtual_device(item, _):
         if "virtual_device_" not in item["attrs"]:
             item["attrs"]["virtual_device_"] = "0"
         return item
@@ -86,6 +119,7 @@ def create_updater_08_to_09():
         "relay.RefRead": _initialize_virtual_device,
         "relay.RefWrite": _initialize_virtual_device,
         "relay.Match": _initialize_virtual_device,
+        "relay.Constant": _initialize_virtual_device,
     }
 
     return create_updater(node_map, "0.8", "0.9")

@@ -125,7 +125,7 @@ def test_global_var():
         {"type_key": ""},
         {
             "type_key": "relay.GlobalVar",
-            "attrs": {"_checked_type_": "0", "name_hint": "x", "span": "0"},
+            "attrs": {"_checked_type_": "0", "name_hint": "x", "span": "0", "virtual_device_": "0"},
         },
     ]
     data = {

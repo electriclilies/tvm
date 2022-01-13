@@ -315,7 +315,7 @@ Function UnCPS(const Function& f) {
   ICHECK_GT(f->params.size(), 0);
   Array<Var> new_params;
   for (const auto& p : f->params) {
-    new_params.push_back(Var(p->name_hint(), p->checked_type());
+    new_params.push_back(Var(p->name_hint(), p->checked_type()));
   }
   auto cont_type = Downcast<FuncType>(new_params.back()->type_annotation);
   new_params.pop_back();

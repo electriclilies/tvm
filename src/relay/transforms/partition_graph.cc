@@ -213,7 +213,8 @@ class Partitioner : public MixedModeMutator {
     auto glob_funcs = module_->functions;
     for (const auto& pair : glob_funcs) {
       if (auto* fn = pair.second.as<FunctionNode>()) {
-        Function func = WithFields(GetRef<Function>(fn), func->params, VisitExpr(fn->body));
+        Function func = GetRef<Function>(fn);
+        func = WithFields(std::move(func), func->params, VisitExpr(func->body));
         module_->Update(pair.first, func);
         module_ = transform::InferType()(module_);
       }

@@ -458,7 +458,7 @@ Expr Gradient(const Expr& re, const Optional<IRModule>& mod) {
     return Pair(get_final_result(c, f->body->checked_type()), Tuple(ret));
   });
   Function ret =
-      WithFields(GetRef<Function>(f), f->params, std::move(body), GradRetType(GetRef<Function>(f)));
+      WithFields(GetRef<Function>(f), f->params, std::move(body), GradRetType(GetRef<Function>(f)), /* erase type params */ Array<TypeVar>());
   CheckFeature(ret, FeatureSet::All() - fGraph);
   return std::move(ret);
 }

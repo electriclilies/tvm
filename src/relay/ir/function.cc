@@ -52,8 +52,6 @@ Function WithFields(Function function, Optional<Array<Var>> opt_params, Optional
   DictAttrs attrs = opt_attrs.value_or(function->attrs);
   VirtualDevice virtual_device = opt_virtual_device.value_or(function->virtual_device());
   Span span = opt_span.value_or(function->span);
-  std::cout << "Opt-attrs: " << opt_attrs << std::endl;
-  std::cout << "Attrs: " << attrs << std::endl;
 
   bool unchanged = body.same_as(function->body) && ret_type.same_as(function->ret_type) &&
                    attrs.same_as(function->attrs) &&

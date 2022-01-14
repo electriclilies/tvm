@@ -411,7 +411,7 @@ class DefuncMutator : public ExprMutator {
     }
 
     auto bind = Downcast<Function>(Bind(f, var_bind_map));
-    return WithFields(std::move(bind), std::move(params), this->VisitExpr(bind->body), {},
+    return WithFields(std::move(bind), std::move(params), this->VisitExpr(bind->body), bind->ret_type,
                       /* erase type params */ Array<TypeVar>());
   }
 };

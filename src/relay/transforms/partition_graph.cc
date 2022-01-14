@@ -213,7 +213,8 @@ class Partitioner : public MixedModeMutator {
     auto glob_funcs = module_->functions;
     for (const auto& pair : glob_funcs) {
       if (auto* fn = pair.second.as<FunctionNode>()) {
-        Function func = WithFields(GetRef<Function>(fn), func->params, VisitExpr(fn->body));
+        Function func = GetRef<Function>(fn);
+        func = WithFields(func, func->params, VisitExpr(fn->body));
         module_->Update(pair.first, func);
         module_ = transform::InferType()(module_);
       }
@@ -427,7 +428,7 @@ IRModule RemoveDefaultAnnotations(IRModule module) {
       auto func = GetRef<Function>(fn);
       DefaultRemover remover;
       auto removed = PostOrderRewrite(func->body, &remover);
-      func = WithFields(GetRef<Function>(fn), func->params, std::move(removed));
+      func = WithFields(func, func->params, std::move(removed));
       module->Update(pair.first, GetRef<Function>(fn));
       module = relay::transform::InferType()(module);
     }
@@ -483,7 +484,7 @@ IRModule FlattenTupleOutputs(IRModule module) {
       Function func = GetRef<Function>(fn);
       TupleOutFlattener to_flattener;
       auto removed = PostOrderRewrite(func->body, &to_flattener);
-      func = WithFields(GetRef<Function>(fn), func->params, std::move(removed));
+      func = WithFields(func, func->params, std::move(removed));
       module->Update(pair.first, func);
       module = relay::transform::InferType()(module);
     }

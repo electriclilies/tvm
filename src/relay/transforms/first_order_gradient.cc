@@ -308,7 +308,8 @@ Pass FirstOrderGradient() {
         return Pair(res.forward, grad_tuple);
       });
       ad_mod->Update(pr.first, WithFields(GetRef<Function>(func), func->params, std::move(body),
-                                          GradRetType(GetRef<Function>(func)), /* erase type params */Array<TypeVar>()));
+                                          GradRetType(GetRef<Function>(func)),
+                                          /* erase type params */ Array<TypeVar>()));
     }
 
     return ad_mod;

@@ -165,8 +165,17 @@ class TECompilerImpl : public TECompilerNode {
         for (const auto& kv2 : kv1.second->cached_func->funcs->functions) {
           if (const auto* function_node = kv2.second.as<FunctionNode>()) {
             // Abandon the existing function annotations.
-            Function function = WithFields(GetRef<Function>(function_node), {}, {}, {}, {},
-                                           /* erase attributes */ DictAttrs());
+            
+            // OK what the actual F, DictAttrs() is nullptr which was causing the attributes to not be removed, but DictAttrs(Map<String, ObjectRef>()) is not nullptr
+            Function bad_function = WithFields(GetRef<Function>(function_node), function_node->params, function_node->body, function_node->ret_type, function_node->type_params,
+                                           /* erase attributes */ DictAttrs(Map<String, ObjectRef>()));
+            Function good_function(function_node->params, function_node->body, function_node->ret_type, function_node->type_params, {}, function_node->span);
+            std::cout << "Original function: " << GetRef<Function>(function_node) << std::endl;
+            std::cout << "Function produced by WithFields: " << bad_function << std::endl;
+            std::cout << "Type args of function produced by WithFields: " << bad_function->type_params << std::endl;
+            std::cout << "Function produced by constructor: " << good_function << std::endl;
+            std::cout << "Type args of function produced by constructor: " << good_function->type_params << std::endl;
+            Function function = bad_function;
             // Mark function as 'extern' using the "ExternalSymbol" attribute.
             function = WithAttr(std::move(function), attr::kExternalSymbol, kv2.first->name_hint);
             module->Add(kv2.first, function);

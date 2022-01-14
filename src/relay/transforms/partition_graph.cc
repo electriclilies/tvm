@@ -428,8 +428,8 @@ IRModule RemoveDefaultAnnotations(IRModule module) {
       auto func = GetRef<Function>(fn);
       DefaultRemover remover;
       auto removed = PostOrderRewrite(func->body, &remover);
-      func = WithFields(GetRef<Function>(fn), func->params, std::move(removed));
-      module->Update(pair.first, GetRef<Function>(fn));
+      func = WithFields(std::move(func), func->params, std::move(removed));
+      module->Update(pair.first, func);
       module = relay::transform::InferType()(module);
     }
   }
@@ -484,7 +484,7 @@ IRModule FlattenTupleOutputs(IRModule module) {
       Function func = GetRef<Function>(fn);
       TupleOutFlattener to_flattener;
       auto removed = PostOrderRewrite(func->body, &to_flattener);
-      func = WithFields(GetRef<Function>(fn), func->params, std::move(removed));
+      func = WithFields(std::move(func), func->params, std::move(removed));
       module->Update(pair.first, func);
       module = relay::transform::InferType()(module);
     }
@@ -526,11 +526,11 @@ class NameMangleExtFuncs : public MixedModeMutator {
           auto new_dict = func->attrs->dict;
           new_dict.Set(tvm::attr::kGlobalSymbol,
                        String(relay::backend::SanitizeName(mangle_fn_(pair.first->name_hint))));
-          func = WithFields(func, func->params, VisitExpr(func->body), func->ret_type,
+          func = WithFields(std::move(func), func->params, VisitExpr(func->body), func->ret_type,
                             func->type_params, DictAttrs(new_dict));
           new_module->Add(mangled_gvars_[pair.first->name_hint], func);
         } else {
-          func = WithFields(func, func->params, VisitExpr(func->body));
+          func = WithFields(std::move(func), func->params, VisitExpr(func->body));
           new_module->Add(pair.first, func);
         }
       }
